@@ -1,6 +1,5 @@
 from bs4 import BeautifulSoup
-import math
-import pickle
+import math, pickle
 
 # Takes a public Discogs store inventory and returns pricing information on other listings on the market.
 

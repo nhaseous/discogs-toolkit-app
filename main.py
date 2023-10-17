@@ -1,8 +1,7 @@
-from flask import Flask
-from flask import request
-from pricechecker import pricechecker
-import time
+from flask import Flask, request
+from helper import pricechecker, matcher
 import cloudscraper
+import time, pprint
 
 # Main
 
@@ -11,7 +10,16 @@ app = Flask(__name__)
 # Routes
 
 @app.route("/")
-def index():
+def landingpage():
+    return(
+        """<h2>Discogs toolkit.</h1>
+        &#x2022;<br>&#x2022; - Price Checker
+        <br>&#x2022;<br>&#x2022; - Matcher
+        <br>&#x2022;"""
+    )
+
+@app.route("/pricechecker")
+def pricecheckerpage():
 
     seller = request.args.get("seller", "")
     sort = request.args.get("sort", "")
@@ -56,9 +64,48 @@ def index():
         + "Seller: {0}<br><br>{1}".format(seller, output)
     )
 
+@app.route("/matcher")
+def matcherpage():
+
+    collection_user = request.args.get("collection", "")
+    wantlist_user = request.args.get("wantlist", "")
+    output = ""
+
+    if collection_user != "" and wantlist_user != "" :
+        start_time = time.time()
+        try:
+            scraper = cloudscraper.create_scraper(browser={'browser': 'chrome','platform': 'android','desktop': False})
+
+            collection = matcher.get_collection(collection_user, scraper)
+            output += "Collection: {0} - {1}<br>".format(len(collection), collection_user)
+
+            wantlist = matcher.get_wantlist(wantlist_user, scraper)
+            output += "Wantlist: {0} - {1}<br>".format(len(wantlist), wantlist_user)
+
+            matches = set(collection) & set(wantlist)
+            output += "<br>Matches: {0}<br>&#123<br>".format(len(matches))
+            for match in matches:
+                output += "{0}<br>".format(match)
+            output += "&#125"
+
+        except AttributeError:
+            output = "Could not find user(s)." # returns if given username does not match a Discogs store user
+
+        end_time = time.time()
+        print("Time to load: {0} seconds".format(end_time-start_time))
+
+    return (
+        """<form action="" method="get">
+                Search collection: <input type="text" name="collection"><br>
+                Search wantlist: <input type="text" name="wantlist">
+                <input type="submit" value="Search"><br>
+              </form>"""
+        + "<br><br>{0}".format(output)
+    )
+
 # testing
 @app.route("/test")
-def test():
+def testingpage():
     return (
         "testing"
     )
