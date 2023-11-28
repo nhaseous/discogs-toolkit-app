@@ -12,10 +12,10 @@ app = Flask(__name__)
 @app.route("/")
 def landingpage():
     return(
-        """<h2>Discogs toolkit.</h1>
-        &#x2022;<br>&#x2022; - Price Checker
-        <br>&#x2022;<br>&#x2022; - Matcher
-        <br>&#x2022;"""
+        """<h2>Discogs toolkit.</h2><hr width="35%" align="left">
+        &#x2022; <a href="/pricechecker">Price Checker</a><br>
+        &#x2022; <a href="/matcher">Matcher</a>
+        """
     )
 
 @app.route("/pricechecker")
