@@ -13,4 +13,4 @@ Python web-scraper for Discogs that provides additional functionalities to inter
 
 ~
 
-Access here: https://discogs-pricechecker.uc.r.appspot.com
+Access here: https://discogs-toolkit.uc.r.appspot.com
