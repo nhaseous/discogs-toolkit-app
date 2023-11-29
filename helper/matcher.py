@@ -1,6 +1,7 @@
 from bs4 import BeautifulSoup
 import math
 
+
 # Compares 2 public Discogs lists (option for Collection or Wantlist), and returns matching titles from both lists.
 
 
@@ -24,7 +25,7 @@ def count_pages(URL, scraper): # Takes URL for either collection or wantlist, re
     html = scraper.get(URL).content
     soup = BeautifulSoup(html, 'html.parser')
 
-    collection_size = int(soup.find("li", class_="active_header_section").find("small", class_="facet_count").text)
+    collection_size = int(soup.find("li", class_="active_header_section").find("small", class_="facet_count").text.strip().replace(",",""))
     pages = math.ceil(collection_size/25)
 
     return pages
@@ -34,7 +35,9 @@ def parse_list(URL, pages, scraper): # Takes URL of a collection or wantlist, re
     new_list = []
 
     for page in range(1, pages + 1):
+        # new_URL = URL + "&limit=250&sort=artist&sort_order=asc&page={0}".format(page)
         new_URL = URL + "&sort=artist&sort_order=asc&page={0}".format(page)
+        print(new_URL)
         html = scraper.get(new_URL).content
         soup = BeautifulSoup(html, 'html.parser')
 

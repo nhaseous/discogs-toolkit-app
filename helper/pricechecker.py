@@ -43,8 +43,8 @@ def parse_list(URL, scraper, pages): # Takes URL of a store inventory, returns a
     new_list = []
 
     for page in range(1, pages + 1):
-        # new_URL = URL + "?&limit=250&sort=artist&sort_order=asc&page={0}".format(page)
-        # new_URL = URL + "?&limit=250&sort=price&sort_order=asc&page={0}".format(page)
+        # new_URL = URL + "?&limit=250&sort=artist&sort_order=asc&page={0}".format(page) # sort by artist
+        # new_URL = URL + "?&limit=250&sort=price&sort_order=asc&page={0}".format(page) # sort by price
         new_URL = URL + "?&sort=price&sort_order=asc&page={0}".format(page)
         html = scraper.get(new_URL).content
         soup = BeautifulSoup(html, 'html.parser')
