@@ -1,3 +1,6 @@
+import collections
+collections.Callable = collections.abc.Callable
+
 from bs4 import BeautifulSoup
 import math, pickle
 
