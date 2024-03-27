@@ -10,20 +10,6 @@ import math
 
 # Helper Functions
 
-def get_collection(username, scraper):
-
-    URL = "https://www.discogs.com/user/{0}/collection?header=1".format(username)
-    pages = count_pages(URL, scraper)
-
-    return parse_list(URL, pages, scraper)
-
-def get_wantlist(username, scraper):
-
-    URL = "https://www.discogs.com/wantlist?user={0}".format(username)
-    pages = count_pages(URL, scraper)
-
-    return parse_list(URL, pages, scraper)
-
 def count_pages(URL, scraper): # Takes URL for either collection or wantlist, returns the number of pages.
     html = scraper.get(URL).content
     soup = BeautifulSoup(html, 'html.parser')
@@ -60,3 +46,20 @@ def parse_list(URL, pages, scraper): # Takes URL of a collection or wantlist, re
             new_list.append(new_list_item)
 
     return new_list
+
+
+## Get
+
+def get_collection(username, scraper):
+
+    URL = "https://www.discogs.com/user/{0}/collection?header=1".format(username)
+    pages = count_pages(URL, scraper)
+
+    return parse_list(URL, pages, scraper)
+
+def get_wantlist(username, scraper):
+
+    URL = "https://www.discogs.com/wantlist?user={0}".format(username)
+    pages = count_pages(URL, scraper)
+
+    return parse_list(URL, pages, scraper)
