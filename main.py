@@ -21,7 +21,7 @@ def landingpage():
         """
     )
 
-# Price Checker Module
+## Price Checker Module
 
 @app.route("/pricechecker")
 def pricecheckerpage():
@@ -72,7 +72,7 @@ def pricecheckerpage():
         + "Seller: {0}<br><br>{1}".format(seller, output)
     )
 
-# Matcher Module
+## Matcher Module
 
 @app.route("/matcher")
 def matcherpage():
@@ -116,7 +116,7 @@ def matcherpage():
         + "<br><br>{0}".format(output)
     )
 
-# Testing Page
+## Testing Page
 
 @app.route("/test")
 def testingpage():

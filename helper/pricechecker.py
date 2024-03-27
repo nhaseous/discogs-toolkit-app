@@ -175,6 +175,43 @@ def print_list(unsorted_inventory_list): # Prints unsorted inventory list.
 
     return output
 
+def compare_inventory_list(inventory_list): # Compares inventory list with saved state/list for changes.
+
+    saved_state = load_state()
+    
+    if saved_state:
+        print("Loaded saved inventory state.\n")
+
+        if len(saved_state) == len(inventory_list):
+            for count in range(len(saved_state)):
+                pickled_entry = saved_state[count]
+                compare_entries(inventory_list, pickled_entry, count)
+        else:
+            print("Inventory size changed.")
+        print("Finished comparison.")
+    else:
+        print("Nothing to load.\n")
+        print_list(inventory_list)
+
+    # save_state(inventory_list)
+    # print("Updated saved inventory list.")
+        
+def compare_entries(inventory_list, pickled_entry, count): # Given an unpickled entry and an entry number, compares that pickled entry to the current inventory list.
+
+    listings = inventory_list[count].listings
+    pickled_listings = pickled_entry.listings
+    current_place = inventory_list[count].place
+    old_place = pickled_entry.place
+
+    if listings != pickled_listings:
+        print("({0})".format(count))
+        print("{0}\n{1}".format(pickled_entry.title, pickled_entry.url))
+
+        compare_listings(listings, pickled_listings)
+
+        if current_place != old_place:
+            print("Place: {0} --> {1}\n".format(old_place, current_place))
+
 def save_state(inventory_list): # Pickles an inventory list as a save state in a bin file.
 
     with open("state.bin", "wb") as f:
