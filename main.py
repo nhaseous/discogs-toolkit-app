@@ -9,14 +9,19 @@ app = Flask(__name__)
 
 # Routes
 
+## Landing Page
+
 @app.route("/")
 def landingpage():
     return(
-        """<h2>Discogs toolkit.</h2><hr width="35%" align="left">
-        &#x2022; <a href="/pricechecker">Price Checker</a><br>
-        &#x2022; <a href="/matcher">Matcher</a>
+        """
+        <hr width="25%" align="left"><h2>| Discogs Toolkit </h2><hr width="25%" align="left">
+        > <a href="/pricechecker">Price Checker</a><br>
+        > <a href="/matcher">Matcher</a>
         """
     )
+
+# Price Checker Module
 
 @app.route("/pricechecker")
 def pricecheckerpage():
@@ -53,16 +58,21 @@ def pricecheckerpage():
         print("Time to load: {0} seconds".format(end_time-start_time))
 
     return (
-        """<form action="" method="get">
-                Search seller: <input type="text" name="seller">
-                <input type="submit" value="Search"><br>
-                <input type="radio" id="unsorted" name="sort" value="unsorted" checked="checked">
-                <label for="unsorted">Unsorted</label><br>
-                <input type="radio" id="sorted" name="sort" value="sorted">
-                <label for="sorted">Sorted</label><br>
-              </form>"""
+        """
+        <hr width="25%" align="left"><h2>| Price Checker </h2><hr width="25%" align="left">
+        <form action="" method="get">
+            Search seller: <input type="text" name="seller">
+            <input type="submit" value="Search"><br>
+            <input type="radio" id="unsorted" name="sort" value="unsorted" checked="checked">
+            <label for="unsorted">Unsorted</label><br>
+            <input type="radio" id="sorted" name="sort" value="sorted">
+            <label for="sorted">Sorted</label><br>
+        </form>
+        """
         + "Seller: {0}<br><br>{1}".format(seller, output)
     )
+
+# Matcher Module
 
 @app.route("/matcher")
 def matcherpage():
@@ -95,15 +105,19 @@ def matcherpage():
         print("Time to load: {0} seconds".format(end_time-start_time))
 
     return (
-        """<form action="" method="get">
-                Search collection: <input type="text" name="collection"><br>
-                Search wantlist: <input type="text" name="wantlist">
-                <input type="submit" value="Search"><br>
-              </form>"""
+        """
+        <hr width="25%" align="left"><h2>| Matcher </h2><hr width="25%" align="left">
+        <form action="" method="get">
+            Search collection: <input type="text" name="collection"><br>
+            Search wantlist: <input type="text" name="wantlist">
+            <input type="submit" value="Search"><br>
+        </form>
+        """
         + "<br><br>{0}".format(output)
     )
 
-# testing
+# Testing Page
+
 @app.route("/test")
 def testingpage():
     return (
