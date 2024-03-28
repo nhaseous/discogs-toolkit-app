@@ -7,7 +7,7 @@ import math, pickle
 # Takes a public Discogs store inventory and returns pricing information on other listings on the market.
 
 
-# Classes
+## Classes ##
 
 class formattedListings: # Formatted marketplace listings for a single release.
 
@@ -16,54 +16,16 @@ class formattedListings: # Formatted marketplace listings for a single release.
         self.url = url
         self.listings = listings
         self.place = place
-        self.total = "Total: {0}".format(total)
+        self.total = "> Total: {0}".format(total)
 
     def __str__(self):
         return "{0}<br><a href=\"{1}\">Link</a><br>{2}<br>{3}<br>".format(self.title,self.url,self.listings,self.total)
 
 
-# Helper Functions
-
-def get_inventory(username, scraper): # Given a seller username, gets their store url and inventory count.
-
-    URL = "https://www.discogs.com/seller/{0}/profile".format(username)
-    pages = count_pages(URL, scraper) # gets the number of pages in a store
-
-    return parse_list(URL, scraper, pages) # returns a list of releases and their item ids
-
-def count_pages(URL, scraper): # Takes URL for a Discogs store, returns the number of pages.
-
-    html = scraper.get(URL).content
-    soup = BeautifulSoup(html, 'html.parser')
-    # scrapes for the total inventory size
-    inventory_size = int(soup.find(id="page_content").find("li", class_="first").find("h2").text.strip().strip("For Sale"))
-    pages = math.ceil(inventory_size/25)
-
-    return pages
-
-def format_condition(item_condition): # Formats the item condition to (Media/Sleeve).
-
-    media = (item_condition.split("("))[1].split(")")[0]
-    try:
-        sleeve = (item_condition.split("("))[2].split(")")[0]
-
-    except IndexError:
-        return "({0})".format(media.split(" or")[0])
-
-    media = media.split(" or")[0]
-    sleeve = sleeve.split(" or")[0]
-
-    return "({0}/{1})".format(media, sleeve)
-
-def is_user(username, listing): # Checks if a marketplace listing matches the provided username.
-
-    return listing.find(string=username)
-
-def check_scam(listing): # Checks if a listing is a scam (has 0.0% seller rating).
-
-    return listing.find(string="0.0%")
-
-def parse_list(URL, scraper, pages): # Takes URL of a store inventory, returns a list of the releases and their item ids.
+## Helper Functions ##
+    
+# Takes URL of a store inventory, returns a list of the releases and their item ids.
+def parse_list(URL, scraper, pages):
 
     new_list = []
 
@@ -86,10 +48,54 @@ def parse_list(URL, scraper, pages): # Takes URL of a store inventory, returns a
 
     return new_list
 
+# Takes URL for a Discogs store, returns the number of pages.
+def count_pages(URL, scraper):
 
-## Get
+    html = scraper.get(URL).content
+    soup = BeautifulSoup(html, 'html.parser')
+    # scrapes for the total inventory size
+    inventory_size = int(soup.find(id="page_content").find("li", class_="first").find("h2").text.strip().strip("For Sale"))
+    pages = math.ceil(inventory_size/25)
 
-def get_listings(scraper, sorted_inventory_list, inventory_list, username, release_title, item_id): # Given username and item_id, scrapes marketplace for listings and stores them in provided list.
+    return pages
+
+# Formats the item condition to (Media/Sleeve).
+def format_condition(item_condition):
+
+    media = (item_condition.split("("))[1].split(")")[0]
+    try:
+        sleeve = (item_condition.split("("))[2].split(")")[0]
+
+    except IndexError:
+        return "({0})".format(media.split(" or")[0])
+
+    media = media.split(" or")[0]
+    sleeve = sleeve.split(" or")[0]
+
+    return "({0}/{1})".format(media, sleeve)
+
+# Checks if a marketplace listing matches the provided username.
+def is_user(username, listing):
+
+    return listing.find(string=username)
+
+def check_scam(listing): # Checks if a listing is a scam (has 0.0% seller rating).
+
+    return listing.find(string="0.0%")
+
+
+## Get ##
+
+# Given a seller username, gets their store url and inventory count.
+def get_inventory(username, scraper):
+
+    URL = "https://www.discogs.com/seller/{0}/profile".format(username)
+    pages = count_pages(URL, scraper) # gets the number of pages in a store
+
+    return parse_list(URL, scraper, pages) # returns a list of releases and their item ids
+
+# Given username and item_id, scrapes marketplace for listings and stores them in provided list.
+def get_listings(scraper, sorted_inventory_list, inventory_list, username, release_title, item_id):
 
     URL = "https://www.discogs.com/sell/release/{0}?ships_from=United+States&sort=price%2Casc".format(item_id)
     html = scraper.get(URL).content
@@ -124,7 +130,8 @@ def get_listings(scraper, sorted_inventory_list, inventory_list, username, relea
 
     return
 
-def get_price(listing): # Gets the price of a provided listing.
+# Gets the price of a provided listing.
+def get_price(listing): 
 
     try:
         item_condition = listing.find("p", class_="item_condition").text
@@ -139,26 +146,29 @@ def get_price(listing): # Gets the price of a provided listing.
         return "n/a"
 
 
-## Print
+## Print ##
 
-def print_sorted_list(sorted_inventory_list): # Given a sorted inventory list, prints it out.
+# Given a sorted inventory list, prints it out.
+def print_sorted_list(sorted_inventory_list): 
 
-    count = 0
     output = ""
+    count = 0 # count is the number of listings with the same place that a seller has
 
     for index in range(len(sorted_inventory_list)):
-        # Count is the number of listings with the same place that a seller has
+        
         if sorted_inventory_list[index]:
             output += "({0}) Count: {1}<br><br>".format(index+1, len(sorted_inventory_list[index]))
 
-        # an entry is a release to print out
+        # an entry is a release to print out    
         for entry in sorted_inventory_list[index]:
             count += 1
             output += "({0})<br>".format(count)
             output += "{0}<br>".format(entry)
 
-        output += "({0}) Count: {1}".format(index+1, len(sorted_inventory_list[index]))
-        output += "<br>" + '─' * 25 + "<br>"
+        countlen = len(sorted_inventory_list[index])
+        if countlen > 0:
+            output += "({0}) Count: {1}".format(index+1, countlen)
+            output += "<br>" + '─' * 25 + "<br>"
 
     # prints out a list of places and the number of listings a seller has belonging to each place
     output += "Place<br>"
@@ -167,7 +177,8 @@ def print_sorted_list(sorted_inventory_list): # Given a sorted inventory list, p
 
     return output
 
-def print_list(unsorted_inventory_list): # Prints unsorted inventory list.
+# Prints unsorted inventory list.
+def print_list(unsorted_inventory_list): 
 
     count = 0
     output = ""
@@ -175,15 +186,16 @@ def print_list(unsorted_inventory_list): # Prints unsorted inventory list.
     # an entry is a release to print out
     for entry in unsorted_inventory_list:
         count += 1
-        output += "({0})<br>".format(count)
+        output += "<b>({0})</b><br>".format(count)
         output += "{0}<br>".format(entry)
 
     return output
 
 
-## Compare
+## Compare ##
 
-def compare_inventory_list(inventory_list): # Compares inventory list with saved state/list for changes.
+# Compares inventory list with saved state/list for changes.
+def compare_inventory_list(inventory_list): 
 
     saved_state = load_state()
     
@@ -204,7 +216,8 @@ def compare_inventory_list(inventory_list): # Compares inventory list with saved
     # save_state(inventory_list)
     # print("Updated saved inventory list.")
         
-def compare_entries(inventory_list, pickled_entry, count): # Given an unpickled entry and an entry number, compares that pickled entry to the current inventory list.
+# Given an unpickled entry and an entry number, compares that pickled entry to the current inventory list.
+def compare_entries(inventory_list, pickled_entry, count): 
 
     listings = inventory_list[count].listings
     pickled_listings = pickled_entry.listings
@@ -220,7 +233,8 @@ def compare_entries(inventory_list, pickled_entry, count): # Given an unpickled 
         if current_place != old_place:
             print("Place: {0} --> {1}\n".format(old_place, current_place))
 
-def compare_listings(current_listings, pickled_listings): # Given a list of listings, compares the current and pickled versions.
+# Given a list of listings, compares the current and pickled versions.
+def compare_listings(current_listings, pickled_listings): 
 
     current_list = current_listings.split("\n")
     pickled_list = pickled_listings.split("\n")
@@ -252,14 +266,16 @@ def compare_listings(current_listings, pickled_listings): # Given a list of list
             print("{0} --> {1}".format("Inserted", current_list[index]))
 
 
-## State
+## State ##
 
-def save_state(inventory_list): # Pickles an inventory list as a save state in a bin file.
+# Pickles an inventory list as a save state in a bin file.
+def save_state(inventory_list): 
 
     with open("state.bin", "wb") as f:
         pickle.dump(inventory_list, f)
 
-def load_state(): # Loads a pickled inventory list from a bin file.
+# Loads a pickled inventory list from a bin file.
+def load_state(): 
 
     with open("state.bin", "rb") as f:
         try:

@@ -9,26 +9,30 @@ app = Flask(__name__)
 
 # Routes
 
-## Landing Page
+## Landing Page ##
 
 @app.route("/")
 def landingpage():
     return(
         """
-        <hr width="25%" align="left"><h2>| Discogs Toolkit </h2><hr width="25%" align="left">
-        > <a href="/pricechecker">Price Checker</a><br>
-        > <a href="/matcher">Matcher</a>
+        <div style="border-style:ridge; width:25%;padding-left:10px;">
+        <h2>Discogs Toolkit</h2>
+        </div><br>
+        
+        <hr width="25%" align="left">
+        >  <a href="/pricechecker">Price Checker</a><br>
+        >  <a href="/matcher">Matcher</a>
         """
     )
 
-## Price Checker Module
+## Price Checker Module ##
 
 @app.route("/pricechecker")
 def pricecheckerpage():
 
     seller = request.args.get("seller", "")
-    sort = request.args.get("sort", "")
     output = ""
+    loadtime = ""
 
     if seller != "":
         start_time = time.time()
@@ -37,42 +41,69 @@ def pricecheckerpage():
             sorted_inventory_list = [[],[],[],[],[],[],[],[],[],[]]
 
             print("Loading inventory...")
-            # initializes cloudscraper and gets a list of a store's releases and their item ids
+
+            # initializes cloudscraper and gets a list of a store's releases & ids
             scraper = cloudscraper.create_scraper(browser={'browser': 'chrome','platform': 'android','desktop': False})
             inventory = pricechecker.get_inventory(seller, scraper)
 
-            # populates inventory lists of each release's listings in sorted order
+            # populates sorted & unsorted inventory lists
             for release in inventory:
                 pricechecker.get_listings(scraper, sorted_inventory_list, inventory_list, seller, release[0], release[1])
 
-            # writes to output either the sorted or the unsorted inventory list
-            if sort == "sorted":
+            # writes to output
+            if request.args.get("sort","") == "yes":
                 output = pricechecker.print_sorted_list(sorted_inventory_list) # Print sorted
-            elif sort == "unsorted":
+            else:
                 output = pricechecker.print_list(inventory_list) # Print unsorted
 
-        except AttributeError:
-            output = "No user found." # returns if given username does not match a Discogs store user
+            # compares
+            if request.args.get("compare","") == "yes":
+                pricechecker.compare_inventory_list(inventory_list)
+            
+            # saves
+            if request.args.get("save","") == "yes":
+                pricechecker.save_state(inventory_list)
+                print("Saved inventory list locally.\n")
+
+        except AttributeError: # returns if given username does not match a Discogs store user
+            output = "No user found."
 
         end_time = time.time()
-        print("Time to load: {0} seconds".format(end_time-start_time))
+        seller = "Seller: " + seller
+        loadtime = "Search time: {0} seconds".format(round(end_time-start_time,2))
 
     return (
+        
+        # browser output
         """
-        <hr width="25%" align="left"><h2>| Price Checker </h2><hr width="25%" align="left">
-        <form action="" method="get">
+        <div style="border-style:ridge; width:25%;padding-left:10px;">
+        <h2>Price Checker</h2>
+        </div><br>
+
+        <hr width="25%" align="left"><br>
+        <form action="" method="get">   
             Search seller: <input type="text" name="seller">
             <input type="submit" value="Search"><br>
-            <input type="radio" id="unsorted" name="sort" value="unsorted" checked="checked">
-            <label for="unsorted">Unsorted</label><br>
-            <input type="radio" id="sorted" name="sort" value="sorted">
-            <label for="sorted">Sorted</label><br>
+
+            <input type="checkbox" id="sort" name="sort" value="yes">
+            <label for="sort">Sort</label><br>
+            <input type="checkbox" id="compare" name="compare" value="yes">
+            <label for="compare">Compare</label><br>
+            <input type="checkbox" id="save" name="save" value="yes">
+            <label for="save">Save</label><br>        
         </form>
+        -
+        <br><br>
         """
-        + "Seller: {0}<br><br>{1}".format(seller, output)
+        + "{0}<br><br><b>{1}</b><br><br>{2}<br>".format(loadtime, seller, output)
+        + """
+        <hr width="25%" align="left">
+        <a href="/">> Home</a><br>
+        <a href="/pricechecker">> Reset</a> 
+        """
     )
 
-## Matcher Module
+## Matcher Module ##
 
 @app.route("/matcher")
 def matcherpage():
@@ -106,22 +137,37 @@ def matcherpage():
 
     return (
         """
-        <hr width="25%" align="left"><h2>| Matcher </h2><hr width="25%" align="left">
+        <div style="border-style:ridge; width:25%;padding-left:10px;">
+        <h2>Matcher</h2></div>
+        <br>
+
+        <hr width="25%" align="left"><br>
         <form action="" method="get">
             Search collection: <input type="text" name="collection"><br>
             Search wantlist: <input type="text" name="wantlist">
             <input type="submit" value="Search"><br>
         </form>
+        -
+        <br><br>
         """
-        + "<br><br>{0}".format(output)
+        + output
+        + """
+        <br><br>
+        <hr width="25%" align="left">
+        <a href="/">> Home</a><br>
+        <a href="/matcher">> Reset</a> 
+        """
     )
 
-## Testing Page
+## Testing Page ##
 
 @app.route("/test")
 def testingpage():
     return (
-        "testing"
+        """
+        <input type="text" name="wantlist">
+        testing
+        """
     )
 
 # Helper Functions

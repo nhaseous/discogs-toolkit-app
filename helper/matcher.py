@@ -7,19 +7,27 @@ import math
 
 # Compares 2 public Discogs lists (option for Collection or Wantlist), and returns matching titles from both lists.
 
+## Get ##
 
-# Helper Functions
+def get_collection(username, scraper):
 
-def count_pages(URL, scraper): # Takes URL for either collection or wantlist, returns the number of pages.
-    html = scraper.get(URL).content
-    soup = BeautifulSoup(html, 'html.parser')
+    URL = "https://www.discogs.com/user/{0}/collection?header=1".format(username)
+    pages = count_pages(URL, scraper)
 
-    collection_size = int(soup.find("li", class_="active_header_section").find("small", class_="facet_count").text.strip().replace(",",""))
-    pages = math.ceil(collection_size/25)
+    return parse_list(URL, pages, scraper)
 
-    return pages
+def get_wantlist(username, scraper):
 
-def parse_list(URL, pages, scraper): # Takes URL of a collection or wantlist, returns the releases as a list.
+    URL = "https://www.discogs.com/wantlist?user={0}".format(username)
+    pages = count_pages(URL, scraper)
+
+    return parse_list(URL, pages, scraper)
+
+
+## Helper Functions ##
+
+# Takes URL of a collection or wantlist, returns the releases as a list.
+def parse_list(URL, pages, scraper):
 
     new_list = []
 
@@ -47,19 +55,12 @@ def parse_list(URL, pages, scraper): # Takes URL of a collection or wantlist, re
 
     return new_list
 
+# Takes URL for either collection or wantlist, returns the number of pages.
+def count_pages(URL, scraper):
+    html = scraper.get(URL).content
+    soup = BeautifulSoup(html, 'html.parser')
 
-## Get
+    collection_size = int(soup.find("li", class_="active_header_section").find("small", class_="facet_count").text.strip().replace(",",""))
+    pages = math.ceil(collection_size/25)
 
-def get_collection(username, scraper):
-
-    URL = "https://www.discogs.com/user/{0}/collection?header=1".format(username)
-    pages = count_pages(URL, scraper)
-
-    return parse_list(URL, pages, scraper)
-
-def get_wantlist(username, scraper):
-
-    URL = "https://www.discogs.com/wantlist?user={0}".format(username)
-    pages = count_pages(URL, scraper)
-
-    return parse_list(URL, pages, scraper)
+    return pages
