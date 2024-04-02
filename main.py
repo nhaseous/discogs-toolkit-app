@@ -56,16 +56,7 @@ def pricecheckerpage():
             else:
                 output = pricechecker.print_list(inventory_list) # Print unsorted
 
-            # compares
-            if request.args.get("compare","") == "yes":
-                pricechecker.compare_inventory_list(inventory_list)
-            
-            # saves
-            if request.args.get("save","") == "yes":
-                pricechecker.save_state(inventory_list)
-                print("Saved inventory list locally.\n")
-
-        except AttributeError: # returns if given username does not match a Discogs store user
+        except AttributeError: # returns if given username does not match a Discogs seller
             output = "No user found."
 
         end_time = time.time()
@@ -73,8 +64,7 @@ def pricecheckerpage():
         loadtime = "Search time: {0} seconds".format(round(end_time-start_time,2))
 
     return (
-        
-        # browser output
+        # browser output #
         """
         <div style="border-style:ridge; width:25%;padding-left:10px;">
         <h2>Price Checker</h2>
@@ -87,10 +77,6 @@ def pricecheckerpage():
 
             <input type="checkbox" id="sort" name="sort" value="yes">
             <label for="sort">Sort</label><br>
-            <input type="checkbox" id="compare" name="compare" value="yes">
-            <label for="compare">Compare</label><br>
-            <input type="checkbox" id="save" name="save" value="yes">
-            <label for="save">Save</label><br>        
         </form>
         -
         <br><br>
@@ -111,34 +97,40 @@ def matcherpage():
     collection_user = request.args.get("collection", "")
     wantlist_user = request.args.get("wantlist", "")
     output = ""
+    loadtime = ""
 
+    start_time = time.time()
     if collection_user != "" and wantlist_user != "" :
-        start_time = time.time()
         try:
             scraper = cloudscraper.create_scraper(browser={'browser': 'chrome','platform': 'android','desktop': False})
 
+            # scrapes for the collections and wantlists
             collection = matcher.get_collection(collection_user, scraper)
-            output += "Collection: {0} - {1}<br>".format(len(collection), collection_user)
-
             wantlist = matcher.get_wantlist(wantlist_user, scraper)
-            output += "Wantlist: {0} - {1}<br>".format(len(wantlist), wantlist_user)
 
+            # compare the sets to find matches between collection and wantlist
             matches = set(collection) & set(wantlist)
-            output += "<br>Matches: {0}<br>&#123<br>".format(len(matches))
             for match in matches:
                 output += "{0}<br>".format(match)
-            output += "&#125"
+
+            output = """
+            <b>Collection: {0} - {1}<br>
+            Wantlist: {2} - {3}<br><br>
+            Matches: {4}<br><br></b>
+            &#123<br>{5}&#125
+            """.format(len(collection), collection_user,len(wantlist), wantlist_user,len(matches),output)
 
         except AttributeError:
-            output = "Could not find user(s)." # returns if given username does not match a Discogs store user
+            output = "Unable to find a match." # returns if given username does not match a Discogs store user
 
         end_time = time.time()
-        print("Time to load: {0} seconds".format(end_time-start_time))
+        loadtime = "Load time: {0} seconds".format(round(end_time-start_time,2))
 
     return (
+        # browser output #
         """
         <div style="border-style:ridge; width:25%;padding-left:10px;">
-        <h2>Matcher</h2></div>
+        <h2>Collection Matcher</h2></div>
         <br>
 
         <hr width="25%" align="left"><br>
@@ -150,7 +142,7 @@ def matcherpage():
         -
         <br><br>
         """
-        + output
+        + "{0}<br><br><br>{1}<br>".format(loadtime, output)
         + """
         <br><br>
         <hr width="25%" align="left">
