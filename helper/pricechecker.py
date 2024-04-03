@@ -1,15 +1,14 @@
-import collections
-collections.Callable = collections.abc.Callable
-
 from bs4 import BeautifulSoup
 import math, pickle
+import collections
+collections.Callable = collections.abc.Callable
 
 # Discogs Price Checker Module
 # Takes a public Discogs store inventory and returns pricing information on other listings on the market.
 
 ## Classes ##
 
-class FormattedListings: # Formatted marketplace listings for a single release.
+class FormattedEntry: # Formatted marketplace entry for a single release and its listings
 
     def __init__(self,title,url,listings,place,total):
         self.title = title
@@ -29,17 +28,38 @@ def get_inventory(username, scraper):
     URL = "https://www.discogs.com/seller/{0}/profile".format(username)
     pages = count_pages(URL, scraper) # gets the number of pages in a store
 
-    return parse_list(URL, scraper, pages) # returns a list of releases and their item ids
+    return get_inventory_ids(URL, scraper, pages) # returns a list of releases and their item ids
+
+# Takes URL of a store inventory, returns a list of the releases and their item ids.
+def get_inventory_ids(URL, scraper, pages):
+
+    new_list = []
+
+    for page in range(1, pages + 1):
+        html = scraper.get(URL + "?&sort=price&sort_order=asc&page={0}".format(page)).content
+        soup = BeautifulSoup(html, 'html.parser')
+
+        # scrapes for all the releases on a store page
+        list_items = soup.find(id="pjax_container").find("tbody").find_all("tr")
+        for item in list_items: # scrapes for the release title and item id of each release
+            release = item.find("td", class_="item_description")
+
+            title = release.find("strong").text.strip()
+            item_id = release.find("a", class_="item_release_link")["href"].split("-")[0].strip("/release/")
+
+            new_list_item = (title, item_id)
+            new_list.append(new_list_item)
+
+    return new_list
 
 # Given username and item_id, scrapes marketplace for listings and stores them in provided list.
-def get_listings(scraper, sorted_inventory_list, inventory_list, username, release_title, item_id):
+def get_listings(scraper, inventory_list, sorted_inventory_list, username, release_title, item_id):
 
     URL = "https://www.discogs.com/sell/release/{0}?ships_from=United+States&sort=price%2Casc".format(item_id)
     html = scraper.get(URL).content
     soup = BeautifulSoup(html, 'html.parser')
 
-    count = 0
-    your_place = 0
+    count, your_place = 0, 0
     formatted_listings = ""
 
     # scrapes for all the listings for a given release
@@ -58,7 +78,7 @@ def get_listings(scraper, sorted_inventory_list, inventory_list, username, relea
                 formatted_listings += "{0}<br>".format(get_price(listing))
 
     # compiles info and listing prices for a release, then adds it to the inventory lists
-    entry = FormattedListings(release_title,URL,formatted_listings,your_place,total)
+    entry = FormattedEntry(release_title,URL,formatted_listings,your_place,total)
     if your_place < 10:
         (sorted_inventory_list[your_place - 1]).append(entry)
     else:
@@ -82,91 +102,6 @@ def get_price(listing):
     except AttributeError:
         return "n/a"
 
-## Compare ##
-
-# Compares inventory list with provided list for changes
-def compare_inventory_list(inventory_list,saved_inventory_list): 
-
-    if saved_inventory_list:
-        print("Loaded saved inventory state.\n")
-
-        if len(saved_inventory_list) == len(inventory_list):
-            for count in range(len(saved_inventory_list)):
-                compare_entries(inventory_list, saved_inventory_list[count], count)
-        else:
-            print("Inventory size changed.")
-        print("Finished comparison.")
-    else:
-        print("Nothing to load.\n")
-        print_list(inventory_list)
-
-# Compares inventory list with saved state/list for changes.
-def compare_inventory_list(inventory_list): 
-
-    saved_state = load_state()
-    
-    if saved_state:
-        print("Loaded saved inventory state.\n")
-
-        if len(saved_state) == len(inventory_list):
-            for count in range(len(saved_state)):
-                pickled_entry = saved_state[count]
-                compare_entries(inventory_list, pickled_entry, count)
-        else:
-            print("Inventory size changed.")
-        print("Finished comparison.")
-    else:
-        print("Nothing to load.\n")
-        print_list(inventory_list)
-        
-# Given an unpickled entry and an entry number, compares that pickled entry to the current inventory list.
-def compare_entries(inventory_list, pickled_entry, count): 
-
-    listings = inventory_list[count].listings
-    pickled_listings = pickled_entry.listings
-    current_place = inventory_list[count].place
-    old_place = pickled_entry.place
-
-    if listings != pickled_listings:
-        print("({0})".format(count))
-        print("{0}\n{1}".format(pickled_entry.title, pickled_entry.url))
-
-        compare_listings(listings, pickled_listings)
-
-        if current_place != old_place:
-            print("Place: {0} --> {1}\n".format(old_place, current_place))
-
-# Given a list of listings, compares the current and pickled versions.
-def compare_listings(current_listings, pickled_listings): 
-
-    current_list = current_listings.split("\n")
-    pickled_list = pickled_listings.split("\n")
-
-    for index in range(len(current_list)):
-        try:
-            current_listing = current_list[index]
-            pickled_listing = pickled_list[index]
-
-            if current_listing == pickled_listing:
-                print(current_listing)
-            else:
-                if pickled_list[index+1] == current_list[index] or pickled_list[index+1].split("(You)")[0] == current_list[index].split("(You)")[0]:
-                    print("{0} --> {1}".format(pickled_listing, "Removed"))
-                    current_list.insert(index,pickled_listing)
-                elif current_list[index+1] == pickled_list[index] or current_list[index+1].split("(You)")[0] == pickled_list[index].split("(You)")[0]:
-                    print("{0} --> {1}".format("Inserted", current_listing))
-                    pickled_list.insert(index,current_listing)
-                elif ("You" in pickled_listing) and ("You" in current_listing):
-                    if (pickled_listing.split("You")[0] == current_listing.split("You")[0]):
-                        print("{0} --> {1}".format(pickled_listing, current_listing.split("(You) ")[-1]))
-                    else:
-                        print("{0} --> {1}".format(pickled_listing.split(" (You)")[0], current_listing))
-                else:
-                    print("{0} --> {1}".format(pickled_listing, current_listing))
-
-        except IndexError:
-            # print("Length of listings does not matched to saved listings.")
-            print("{0} --> {1}".format("Inserted", current_list[index]))
 
 ## Print ##
 
@@ -198,8 +133,7 @@ def print_sorted_list(sorted_inventory_list):
         # an entry is a release to print out    
         for entry in sorted_inventory_list[index]:
             count += 1
-            output += "({0})<br>".format(count)
-            output += "{0}<br>".format(entry)
+            output += "({0})<br>{1}<br>".format(count, entry)
 
         # prints if current place has an entry
         if len(sorted_inventory_list[index]) > 0:
@@ -210,35 +144,11 @@ def print_sorted_list(sorted_inventory_list):
     places = "Place<br>"
     for index in range(len(sorted_inventory_list)):
         places += "{0}: {1}<br>".format(index+1, len(sorted_inventory_list[index]))
-    output = places + "<br><hr width=\"25%\" align=\"left\">" + output
 
-    return output
+    return places + "<br><hr width=\"25%\" align=\"left\">" + output
 
 
 ## Helper Functions ##
-    
-# Takes URL of a store inventory, returns a list of the releases and their item ids.
-def parse_list(URL, scraper, pages):
-
-    new_list = []
-
-    for page in range(1, pages + 1):
-        new_URL = URL + "?&sort=price&sort_order=asc&page={0}".format(page)
-        html = scraper.get(new_URL).content
-        soup = BeautifulSoup(html, 'html.parser')
-
-        # scrapes for all the releases on a store page
-        list_items = soup.find(id="pjax_container").find("tbody").find_all("tr")
-        for item in list_items: # scrapes for the release title and item id of each release
-            release = item.find("td", class_="item_description")
-
-            title = release.find("strong").text.strip()
-            item_id = release.find("a", class_="item_release_link")["href"].split("-")[0].strip("/release/")
-
-            new_list_item = (title, item_id)
-            new_list.append(new_list_item)
-
-    return new_list
 
 # Takes URL for a Discogs store, returns the number of pages.
 def count_pages(URL, scraper):

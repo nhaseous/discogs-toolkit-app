@@ -31,24 +31,23 @@ def landingpage():
 def pricecheckerpage():
 
     seller = request.args.get("seller", "")
-    output = ""
-    loadtime = ""
+    output,loadtime = "",""
 
     if seller != "":
         start_time = time.time()
         try:
-            inventory_list = []
-            sorted_inventory_list = [[],[],[],[],[],[],[],[],[],[]]
+            inventory_list,sorted_inventory_list = [], [[],[],[],[],[],[],[],[],[],[]]
 
             print("Loading inventory...")
 
             # initializes cloudscraper and gets a list of a store's releases & ids
-            scraper = cloudscraper.create_scraper(browser={'browser': 'chrome','platform': 'android','desktop': False})
-            inventory = pricechecker.get_inventory(seller, scraper)
+            scraper = cloudscraper.create_scraper(browser={'browser':'chrome','platform':'android','desktop':False})
+            release_titles_ids = pricechecker.get_inventory(seller, scraper)
 
             # populates sorted & unsorted inventory lists
-            for release in inventory:
-                pricechecker.get_listings(scraper, sorted_inventory_list, inventory_list, seller, release[0], release[1])
+            for release in release_titles_ids:
+                pricechecker.get_listings(scraper, sorted_inventory_list, inventory_list,
+                                          seller, release[0], release[1]) # (title, id)
 
             # writes to output
             if request.args.get("sort","") == "yes":
@@ -96,13 +95,12 @@ def matcherpage():
 
     collection_user = request.args.get("collection", "")
     wantlist_user = request.args.get("wantlist", "")
-    output = ""
-    loadtime = ""
+    output,loadtime = "",""
 
     start_time = time.time()
     if collection_user != "" and wantlist_user != "" :
         try:
-            scraper = cloudscraper.create_scraper(browser={'browser': 'chrome','platform': 'android','desktop': False})
+            scraper = cloudscraper.create_scraper(browser={'browser':'chrome','platform':'android','desktop':False})
 
             # scrapes for the collections and wantlists
             collection = matcher.get_collection(collection_user, scraper)
