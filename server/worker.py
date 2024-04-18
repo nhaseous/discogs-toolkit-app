@@ -1,6 +1,8 @@
-from helper import pricechecker
 from discord_webhook import DiscordWebhook
-import cloudscraper
+import cloudscraper, time, random, sys
+
+sys.path.insert(1, 'helper')
+import pricechecker
 
 # Worker node that loops its task (of scraping a seller's Discogs inventory)
 # Has properties: url, status, and savedlist
@@ -9,33 +11,52 @@ import cloudscraper
 
 class Worker:
 
-    def __init__(self,seller,webhook):
+    def __init__(self,seller,rate,webhook):
         self.seller = seller
+        self.rate = rate
         self.webhook = webhook # Discord webhook url to send notifications of changes to
         self.savedinventorylist = [] # local save of the inventory list
         self.active = True
 
     # starts the Worker to loop these actions: scrape, compare, notify, and save
     def run(self):
-        # scrapes and populates sorted & unsorted inventory lists
-        scraper = cloudscraper.create_scraper(browser={'browser':'chrome','platform':'android','desktop':False})
-        inventory_list, sorted_inventory_list = [], [ [] for _ in range(10) ]
+        try:
+            # TBD: add lock/condition to shut off worker from main server
+            # loops worker tasks delayed with the worker's rate
+            while True:
+                inventory_list, sorted_inventory_list = [], [ [] for _ in range(10) ]
+                print("Scraping: {0}".format(self.seller))
 
-        release_titles_ids = pricechecker.get_inventory(self.seller, scraper)
-        for release in release_titles_ids:
-            pricechecker.get_listings(scraper, inventory_list, sorted_inventory_list,
-                                      self.seller, release[0], release[1]) # (title, id)
+                # scrapes and populates sorted & unsorted inventory lists
+                scraper = cloudscraper.create_scraper(browser={'browser':'chrome','platform':'android','desktop':False})
+                release_titles_ids = pricechecker.get_inventory(self.seller, scraper)
+                for release in release_titles_ids:
+                    pricechecker.get_listings(scraper, inventory_list, sorted_inventory_list,
+                                                self.seller, release[0], release[1]) # (title, id)
 
-        # compares inventory list with saved list to check for 
-        changes = compare_inventory_list(inventory_list, self.savedinventorylist)
+                # compares inventory list with saved list to check for 
+                changes = ""
+                if self.savedinventorylist != []:
+                    # if there is a saved list, do comparison and return changes
+                    changes = compare_inventory_list(inventory_list, self.savedinventorylist)
+                else:
+                    changes = pricechecker.print_list(inventory_list) # if there's no saved inventory list, return the scraped list
 
-        if changes != "": # notifies Discord webhook if changes are found (non-empty string)
-            webhook = DiscordWebhook(url="URL", content="MESSAGE")
-            response = webhook.execute()
+                # notifies Discord webhook if changes are found (non-empty string)
+                if changes != "":
+                    webhook = DiscordWebhook(url=self.webhook, content=changes)
+                    response = webhook.execute()
+                    print("Changes detected, webhook alerted.".format)
+                    
+                # makes a local save to compare later
+                # save_state(inventory_list)
+                self.savedinventorylist = inventory_list
             
-        # makes a local save to compare later
-        # save_state(inventory_list)
-        self.savedinventorylist = inventory_list
+                # randomizes rate of looping (from 5 minutes to 10 minutes)
+                time.sleep(self.rate + random.randint(0,5))
+
+        except Exception as e:
+            print(e)
 
 
 ## Compare ##

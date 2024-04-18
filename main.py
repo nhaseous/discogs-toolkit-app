@@ -1,8 +1,7 @@
 from flask import Flask, request
 from helper import pricechecker, matcher
-from server import server
-import cloudscraper
-import time, pprint
+import cloudscraper, time, pprint
+# from server import server
 
 # Main
 
@@ -154,7 +153,8 @@ def matcherpage():
 
 @app.route("/test")
 def testingpage():
-    # server = server.PriceCheckerServer()
+    # server = server.PriceCheckerServer(user1, webhook1)
+    # server.serve()
     return (
         """
         <input type="text" name="wantlist">
