@@ -1,5 +1,6 @@
 from flask import Flask, request
 from helper import pricechecker, matcher
+# from server import server
 import cloudscraper
 import time, pprint
 
@@ -36,7 +37,7 @@ def pricecheckerpage():
     if seller != "":
         start_time = time.time()
         try:
-            inventory_list,sorted_inventory_list = [], [[],[],[],[],[],[],[],[],[],[]]
+            inventory_list,sorted_inventory_list = [], [ [] for _ in range(10) ]
 
             print("Loading inventory...")
 
@@ -46,7 +47,7 @@ def pricecheckerpage():
 
             # populates sorted & unsorted inventory lists
             for release in release_titles_ids:
-                pricechecker.get_listings(scraper, sorted_inventory_list, inventory_list,
+                pricechecker.get_listings(scraper, inventory_list, sorted_inventory_list,
                                           seller, release[0], release[1]) # (title, id)
 
             # writes to output
@@ -153,6 +154,7 @@ def matcherpage():
 
 @app.route("/test")
 def testingpage():
+    # server = server.PriceCheckerServer()
     return (
         """
         <input type="text" name="wantlist">

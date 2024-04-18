@@ -1,5 +1,5 @@
 from helper import pricechecker
-from discord_webhook import DiscordWebhook
+from discordwebhook import DiscordWebhook
 import cloudscraper
 
 # Worker node that loops its task (of scraping a seller's Discogs inventory)
@@ -19,7 +19,7 @@ class Worker:
     def run(self):
         # scrapes and populates sorted & unsorted inventory lists
         scraper = cloudscraper.create_scraper(browser={'browser':'chrome','platform':'android','desktop':False})
-        inventory_list, sorted_inventory_list = [], [[],[],[],[],[],[],[],[],[],[]]
+        inventory_list, sorted_inventory_list = [], [ [] for _ in range(10) ]
 
         release_titles_ids = pricechecker.get_inventory(self.seller, scraper)
         for release in release_titles_ids:
