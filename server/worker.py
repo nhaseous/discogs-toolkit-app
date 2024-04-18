@@ -1,5 +1,5 @@
 from helper import pricechecker
-from discordwebhook import DiscordWebhook
+from discord_webhook import DiscordWebhook
 import cloudscraper
 
 # Worker node that loops its task (of scraping a seller's Discogs inventory)

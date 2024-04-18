@@ -1,6 +1,6 @@
 from flask import Flask, request
 from helper import pricechecker, matcher
-# from server import server
+from server import server
 import cloudscraper
 import time, pprint
 
