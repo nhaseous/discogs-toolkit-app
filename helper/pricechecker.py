@@ -10,15 +10,18 @@ collections.Callable = collections.abc.Callable
 
 class FormattedEntry: # Formatted marketplace entry for a single release and its listings
 
-    def __init__(self,title,url,listings,place,total):
+    def __init__(self,username,title,url,imgUrl,listings,place,total):
+        self.self = username
         self.title = title
         self.url = url
+        self.imgUrl = imgUrl
         self.listings = listings
         self.place = place
-        self.total = "> Total: {0}".format(total)
+        self.total = total
+        # self.total = "> Total: {0}".format(total)
 
     def __str__(self):
-        return "{0}<br><a href=\"{1}\">Link</a><br>{2}<br>{3}<br>".format(self.title,self.url,self.listings,self.total)
+        return "{0}<br><a href=\"{1}\">Link</a><br>{2}<br>> Total: {3}<br>".format(self.title,self.url,self.listings,self.total)
 
 ## Get ##
 
@@ -57,6 +60,7 @@ def get_listings(scraper, inventory_list, sorted_inventory_list, username, relea
 
     URL = "https://www.discogs.com/sell/release/{0}?ships_from=United+States&sort=price%2Casc".format(item_id)
     html = scraper.get(URL).content
+
     soup = BeautifulSoup(html, 'html.parser')
 
     count, your_place = 0, 0
@@ -65,6 +69,8 @@ def get_listings(scraper, inventory_list, sorted_inventory_list, username, relea
     # scrapes for all the listings for a given release
     listings = soup.find("table", class_="mpitems").find_all("tr", class_="shortcut_navigable")
     total = (soup.find("strong", class_="pagination_total").text.split(" of "))[-1] # total number of listings for a release
+    imgURL = soup.find("a", class_="thumbnail_link").find("img")["src"]
+
     # compiles the prices of all the listings for a release
     for listing in listings:
         count += 1
@@ -78,7 +84,7 @@ def get_listings(scraper, inventory_list, sorted_inventory_list, username, relea
                 formatted_listings += "{0}<br>".format(get_price(listing))
 
     # compiles info and listing prices for a release, then adds it to the inventory lists
-    entry = FormattedEntry(release_title,URL,formatted_listings,your_place,total)
+    entry = FormattedEntry(username,release_title,URL,imgURL,formatted_listings,your_place,total)
     if your_place < 10:
         (sorted_inventory_list[your_place - 1]).append(entry)
     else:
@@ -187,20 +193,21 @@ def check_scam(listing):
 
     return listing.find(string="0.0%")
 
+
 ## State ##
 
-# Pickles an inventory list as a save state in a bin file.
-def save_state(inventory_list): 
+# # Pickles an inventory list as a save state in a bin file.
+# def save_state(inventory_list): 
 
-    with open("state.bin", "wb") as f:
-        pickle.dump(inventory_list, f)
+#     with open("state.bin", "wb") as f:
+#         pickle.dump(inventory_list, f)
 
-# Loads a pickled inventory list from a bin file.
-def load_state(): 
+# # Loads a pickled inventory list from a bin file.
+# def load_state(): 
 
-    with open("state.bin", "rb") as f:
-        try:
-            pickled_list = pickle.load(f)
-            return pickled_list
-        except pickle.UnpicklingError:
-            return []
+#     with open("state.bin", "rb") as f:
+#         try:
+#             pickled_list = pickle.load(f)
+#             return pickled_list
+#         except pickle.UnpicklingError:
+#             return []

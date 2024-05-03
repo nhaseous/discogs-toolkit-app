@@ -10,10 +10,6 @@ class PriceCheckerServer:
 
     def __init__(self):
         self.workers = [] # list of worker thread ids
-
-    # def __init__(self,workers):
-    #     self.workers = workers
-        
     
     ## Main Functions ##
 
@@ -37,6 +33,7 @@ class PriceCheckerServer:
     def start_worker(self,user,rate,webhook):
         new_worker = Worker(user,rate,webhook)
         new_worker.run()
+        # new_worker.test()
 
     # TBD
     # checks if there is an active worker watching the given user
@@ -58,13 +55,12 @@ class PriceCheckerServer:
 # Local Testing
 
 if __name__ == "__main__":
-    # hardcoded params for testing
-    # set to loop worker every 10 minutes
-    user1, rate, webhook1 = "curefortheitch", 5, "https://discord.com/api/webhooks/1181026153801191424/dFcWlcwfcrF3T2MbQy2AikAc8-0Ha5vRDdb-gv_EN2rFA0187rGxzPFBPiHUDNmFBdn2"
+    # set to loop worker every 300 seconds (hardcoded params for testing)
     server = PriceCheckerServer()
+    user1, rate, webhook1 = "curefortheitch", 300, "https://discord.com/api/webhooks/1181026153801191424/dFcWlcwfcrF3T2MbQy2AikAc8-0Ha5vRDdb-gv_EN2rFA0187rGxzPFBPiHUDNmFBdn2"
     server.serve(user1, rate, webhook1) # starts worker in a new thread
     print ("Server launched. Press 'x' to exit.")
 
     # keeps server running pending user input from the console to exit.
     while input() != "x":
-        time.sleep(0.5)
+        time.sleep(1)
