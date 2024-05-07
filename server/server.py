@@ -56,10 +56,19 @@ class PriceCheckerServer:
 if __name__ == "__main__":
     # set to loop worker every x seconds (hardcoded params for testing)
     server = PriceCheckerServer()
-    user1, rate, webhook1 = "curefortheitch", 600, "https://discord.com/api/webhooks/1181026153801191424/dFcWlcwfcrF3T2MbQy2AikAc8-0Ha5vRDdb-gv_EN2rFA0187rGxzPFBPiHUDNmFBdn2"
-    server.serve(user1, rate, webhook1) # starts worker in a new thread
-    print ("Server launched. Press 'x' to exit.")
+
+    user1, rate1, webhook1 = "curefortheitch", 600, "https://discord.com/api/webhooks/1181026153801191424/dFcWlcwfcrF3T2MbQy2AikAc8-0Ha5vRDdb-gv_EN2rFA0187rGxzPFBPiHUDNmFBdn2"
+    server.serve(user1, rate1, webhook1) # starts worker in a new thread
+
+    user2, rate2, webhook2 = "jazzycats", 600, "https://discord.com/api/webhooks/1181026153801191424/dFcWlcwfcrF3T2MbQy2AikAc8-0Ha5vRDdb-gv_EN2rFA0187rGxzPFBPiHUDNmFBdn2"
+    server.serve(user2, rate2, webhook2)
+
+    print ("Server launched.")
 
     # keeps server running pending user input from the console to exit.
-    while input() != "x":
-        time.sleep(1)
+    # while input() != "x":
+    #     time.sleep(1)
+
+    # keeps server running indefinitely
+    while True:
+        time.sleep(1000)
