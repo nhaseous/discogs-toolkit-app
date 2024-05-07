@@ -30,10 +30,13 @@ class Worker:
             webhook = DiscordWebhook(url=self.webhook,rate_limit_retry=True)
 
             # loops worker tasks delayed with the worker's rate
+            iteration = 0
             while True:
                 start_time = time.time()
+                iteration += 1
+
                 inventory_list, sorted_inventory_list = [], [ [] for _ in range(10) ]
-                print("Scraping: {0}...".format(self.seller))
+                print("Scraping: {0}... ({1})".format(self.seller,iteration))
 
                 # scrapes and populates sorted & unsorted inventory lists
                 release_titles_ids = pricechecker.get_inventory(self.seller, scraper)
@@ -50,31 +53,35 @@ class Worker:
                 if embeded_changes != []:
                     print("Changes detected, alerting webhook.")
                     count = 0
-                    for embeded in embeded_changes: # converts the entries in the inventory list to be able to output to DiscordWebhooks as embded content
+                    # converts the entries in the inventory list to be able to output to DiscordWebhooks as embded content
+                    for embeded in embeded_changes:
                         webhook.add_embed(embeded)
                         count += 1
 
                         if count > 9:
                             response = webhook.execute(remove_embeds=True)
                             count = 0
+
+                    response = webhook.execute(remove_embeds=True)
 
                 # if no changes, just output the original inventory list
+
+                # elif self.savedinventorylist == []:
+                #     print("No changes found, returning the original list.")
+                #     count = 0
+                #     for entry in inventory_list:
+                #         embeded = embed(entry)
+                #         webhook.add_embed(embeded)
+                #         count += 1
+
+                #         if count > 9:
+                #             response = webhook.execute(remove_embeds=True)
+                #             count = 0
+
+                #     response = webhook.execute(remove_embeds=True)
+
                 else:
-                    # print("No changes found.")
-                    print("No changes found, returning the original list.")
-                    count = 0
-                    for entry in inventory_list: # converts the entries in the inventory list to be able to output to DiscordWebhooks as embded content
-                        embeded = embed(entry)
-                        webhook.add_embed(embeded)
-                        count += 1
-
-                        if count > 9:
-                            response = webhook.execute(remove_embeds=True)
-                            count = 0
-                    """
-                    """
-
-                response = webhook.execute(remove_embeds=True)
+                    print("No changes found.")
 
                 end_time = time.time()
                 print("Search time: {0}s".format(round(end_time-start_time,2)))
@@ -84,7 +91,7 @@ class Worker:
                 self.savedinventorylist = inventory_list
 
                 # randomizes rate of looping (in seconds)
-                sleeptime = self.rate + random.randint(0,200)
+                sleeptime = self.rate + random.randint(0,300)
                 print("Sleeping... ({0}s)".format(sleeptime))
                 time.sleep(sleeptime)
 
@@ -94,10 +101,9 @@ class Worker:
 
 ## Compare ##
 
+# TBD: accommodate changes to inventory list
 # Compares inventory list with provided list for changes
 def compare_inventory_list(inventory_list, saved_inventory_list, embeded_changes): 
-
-    # embeded_changes = []
 
     if saved_inventory_list:
         print("Loaded saved inventory state.\n")
@@ -122,9 +128,7 @@ def compare_inventory_list(inventory_list, saved_inventory_list, embeded_changes
                 
                 # if change is detected, generate an Embed object with the entry and changes logged
                 if changes != "":
-                    print("Changes: " + changes)
-                    # if saved_inventory_list[i].place != inventory_list[i].place:
-                    #     saved_inventory_list[i].place = changes.split("(Place) ")[1]
+                    print("Changes detected. Sending to webhook.")
                     embeded_changes.append(embed(inventory_list[i],changes))
 
         else:
@@ -133,9 +137,7 @@ def compare_inventory_list(inventory_list, saved_inventory_list, embeded_changes
         print("Finished comparison.")
     else:
         print("Nothing to load.\n")
-    
-    # return embeded_changes
-        
+            
 # Given an entry number and a saved entry, compares it to the corresponding entry in the provided inventory list
 # returns any changes as a string output; returns an empty string if there are no changes
 def compare_entries(current, saved_entry): 
@@ -145,11 +147,8 @@ def compare_entries(current, saved_entry):
     change_log = ""
 
     if current_listings != saved_listings:
-
-        # writes to change log if changes are found after comparison
-        # change_log = "({0}){1}\n{2}\n".format(count, saved_entry.title, saved_entry.url)
-
         # compares the current and saved versions of an entry's listings
+        # writes any changes to change log to return
         current_list, saved_list = current_listings.split("<br>"), saved_listings.split("<br>")
         for index in range(len(current_list)):
             try:
@@ -177,7 +176,6 @@ def compare_entries(current, saved_entry):
                         change_log += "{0} --> {1}\n".format(saved_listing, current_listing)
 
             except IndexError:
-                # output += "Length of listings does not matched to saved listings."
                 change_log += "{0} --> {1}\n".format("Inserted", current_list[index])
 
         # checks if your place has changed on the list
@@ -192,19 +190,18 @@ def compare_entries(current, saved_entry):
 # Converts a FormattedEntry object to a DiscordEmbed and returns it
 def embed(entry,changes=""):
 
-    # TBD - Fix "You" splitting
     # trim HTML from the entry listings
-    formatted_listings = entry.listings.replace("<br>","\n").replace("<mark>", "\> ").split("(You)")[0]
+    formatted_listings = entry.listings.replace("<br>","\n").replace("<mark>", "\> ").replace("(You)","").replace("</mark>","")
+    place = entry.place
+    if "(Place)" in changes:
+        place = changes.split("(Place) ")[1]
+        changes = changes.split("(Place) ")[0]
 
     # embed = DiscordEmbed(title=entry.title, description=entry.url.split("?")[0], color="03b2f8")
     embed = DiscordEmbed(title=entry.title, description=entry.url, color="03b2f8")
     embed.set_thumbnail(url=entry.imgUrl)
     embed.add_embed_field(name="Listings", value=formatted_listings, inline=False)
-
-    if "(Place)" in changes:
-        embed.add_embed_field(name="Place", value=changes.split("(Place) ")[1])
-        changes = changes.split("(Place) ")[0]
-    
+    embed.add_embed_field(name="Place", value=place)
     embed.add_embed_field(name="Total", value=entry.total)
 
     # if changes detected, add a Changes field to webhook embed
