@@ -1,5 +1,5 @@
 from discord_webhook import DiscordWebhook, DiscordEmbed
-import cloudscraper, time, random, sys
+import cloudscraper, time, random, sys, itertools
 
 sys.path.insert(1, 'helper')
 import pricechecker
@@ -91,7 +91,8 @@ class Worker:
                 self.savedinventorylist = inventory_list
 
                 # randomizes rate of looping (in seconds)
-                sleeptime = self.rate + random.randint(0,300)
+                # sleeptime = self.rate + random.randint(0,300)
+                sleeptime = self.rate + random.randint(0,10)
                 print("Sleeping... ({0}s)".format(sleeptime))
                 time.sleep(sleeptime)
 
@@ -101,22 +102,84 @@ class Worker:
 
 ## Compare ##
 
-# TBD: accommodate changes to inventory list
 # Compares inventory list with provided list for changes
 def compare_inventory_list(inventory_list, saved_inventory_list, embeded_changes): 
 
     if saved_inventory_list:
         print("Loaded saved inventory state.\n")
 
-        # do comparison if inventory size hasn't changed
-        if len(inventory_list) == len(saved_inventory_list):
+        # iterate over the indices of both lists to look for changes
+        for (i,j) in itertools.zip_longest(range(len(inventory_list)),range(len(saved_inventory_list))):
 
-            for i in range(len(inventory_list)):
+            changes = ""
+            match_found = False
 
-                changes = ""
+            # checks if an entry exists at that index for both the current and saved lists
+            if i and j:
+
                 # checks if the entries being compared are the same release (using url as an id)
                 if inventory_list[i].url == saved_inventory_list[i].url:
                     changes += compare_entries(inventory_list[i], saved_inventory_list[i])
+
+                # if the entries don't match up,
+                else:
+                    # find matching entry for current entry by traversing the saved list
+                    for k in range(i+1,len(saved_inventory_list)):
+                        # if the matching entry is found, do a comparison
+                        if inventory_list[i].url == saved_inventory_list[k].url:
+                            changes += compare_entries(inventory_list[i], saved_inventory_list[k])
+                            # swap to reorganize list for future compares
+                            saved_inventory_list[i], saved_inventory_list[k] = saved_inventory_list[k], saved_inventory_list[i]
+                            match_found = True
+
+                    # find matching entry for saved entry by traversing the current list if not found yet
+                    if not match_found:
+                        for k in range(i,len(inventory_list)):
+                            if saved_inventory_list[i].url == inventory_list[k].url:
+                                changes += compare_entries(inventory_list[k], saved_inventory_list[i])
+                                inventory_list[i], inventory_list[k] = inventory_list[k], inventory_list[i]
+                                match_found = True
+
+                    # if a matching entry isn't found in either list, return both entries at that index in the change log
+                    if not match_found: 
+                        print("Changes detected.")
+                        embeded_changes.append(embed(inventory_list[i],"New entry found."))
+                        embeded_changes.append(embed(saved_inventory_list[i],"New entry found."))
+
+                # if the current release entry has changed, log the changes in an Emded object
+                if changes != "":
+                    print("Changes detected. Sending to webhook.")
+                    embeded_changes.append(embed(inventory_list[i],changes))
+
+            # if current entry exists at that index but not a saved entry, return the current entry
+            elif i:
+                embeded_changes.append(embed(inventory_list[i],"New entry added."))
+
+        print("Finished comparison.")
+                
+    else:
+        print("Nothing to load.\n")
+
+
+# TBD: remove
+def compare_inventory_list_old(inventory_list, saved_inventory_list, embeded_changes): 
+
+    if saved_inventory_list:
+        print("Loaded saved inventory state.\n")
+
+        # compare size of current inventory list to saved list
+        if len(inventory_list) >= len(saved_inventory_list):
+
+            # iterate over the current inventory list to compare for changes
+            for i in range(len(inventory_list)):
+
+                changes = ""
+                match_found = False
+                
+                # checks if the entries being compared are the same release (using url as an id)
+                if inventory_list[i].url == saved_inventory_list[i].url:
+                    changes += compare_entries(inventory_list[i], saved_inventory_list[i])
+
                 else:
                     # if the entries don't match up, find the matching entry/release by traversing the list
                     for j in range(i+1,len(saved_inventory_list)):
@@ -125,16 +188,27 @@ def compare_inventory_list(inventory_list, saved_inventory_list, embeded_changes
                             # then a swap to reorganize list for future compares 
                             changes += compare_entries(inventory_list[i], saved_inventory_list[j])
                             saved_inventory_list[i], saved_inventory_list[j] = saved_inventory_list[j], saved_inventory_list[i]
+                            match_found = True
+
+                    # if a matching entry/release isn't found after the traversal, treat the corresponding entries in the current
+                    # and saved inventory lists both as new entries/changes to log
+                    if not match_found:
+                        print("Changes detected.")
+                        embeded_changes.append(embed(inventory_list[i],changes))
+                        embeded_changes.append(embed(saved_inventory_list[i],changes))
                 
-                # if change is detected, generate an Embed object with the entry and changes logged
+                # if the current release entry has changed, log the changes in an Emded object
                 if changes != "":
                     print("Changes detected. Sending to webhook.")
                     embeded_changes.append(embed(inventory_list[i],changes))
 
         else:
+            # TODO: current inventory list size smaller than last compared, do...
             print("Inventory size changed.")
             
+            
         print("Finished comparison.")
+
     else:
         print("Nothing to load.\n")
             
