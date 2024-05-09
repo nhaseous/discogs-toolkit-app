@@ -58,14 +58,13 @@ class Worker:
                         webhook.add_embed(embeded)
                         count += 1
 
-                        if count > 9:
+                        if count > 4:
                             response = webhook.execute(remove_embeds=True)
                             count = 0
 
                     response = webhook.execute(remove_embeds=True)
 
                 # if no changes, just output the original inventory list
-
                 # elif self.savedinventorylist == []:
                 #     print("No changes found, returning the original list.")
                 #     count = 0
@@ -84,7 +83,7 @@ class Worker:
                     print("No changes found for ({0}).".format(self.seller))
 
                 end_time = time.time()
-                print("Search time ({0}): {1}s".format(self.seller,round(end_time-start_time,2)))
+                print("Search time ({0}): {1}s".format(self.seller,round(end_time-start_time)))
 
                 # makes a local save to compare later
                 # save_state(inventory_list)
@@ -96,7 +95,7 @@ class Worker:
                 time.sleep(sleeptime)
 
         except Exception as e:
-            print("{0}: {1}".format(self.seller,e))
+            print("{0}: {1}: {2}".format("run",self.seller,e))
 
 
 ## Compare ##
@@ -107,52 +106,57 @@ def compare_inventory_list(inventory_list, saved_inventory_list, embeded_changes
     if saved_inventory_list:
         print("Loaded saved inventory state. ({0})\nComparing...".format(inventory_list[0].self))
 
-        # iterate over the indices of both lists to look for changes
-        for (i,j) in itertools.zip_longest(range(len(inventory_list)),range(len(saved_inventory_list))):
+        try:
+            # iterate over the indices of both lists to look for changes
+            for (i,j) in itertools.zip_longest(range(len(inventory_list)),range(len(saved_inventory_list))):
 
-            changes = ""
-            match_found = False
+                changes = ""
+                match_found = False
 
-            # checks if an entry exists at that index for both the current and saved lists
-            if i and j:
+                # checks if an entry exists at that index for both the current and saved lists
+                if i and j:
 
-                # checks if the entries being compared are the same release (using url as an id)
-                if inventory_list[i].url == saved_inventory_list[i].url:
-                    changes += compare_entries(inventory_list[i], saved_inventory_list[i])
+                    # checks if the entries being compared are the same release (using url as an id)
+                    if inventory_list[i].url == saved_inventory_list[i].url:
+                        changes += compare_entries(inventory_list[i], saved_inventory_list[i])
 
-                # if the entries don't match up,
-                else:
-                    # find matching entry for current entry by traversing the saved list
-                    for k in range(i+1,len(saved_inventory_list)):
-                        # if the matching entry is found, do a comparison
-                        if inventory_list[i].url == saved_inventory_list[k].url:
-                            changes += compare_entries(inventory_list[i], saved_inventory_list[k])
-                            # swap to reorganize list for future compares
-                            saved_inventory_list[i], saved_inventory_list[k] = saved_inventory_list[k], saved_inventory_list[i]
-                            match_found = True
+                    # if the entries don't match up,
+                    else:
+                        if i+1 < len(saved_inventory_list):
+                            # find matching entry for current entry by traversing the saved list
+                            for k in range(i+1,len(saved_inventory_list)):
+                                # if the matching entry is found, do a comparison
+                                if inventory_list[i].url == saved_inventory_list[k].url:
+                                    changes += compare_entries(inventory_list[i], saved_inventory_list[k])
+                                    # swap to reorganize list for future compares
+                                    saved_inventory_list[i], saved_inventory_list[k] = saved_inventory_list[k], saved_inventory_list[i]
+                                    match_found = True
 
-                    # find matching entry for saved entry by traversing the current list if not found yet
-                    if not match_found:
-                        for k in range(i,len(inventory_list)):
-                            if saved_inventory_list[i].url == inventory_list[k].url:
-                                changes += compare_entries(inventory_list[k], saved_inventory_list[i])
-                                inventory_list[i], inventory_list[k] = inventory_list[k], inventory_list[i]
-                                match_found = True
+                        # find matching entry for saved entry by traversing the current list if not found yet
+                        if not match_found:
+                            for k in range(i,len(inventory_list)):
+                                if saved_inventory_list[i].url == inventory_list[k].url:
+                                    changes += compare_entries(inventory_list[k], saved_inventory_list[i])
+                                    inventory_list[i], inventory_list[k] = inventory_list[k], inventory_list[i]
+                                    match_found = True
 
-                    # if a matching entry isn't found in either list, return both entries at that index in the change log
-                    if not match_found: 
-                        print("Changes detected. ({0})".format(inventory_list[i].self))
-                        embeded_changes.append(embed(inventory_list[i],"New entry found."))
-                        embeded_changes.append(embed(saved_inventory_list[i],"New entry found."))
+                        # if a matching entry isn't found in either list, return both entries at that index in the change log
+                        if not match_found: 
+                            print("Changes detected. ({0})".format(inventory_list[i].self))
+                            embeded_changes.append(embed(inventory_list[i],"New entry found."))
+                            embeded_changes.append(embed(saved_inventory_list[i],"New entry found."))
 
-                # if the current release entry has changed, log the changes in an Emded object
-                if changes != "":
-                    print("Changes detected. Sending to webhook. ({0})".format(inventory_list[i].self))
-                    embeded_changes.append(embed(inventory_list[i],changes))
+                    # if the current release entry has changed, log the changes in an Emded object
+                    if changes != "":
+                        print("Changes detected. Sending to webhook. ({0})".format(inventory_list[i].self))
+                        embeded_changes.append(embed(inventory_list[i],changes))
 
-            # if current entry exists at that index but not a saved entry, return the current entry
-            elif i:
-                embeded_changes.append(embed(inventory_list[i],"New entry added."))
+                # if current entry exists at that index but not a saved entry, return the current entry
+                elif i:
+                    embeded_changes.append(embed(inventory_list[i],"New entry added."))
+
+        except Exception as e:
+            print("{0}: {1}: {2}".format("compare_inventory_list",inventory_list[0].self,e))
 
         print("Finished comparison. ({0})".format(inventory_list[i].self))
                 
