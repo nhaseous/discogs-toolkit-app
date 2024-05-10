@@ -36,7 +36,7 @@ class Worker:
                 iteration += 1
 
                 inventory_list, sorted_inventory_list = [], [ [] for _ in range(10) ]
-                print("Scraping: {0}... ({1})".format(self.seller,iteration))
+                print("({0}) Scraping... ({1})".format(self.seller,iteration))
 
                 # scrapes and populates sorted & unsorted inventory lists
                 release_titles_ids = pricechecker.get_inventory(self.seller, scraper)
@@ -51,7 +51,7 @@ class Worker:
 
                 # notifies Discord webhook if changes are found (non-empty string)
                 if embeded_changes != []:
-                    print("Changes detected for ({0}), alerting webhook.".format(self.seller))
+                    print("({0}) Changes detected, notifying Discord.".format(self.seller))
                     count = 0
                     # converts the entries in the inventory list to be able to output to DiscordWebhooks as embded content
                     for embeded in embeded_changes:
@@ -80,10 +80,10 @@ class Worker:
                 #     response = webhook.execute(remove_embeds=True)
 
                 else:
-                    print("No changes found for ({0}).".format(self.seller))
+                    print("({0}) No changes found.".format(self.seller))
 
                 end_time = time.time()
-                print("Search time ({0}): {1}s".format(self.seller,round(end_time-start_time)))
+                print("({0}) Search time: {1}s".format(self.seller,round(end_time-start_time)))
 
                 # makes a local save to compare later
                 # save_state(inventory_list)
@@ -91,7 +91,7 @@ class Worker:
 
                 # randomizes rate of looping (in seconds)
                 sleeptime = self.rate + random.randint(0,100)
-                print("Sleeping... ({0}) ({1}s)\n".format(self.seller,sleeptime))
+                print("({0}) Sleeping... ({1}s)\n".format(self.seller,sleeptime))
                 time.sleep(sleeptime)
 
         except Exception as e:
@@ -104,7 +104,7 @@ class Worker:
 def compare_inventory_list(inventory_list, saved_inventory_list, embeded_changes): 
 
     if saved_inventory_list:
-        print("Loaded saved inventory state. ({0})\nComparing...".format(inventory_list[0].self))
+        print("({0}) Loaded saved inventory state.\nComparing...".format(inventory_list[0].self))
 
         try:
             # iterate over the indices of both lists to look for changes
@@ -142,13 +142,13 @@ def compare_inventory_list(inventory_list, saved_inventory_list, embeded_changes
 
                         # if a matching entry isn't found in either list, return both entries at that index in the change log
                         if not match_found: 
-                            print("Changes detected. ({0})".format(inventory_list[i].self))
+                            print("({0}) Changes detected.".format(inventory_list[i].self))
                             embeded_changes.append(embed(inventory_list[i],"New entry found."))
                             embeded_changes.append(embed(saved_inventory_list[i],"New entry found."))
 
                     # if the current release entry has changed, log the changes in an Emded object
                     if changes != "":
-                        print("Changes detected. Sending to webhook. ({0})".format(inventory_list[i].self))
+                        print("({0}) Changes detected. Sending to webhook.".format(inventory_list[i].self))
                         embeded_changes.append(embed(inventory_list[i],changes))
 
                 # if current entry exists at that index but not a saved entry, return the current entry
@@ -158,62 +158,10 @@ def compare_inventory_list(inventory_list, saved_inventory_list, embeded_changes
         except Exception as e:
             print("{0}: {1}: {2}".format("compare_inventory_list",inventory_list[0].self,e))
 
-        print("Finished comparison. ({0})".format(inventory_list[i].self))
+        print("({0}) Finished comparison.".format(inventory_list[i].self))
                 
     else:
-        print("Nothing to load. ({0})\n".format(inventory_list[i].self))
-
-
-# TBD: remove
-# def compare_inventory_list_old(inventory_list, saved_inventory_list, embeded_changes): 
-
-#     if saved_inventory_list:
-#         print("Loaded saved inventory state.\n")
-
-#         # compare size of current inventory list to saved list
-#         if len(inventory_list) >= len(saved_inventory_list):
-
-#             # iterate over the current inventory list to compare for changes
-#             for i in range(len(inventory_list)):
-
-#                 changes = ""
-#                 match_found = False
-                
-#                 # checks if the entries being compared are the same release (using url as an id)
-#                 if inventory_list[i].url == saved_inventory_list[i].url:
-#                     changes += compare_entries(inventory_list[i], saved_inventory_list[i])
-
-#                 else:
-#                     # if the entries don't match up, find the matching entry/release by traversing the list
-#                     for j in range(i+1,len(saved_inventory_list)):
-#                         if inventory_list[i].url == saved_inventory_list[j].url:
-#                             # if the matching entry is found, do a comparison
-#                             # then a swap to reorganize list for future compares 
-#                             changes += compare_entries(inventory_list[i], saved_inventory_list[j])
-#                             saved_inventory_list[i], saved_inventory_list[j] = saved_inventory_list[j], saved_inventory_list[i]
-#                             match_found = True
-
-#                     # if a matching entry/release isn't found after the traversal, treat the corresponding entries in the current
-#                     # and saved inventory lists both as new entries/changes to log
-#                     if not match_found:
-#                         print("Changes detected.")
-#                         embeded_changes.append(embed(inventory_list[i],changes))
-#                         embeded_changes.append(embed(saved_inventory_list[i],changes))
-                
-#                 # if the current release entry has changed, log the changes in an Emded object
-#                 if changes != "":
-#                     print("Changes detected. Sending to webhook.")
-#                     embeded_changes.append(embed(inventory_list[i],changes))
-
-#         else:
-#             # TODO: current inventory list size smaller than last compared, do...
-#             print("Inventory size changed.")
-            
-            
-#         print("Finished comparison.")
-
-#     else:
-#         print("Nothing to load.\n")
+        print("({0}) Nothing to load.\n".format(inventory_list[i].self))
             
 # Given an entry number and a saved entry, compares it to the corresponding entry in the provided inventory list
 # returns any changes as a string output; returns an empty string if there are no changes
@@ -270,46 +218,30 @@ def compare_entries(current, saved_entry):
 # Converts a FormattedEntry object to a DiscordEmbed and returns it
 def embed(entry,changes=""):
 
-    # trim HTML from the entry listings
-    formatted_listings = entry.listings.replace("<br>","\n").replace("<mark>", "\> ").replace("(You)","").replace("</mark>","")
-    place = entry.place
-    if "(Place)" in changes:
-        place = changes.split("(Place) ")[1]
-        changes = changes.split("(Place) ")[0]
+    try:
+        # trim HTML from the entry listings
+        formatted_listings = entry.listings.replace("<br>","\n").replace("<mark>", "\> ").replace("(You)","").replace("</mark>","")
+        place = entry.place
+        if "(Place)" in changes:
+            place = changes.split("(Place) ")[1]
+            changes = changes.split("(Place) ")[0]
 
-    # embed = DiscordEmbed(title=entry.title, description=entry.url.split("?")[0], color="03b2f8")
-    embed = DiscordEmbed(title=entry.title, description=entry.url, color="03b2f8")
-    embed.set_thumbnail(url=entry.imgUrl)
-    embed.add_embed_field(name="Listings", value=formatted_listings, inline=False)
-    embed.add_embed_field(name="Place", value=place)
-    embed.add_embed_field(name="Total", value=entry.total)
+        # embed = DiscordEmbed(title=entry.title, description=entry.url.split("?")[0], color="03b2f8")
+        embed = DiscordEmbed(title=entry.title, description=entry.url, color="03b2f8")
+        embed.set_thumbnail(url=entry.imgUrl)
+        embed.add_embed_field(name="Listings", value=formatted_listings, inline=False)
+        embed.add_embed_field(name="Place", value=place)
+        embed.add_embed_field(name="Total", value=entry.total)
 
-    # if changes detected, add a Changes field to webhook embed
-    if changes != "":
-        embed.add_embed_field(name="Changes", value =changes, inline=False)
-
-
-    embed.set_footer(text=entry.self)
-    embed.set_timestamp()
-
-    return embed
+        # if changes detected, add a Changes field to webhook embed
+        if changes != "":
+            embed.add_embed_field(name="Changes", value =changes, inline=False)
 
 
-# Compares inventory list with saved state/list for changes (this one uses Pickle to save state)
-# def compare_inventory_list(inventory_list): 
+        embed.set_footer(text=entry.self)
+        embed.set_timestamp()
 
-#     saved_state = load_state()
+        return embed
     
-#     if saved_state:
-#         print("Loaded saved inventory state.\n")
-
-#         if len(saved_state) == len(inventory_list):
-#             for count in range(len(saved_state)):
-#                 saved_entry = saved_state[count]
-#                 compare_entries(inventory_list, saved_entry, count)
-#         else:
-#             print("Inventory size changed.")
-#         print("Finished comparison.")
-#     else:
-#         print("Nothing to load.\n")
-#         print_list(inventory_list)
+    except Exception as e:
+        print("{0}: {1}: {2}".format("embded",entry.self,e))

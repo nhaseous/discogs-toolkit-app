@@ -57,11 +57,11 @@ if __name__ == "__main__":
     # set to loop worker every x seconds (hardcoded params for testing)
     server = PriceCheckerServer()
 
-    user1, rate1, webhook1 = "curefortheitch", 500, "https://discord.com/api/webhooks/1181026153801191424/dFcWlcwfcrF3T2MbQy2AikAc8-0Ha5vRDdb-gv_EN2rFA0187rGxzPFBPiHUDNmFBdn2"
+    user1, rate1, webhook1 = "juchewrld", 500, "https://discord.com/api/webhooks/1181026153801191424/dFcWlcwfcrF3T2MbQy2AikAc8-0Ha5vRDdb-gv_EN2rFA0187rGxzPFBPiHUDNmFBdn2"
     server.serve(user1, rate1, webhook1) # starts worker in a new thread
     
-    user2, rate2, webhook2 = "juchewrld", 500, "https://discord.com/api/webhooks/1237513121074118728/W9UA2zB5yHLARu4AcQdRyUIavWxJzq4dZmaRKwTfUsgCXnbH_SYAONEf0-EvXGcps5hi"
-    server.serve(user2, rate2, webhook2)
+    # user2, rate2, webhook2 = "juchewrld", 500, "https://discord.com/api/webhooks/1237513121074118728/W9UA2zB5yHLARu4AcQdRyUIavWxJzq4dZmaRKwTfUsgCXnbH_SYAONEf0-EvXGcps5hi"
+    # server.serve(user2, rate2, webhook2)
 
     print ("Server launched.\n")
 

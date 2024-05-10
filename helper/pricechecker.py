@@ -50,8 +50,15 @@ def get_inventory_ids(URL, scraper, pages):
             title = release.find("strong").text.strip()
             item_id = release.find("a", class_="item_release_link")["href"].split("-")[0].strip("/release/")
 
-            new_list_item = (title, item_id)
-            new_list.append(new_list_item)
+            # checks if item id has been added to the list already
+            found = False
+            for (name,id) in new_list:
+                if id == item_id:
+                    found = True
+            # if seller has multiple copies of the same release listed, only add it to the list once for scraping
+            if not found:
+                new_list_item = (title, item_id)
+                new_list.append(new_list_item)
 
     return new_list
 
@@ -71,12 +78,18 @@ def get_listings(scraper, inventory_list, sorted_inventory_list, username, relea
     total = (soup.find("strong", class_="pagination_total").text.split(" of "))[-1] # total number of listings for a release
     imgURL = soup.find("a", class_="thumbnail_link").find("img")["src"]
 
+    user_found = False
+    # TBD: account for when user has multiple listings
     # compiles the prices of all the listings for a release
     for listing in listings:
         count += 1
-        if is_user(username, listing): # checks if a listing belongs to the user provided
+        # checks if a listing belongs to the user provided
+        if is_user(username, listing) and not user_found:
             formatted_listings += "<mark>{0} (You) ({1})</mark><br>".format(get_price(listing), count)
             your_place = count
+            user_found = True
+        elif is_user(username, listing):
+            formatted_listings += "{0} (You)<br>".format(get_price(listing))
         else:
             if check_scam(listing): # checks if a seller has 0% feedback rating
                 formatted_listings += "{0} (SCAM)<br>".format(get_price(listing))
