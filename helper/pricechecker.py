@@ -176,7 +176,7 @@ def count_pages(URL, scraper):
     soup = BeautifulSoup(html, 'html.parser')
 
     # scrapes for the total inventory size
-    inventory_size = int(soup.find(id="page_content").find("li", class_="first").find("h2").text.strip().strip("For Sale"))
+    inventory_size = int(soup.find(id="pjax_container").find("strong", class_="pagination_total").text.strip().split("of ")[1])
     pages = math.ceil(inventory_size/25)
 
     return pages

@@ -40,9 +40,12 @@ class Worker:
 
                 # scrapes and populates sorted & unsorted inventory lists
                 release_titles_ids = pricechecker.get_inventory(self.seller, scraper)
-                for release in release_titles_ids:
+                print("({0}) Fetched inventory. Parsing..".format(self.seller))
+
+                for (title,id) in release_titles_ids:
                     pricechecker.get_listings(scraper, inventory_list, sorted_inventory_list,
-                                                self.seller, release[0], release[1]) # (title, id)
+                                                self.seller, title, id)
+                print("({0}) Finished scraping.".format(self.seller))
                     
                 embeded_changes = []
                 # if saved list exists, compares it to current inventory list
@@ -104,7 +107,8 @@ class Worker:
 def compare_inventory_list(inventory_list, saved_inventory_list, embeded_changes): 
 
     if saved_inventory_list:
-        print("({0}) Loaded saved inventory state.\nComparing...".format(inventory_list[0].self))
+        # print("({0}) Loaded save. Comparing...".format(inventory_list[0].self))
+        # print("Inventory list: {0} / Saved list: {1}".format(len(inventory_list),len(saved_inventory_list)))
 
         try:
             # iterate over the indices of both lists to look for changes
@@ -114,7 +118,10 @@ def compare_inventory_list(inventory_list, saved_inventory_list, embeded_changes
                 match_found = False
 
                 # checks if an entry exists at that index for both the current and saved lists
-                if i and j:
+                if i == j:
+
+                    # print("i: {0} / j: {1}".format(i,j))
+                    # print("inventory-list: {0} / saved-list: {1}".format(inventory_list[i].title,saved_inventory_list[i].title))
 
                     # checks if the entries being compared are the same release (using url as an id)
                     if inventory_list[i].url == saved_inventory_list[i].url:
@@ -135,6 +142,7 @@ def compare_inventory_list(inventory_list, saved_inventory_list, embeded_changes
                         # find matching entry for saved entry by traversing the current list if not found yet
                         if not match_found:
                             for k in range(i,len(inventory_list)):
+                                # print("k: {0}".format(k))
                                 if saved_inventory_list[i].url == inventory_list[k].url:
                                     changes += compare_entries(inventory_list[k], saved_inventory_list[i])
                                     inventory_list[i], inventory_list[k] = inventory_list[k], inventory_list[i]
@@ -143,8 +151,8 @@ def compare_inventory_list(inventory_list, saved_inventory_list, embeded_changes
                         # if a matching entry isn't found in either list, return both entries at that index in the change log
                         if not match_found: 
                             print("({0}) Changes detected.".format(inventory_list[i].self))
-                            embeded_changes.append(embed(inventory_list[i],"New entry found."))
-                            embeded_changes.append(embed(saved_inventory_list[i],"New entry found."))
+                            embeded_changes.append(embed(inventory_list[i],"New listing found."))
+                            embeded_changes.append(embed(saved_inventory_list[i],"New listing found."))
 
                     # if the current release entry has changed, log the changes in an Emded object
                     if changes != "":
@@ -153,15 +161,21 @@ def compare_inventory_list(inventory_list, saved_inventory_list, embeded_changes
 
                 # if current entry exists at that index but not a saved entry, return the current entry
                 elif i:
-                    embeded_changes.append(embed(inventory_list[i],"New entry added."))
+                    # print("i: {0}".format(i))
+                    embeded_changes.append(embed(inventory_list[i],"New listing added."))
+
+                elif j:
+                    changes = "Listing removed."
+                    changes += "(Place) {0} --> {1}".format(saved_inventory_list[j].place, 0)
+                    embeded_changes.append(embed(saved_inventory_list[j],changes))
 
         except Exception as e:
             print("{0}: {1}: {2}".format("compare_inventory_list",inventory_list[0].self,e))
 
-        print("({0}) Finished comparison.".format(inventory_list[i].self))
+        print("({0}) Finished comparison.".format(inventory_list[0].self))
                 
     else:
-        print("({0}) Nothing to load.\n".format(inventory_list[i].self))
+        print("({0}) Nothing to load.\n".format(inventory_list[0].self))
             
 # Given an entry number and a saved entry, compares it to the corresponding entry in the provided inventory list
 # returns any changes as a string output; returns an empty string if there are no changes
@@ -220,6 +234,7 @@ def embed(entry,changes=""):
 
     try:
         # trim HTML from the entry listings
+        # if entry.listings.count("<br>") > 20:
         formatted_listings = entry.listings.replace("<br>","\n").replace("<mark>", "\> ").replace("(You)","").replace("</mark>","")
         place = entry.place
         if "(Place)" in changes:
