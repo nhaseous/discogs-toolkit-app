@@ -74,7 +74,10 @@ def get_listings(scraper, inventory_list, sorted_inventory_list, username, relea
     formatted_listings = ""
 
     # scrapes for all the listings for a given release
-    listings = soup.find("table", class_="mpitems").find_all("tr", class_="shortcut_navigable")
+    if soup.find("table", class_="mpitems"):
+        listings = soup.find("table", class_="mpitems").find_all("tr", class_="shortcut_navigable")
+    else:
+        listings = []
     total = (soup.find("strong", class_="pagination_total").text.split(" of "))[-1] # total number of listings for a release
     imgURL = soup.find("a", class_="thumbnail_link").find("img")["src"]
 
@@ -90,11 +93,11 @@ def get_listings(scraper, inventory_list, sorted_inventory_list, username, relea
             user_found = True
         elif is_user(username, listing):
             formatted_listings += "{0} (You)<br>".format(get_price(listing))
+        # checks if a seller has 0% feedback rating
+        elif check_scam(listing):
+            formatted_listings += "{0} (SCAM)<br>".format(get_price(listing))
         else:
-            if check_scam(listing): # checks if a seller has 0% feedback rating
-                formatted_listings += "{0} (SCAM)<br>".format(get_price(listing))
-            else:
-                formatted_listings += "{0}<br>".format(get_price(listing))
+            formatted_listings += "{0}<br>".format(get_price(listing))
 
     # compiles info and listing prices for a release, then adds it to the inventory lists
     entry = FormattedEntry(username,release_title,URL,imgURL,formatted_listings,your_place,total)
