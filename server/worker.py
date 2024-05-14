@@ -54,7 +54,7 @@ class Worker:
 
                 # notifies Discord webhook if changes are found (non-empty string)
                 if embeded_changes != []:
-                    print("({0}) Changes detected, notifying Discord.".format(self.seller))
+                    print("({0}) Changes ({1}) detected, notifying Discord.".format(self.seller,len(embeded_changes)))
                     count = 0
                     # converts the entries in the inventory list to be able to output to DiscordWebhooks as embded content
                     for embeded in embeded_changes:
@@ -177,11 +177,11 @@ def compare_inventory_list(inventory_list, saved_inventory_list, embeded_changes
     else:
         print("({0}) Nothing to load.\n".format(inventory_list[0].self))
             
-# Given an entry number and a saved entry, compares it to the corresponding entry in the provided inventory list
+# Compares the current and saved listings
 # returns any changes as a string output; returns an empty string if there are no changes
-def compare_entries(current, saved_entry): 
+def compare_entries(current_entry, saved_entry): 
 
-    current_listings = current.listings.replace("<mark>"," ").replace("</mark>"," ")
+    current_listings = current_entry.listings.replace("<mark>"," ").replace("</mark>"," ")
     saved_listings = saved_entry.listings.replace("<mark>"," ").replace("</mark>"," ")
     change_log = ""
 
@@ -218,8 +218,8 @@ def compare_entries(current, saved_entry):
                 change_log += "{0} --> {1}\n".format("Inserted", current_list[index])
 
         # checks if your place has changed on the list
-        if current.place != saved_entry.place:
-            change_log += "(Place) {0} --> {1}".format(saved_entry.place, current.place)
+        if current_entry.place != saved_entry.place:
+            change_log += "(Place) {0} --> {1}".format(saved_entry.place, current_entry.place)
         else:
             # if your place has not changed, do not report changes to the listings even if there are any
             change_log = ""
@@ -235,23 +235,21 @@ def embed(entry,changes=""):
     try:
         # trim HTML from the entry listings
         # if entry.listings.count("<br>") > 20:
-        formatted_listings = entry.listings.replace("<br>","\n").replace("<mark>", "\> ").replace("(You)","").replace("</mark>","")
+        listings = entry.listings.replace("<br>","\n").replace("<mark>", "\> ").replace("(You)","").replace("</mark>","")
         place = entry.place
-        if "(Place)" in changes:
-            place = changes.split("(Place) ")[1]
-            changes = changes.split("(Place) ")[0]
+        if "(Place) " in changes:
+            changes, place = changes.split("(Place) ")
 
         # embed = DiscordEmbed(title=entry.title, description=entry.url.split("?")[0], color="03b2f8")
         embed = DiscordEmbed(title=entry.title, description=entry.url, color="03b2f8")
         embed.set_thumbnail(url=entry.imgUrl)
-        embed.add_embed_field(name="Listings", value=formatted_listings, inline=False)
+        embed.add_embed_field(name="Listings", value=listings, inline=False)
         embed.add_embed_field(name="Place", value=place)
         embed.add_embed_field(name="Total", value=entry.total)
 
         # if changes detected, add a Changes field to webhook embed
-        if changes != "":
+        if changes != "" and changes:
             embed.add_embed_field(name="Changes", value =changes, inline=False)
-
 
         embed.set_footer(text=entry.self)
         embed.set_timestamp()
