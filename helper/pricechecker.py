@@ -65,21 +65,21 @@ def get_inventory_ids(URL, scraper, pages):
 # Given username and item_id, scrapes marketplace for listings and stores them in provided list.
 def get_listings(scraper, inventory_list, sorted_inventory_list, username, release_title, item_id):
 
-    URL = "https://www.discogs.com/sell/release/{0}?ships_from=United+States&sort=price%2Casc".format(item_id)
+    URL, imgURL = "https://www.discogs.com/sell/release/{0}?ships_from=United+States&sort=price%2Casc".format(item_id), ""
     html = scraper.get(URL).content
 
     soup = BeautifulSoup(html, 'html.parser')
 
-    count, your_place = 0, 0
-    formatted_listings = ""
+    count, your_place, total = 0, 0, 0
+    formatted_listings, listings = "", []
 
     # scrapes for all the listings for a given release
     if soup.find("table", class_="mpitems"):
         listings = soup.find("table", class_="mpitems").find_all("tr", class_="shortcut_navigable")
+        total = (soup.find("strong", class_="pagination_total").text.split(" of "))[-1] # total number of listings for a release
+        imgURL = soup.find("a", class_="thumbnail_link").find("img")["src"]
     else:
-        listings = []
-    total = (soup.find("strong", class_="pagination_total").text.split(" of "))[-1] # total number of listings for a release
-    imgURL = soup.find("a", class_="thumbnail_link").find("img")["src"]
+        print("get_listings_error: {0}: {1}".format(release_title,html))
 
     user_found = False
     # TBD: account for when user has multiple listings
