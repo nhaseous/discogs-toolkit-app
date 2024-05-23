@@ -1,0 +1,174 @@
+/Users/nha/Development/discogs-toolkit-app/venv/lib/python3.8/site-packages/urllib3/__init__.py:35: NotOpenSSLWarning: urllib3 v2 only supports OpenSSL 1.1.1+, currently the 'ssl' module is compiled with 'LibreSSL 2.8.3'. See: https://github.com/urllib3/urllib3/issues/3020
+  warnings.warn(
+webhook message is empty! set content or embed data
+Webhook status code 400: {"message": "Cannot send an empty message", "code": 50006}
+New worker started watching: curefortheitch
+New worker started watching: juchewrld
+Server launched.
+
+(juchewrld) Scraping... (1)
+(curefortheitch) Scraping... (1)
+(curefortheitch) Fetched inventory. Parsing..
+(juchewrld) Fetched inventory. Parsing..
+(curefortheitch) Finished scraping.
+(curefortheitch) No changes found.
+(curefortheitch) Search time: 50s
+(curefortheitch) Sleeping... (519s)
+
+(juchewrld) Finished scraping.
+(juchewrld) No changes found.
+(juchewrld) Search time: 189s
+(juchewrld) Sleeping... (556s)
+
+(curefortheitch) Scraping... (2)
+(curefortheitch) Fetched inventory. Parsing..
+(curefortheitch) Finished scraping.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Finished comparison.
+(curefortheitch) Changes (60) detected, notifying Discord.
+(curefortheitch) Search time: 57s
+(curefortheitch) Sleeping... (507s)
+
+(juchewrld) Scraping... (2)
+(juchewrld) Fetched inventory. Parsing..
+(juchewrld) Finished scraping.
+(juchewrld) Changes detected.
+(juchewrld) Finished comparison.
+(juchewrld) Changes (2) detected, notifying Discord.
+(juchewrld) Search time: 208s
+(juchewrld) Sleeping... (531s)
+
+(curefortheitch) Scraping... (3)
+(curefortheitch) Fetched inventory. Parsing..
+(curefortheitch) Finished scraping.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Changes detected. Sending to webhook.
+(curefortheitch) Finished comparison.
+(curefortheitch) Changes (61) detected, notifying Discord.
+(curefortheitch) Search time: 63s
+(curefortheitch) Sleeping... (534s)
+
+(juchewrld) Scraping... (3)
+(juchewrld) Fetched inventory. Parsing..
+(juchewrld) Finished scraping.
+(juchewrld) Changes detected.
+(juchewrld) Finished comparison.
+(juchewrld) Changes (2) detected, notifying Discord.
