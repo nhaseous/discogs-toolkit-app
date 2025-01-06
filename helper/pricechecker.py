@@ -77,7 +77,7 @@ def get_listings(scraper, inventory_list, sorted_inventory_list, username, relea
     if soup.find("table", class_="mpitems"):
         listings = soup.find("table", class_="mpitems").find_all("tr", class_="shortcut_navigable")
         total = (soup.find("strong", class_="pagination_total").text.split(" of "))[-1] # total number of listings for a release
-        imgURL = soup.find("a", class_="thumbnail_link").find("img")["src"]
+        # imgURL = soup.find("a", class_="thumbnail_link").find("img")["src"]
     elif soup.find("title").text.find("Page is Unavailable"):
         print("get_listings_error: page_unavailable: {0}".format(release_title))
     else:
