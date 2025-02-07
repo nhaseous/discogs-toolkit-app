@@ -25,7 +25,7 @@ class FormattedEntry: # Formatted marketplace entry for a single release and its
 
 ## Get ##
 
-# get_inventory_ids: main
+# get_inventory_ids: gets release ids from a seller's inventory
 # get_listings: get listings for a release id
 # get_price: get price of a listing
 
@@ -33,10 +33,15 @@ class FormattedEntry: # Formatted marketplace entry for a single release and its
 def get_inventory_ids(username, scraper):
 
     URL = "https://www.discogs.com/seller/{0}/profile".format(username)
-    pages = count_pages(URL, scraper) # gets the number of pages in a store
 
+    # gets the number of pages in a store
+    html = scraper.get(URL).content
+    soup = BeautifulSoup(html, 'html.parser')
+    inventory_size = int(soup.find(id="pjax_container").find("strong", class_="pagination_total").text.strip().split("of ")[1])
+    pages = math.ceil(inventory_size/25)
+
+    # list to populate an inventory's releases and their ids
     new_list = []
-
     for page in range(1, pages + 1):
         html = scraper.get(URL + "?&sort=price&sort_order=asc&page={0}".format(page)).content
         soup = BeautifulSoup(html, 'html.parser')
@@ -54,6 +59,7 @@ def get_inventory_ids(username, scraper):
             for (name,id) in new_list:
                 if id == item_id:
                     found = True
+
             # if seller has multiple copies of the same release listed, only add it to the list once for scraping
             if not found:
                 new_list_item = (title, item_id)
@@ -61,18 +67,17 @@ def get_inventory_ids(username, scraper):
 
     return new_list
 
+# TBD: account for when user has multiple listings
 # Given username and item_id, scrapes marketplace for listings and stores them in provided list.
 def get_listings(scraper, inventory_list, sorted_inventory_list, username, release_title, item_id):
 
-    URL, imgURL = "https://www.discogs.com/sell/release/{0}?ships_from=United+States&sort=price%2Casc".format(item_id), ""
-    html = scraper.get(URL).content
-
-    soup = BeautifulSoup(html, 'html.parser')
-
     count, your_place, total = 0, 0, 0
-    formatted_listings, listings = "", []
+    listings = []
 
     # scrapes for all the listings for a given release
+    URL, imgURL = "https://www.discogs.com/sell/release/{0}?ships_from=United+States&sort=price%2Casc".format(item_id), ""
+    html = scraper.get(URL).content
+    soup = BeautifulSoup(html, 'html.parser')
     if soup.find("table", class_="mpitems"):
         listings = soup.find("table", class_="mpitems").find_all("tr", class_="shortcut_navigable")
         total = (soup.find("strong", class_="pagination_total").text.split(" of "))[-1] # total number of listings for a release
@@ -82,9 +87,8 @@ def get_listings(scraper, inventory_list, sorted_inventory_list, username, relea
     else:
         print("get_listings_error: {0}: {1}".format(release_title,html))
 
-    user_found = False
-    # TBD: account for when user has multiple listings
     # compiles the prices of all the listings for a release
+    formatted_listings, user_found = "", False
     for listing in listings:
         count += 1
         # checks if a listing belongs to the user provided
@@ -94,13 +98,14 @@ def get_listings(scraper, inventory_list, sorted_inventory_list, username, relea
             user_found = True
         elif is_user(username, listing):
             formatted_listings += "{0} (You)<br>".format(get_price(listing))
+            
         # checks if a seller has 0% feedback rating
         elif check_scam(listing):
             formatted_listings += "{0} (SCAM)<br>".format(get_price(listing))
         else:
             formatted_listings += "{0}<br>".format(get_price(listing))
 
-    # compiles info and listing prices for a release, then adds it to the inventory lists
+    # compiles info and listing prices for a release, then adds the entry to the inventory lists
     entry = FormattedEntry(username,release_title,URL,imgURL,formatted_listings,your_place,total)
     if your_place < 10:
         (sorted_inventory_list[your_place - 1]).append(entry)
@@ -176,22 +181,9 @@ def print_sorted_list(sorted_inventory_list):
 
 ## Helper Functions ##
 
-# count_pages
 # format_condition
 # is_user
 # check_scam
-
-# Takes URL for a Discogs store, returns the number of pages.
-def count_pages(URL, scraper):
-
-    html = scraper.get(URL).content
-    soup = BeautifulSoup(html, 'html.parser')
-
-    # scrapes for the total inventory size
-    inventory_size = int(soup.find(id="pjax_container").find("strong", class_="pagination_total").text.strip().split("of ")[1])
-    pages = math.ceil(inventory_size/25)
-
-    return pages
 
 # Formats the item condition to (Media/Sleeve).
 def format_condition(item_condition):
