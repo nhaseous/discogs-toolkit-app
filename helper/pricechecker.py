@@ -25,16 +25,15 @@ class FormattedEntry: # Formatted marketplace entry for a single release and its
 
 ## Get ##
 
-# Given a seller username, gets their store url and inventory count.
-def get_inventory(username, scraper):
+# get_inventory_ids: main
+# get_listings: get listings for a release id
+# get_price: get price of a listing
+
+# Given a seller username, returns a list of the releases in their inventory and their item ids.
+def get_inventory_ids(username, scraper):
 
     URL = "https://www.discogs.com/seller/{0}/profile".format(username)
     pages = count_pages(URL, scraper) # gets the number of pages in a store
-
-    return get_inventory_ids(URL, scraper, pages) # returns a list of releases and their item ids
-
-# Takes URL of a store inventory, returns a list of the releases and their item ids.
-def get_inventory_ids(URL, scraper, pages):
 
     new_list = []
 
@@ -129,6 +128,9 @@ def get_price(listing):
 
 ## Print ##
 
+# print_list
+# print_sorted_list
+
 # Prints unsorted inventory list.
 def print_list(unsorted_inventory_list): 
 
@@ -173,6 +175,11 @@ def print_sorted_list(sorted_inventory_list):
 
 
 ## Helper Functions ##
+
+# count_pages
+# format_condition
+# is_user
+# check_scam
 
 # Takes URL for a Discogs store, returns the number of pages.
 def count_pages(URL, scraper):

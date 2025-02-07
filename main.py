@@ -42,7 +42,7 @@ def pricecheckerpage():
 
             # initializes cloudscraper and gets a list of a store's releases & ids
             scraper = cloudscraper.create_scraper(browser={'browser':'chrome','platform':'android','desktop':False})
-            release_titles_ids = pricechecker.get_inventory(seller, scraper)
+            release_titles_ids = pricechecker.get_inventory_ids(seller, scraper)
 
             # populates sorted & unsorted inventory lists
             for release in release_titles_ids:

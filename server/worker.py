@@ -39,7 +39,7 @@ class Worker:
                 print("({0}) Scraping... ({1})".format(self.seller,iteration))
 
                 # scrapes and populates sorted & unsorted inventory lists
-                release_titles_ids = pricechecker.get_inventory(self.seller, scraper)
+                release_titles_ids = pricechecker.get_inventory_ids(self.seller, scraper)
                 print("({0}) Fetched inventory. Parsing..".format(self.seller))
 
                 for (title,id) in release_titles_ids:
