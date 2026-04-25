@@ -1,53 +1,75 @@
 import collections
 collections.Callable = collections.abc.Callable
 
-from bs4 import BeautifulSoup
-import math
+from concurrent.futures import ThreadPoolExecutor, as_completed
+import re
 
 # Discogs Collection Matcher Module
-# Compares 2 public Discogs lists (option for Collection or Wantlist), and returns matching titles from both lists.
+# Compares a user's collection against another user's wantlist via the Discogs REST API.
+
+_API_HEADERS = {"User-Agent": "DiscogsToolkitApp/1.0"}
+_MAX_WORKERS = 5
 
 ## Get ##
 
 def get_collection(username, scraper):
-
-    URL = "https://www.discogs.com/user/{0}/collection?header=1".format(username)
-    pages = count_pages(URL, scraper)
-
-    return parse_list(URL, pages, scraper)
+    url = "https://api.discogs.com/users/{0}/collection/folders/0/releases".format(username)
+    result = []
+    for r in _fetch_all_pages(url, "releases", scraper):
+        info = r["basic_information"]
+        artist = _clean_artist(info["artists"][0]) if info.get("artists") else ""
+        title = info.get("title", "")
+        fmt_info = info["formats"][0] if info.get("formats") else {}
+        fmt = fmt_info.get("name", "")
+        fmt_descriptions = ", ".join(fmt_info.get("descriptions", []))
+        fmt_text = fmt_info.get("text", "")
+        release_id = info.get("id", "")
+        result.append({
+            "key":              "{0} - {1}".format(artist, title),
+            "artist":           artist,
+            "title":            title,
+            "format":           fmt,
+            "format_descriptions": fmt_descriptions,
+            "format_text":      fmt_text,
+            "thumb":            info.get("thumb", ""),
+            "url":              "https://www.discogs.com/release/{0}".format(release_id) if release_id else "",
+        })
+    return result
 
 def get_wantlist(username, scraper):
-
-    URL = "https://www.discogs.com/wantlist?user={0}".format(username)
-    pages = count_pages(URL, scraper)
-
-    return parse_list(URL, pages, scraper)
+    url = "https://api.discogs.com/users/{0}/wants".format(username)
+    result = []
+    for w in _fetch_all_pages(url, "wants", scraper):
+        info = w["basic_information"]
+        artist = _clean_artist(info["artists"][0]) if info.get("artists") else ""
+        title = info.get("title", "")
+        result.append("{0} - {1}".format(artist, title))
+    return result
 
 ## Helper Functions ##
 
-# Takes URL of a collection or wantlist, returns the releases as a list.
-def parse_list(URL, pages, scraper):
+def _fetch_all_pages(url, items_key, scraper):
+    params = {"sort": "artist", "sort_order": "asc", "per_page": 100}
 
-    new_list = []
+    first = scraper.get(url, params=dict(params, page=1), headers=_API_HEADERS).json()
+    total_pages = first.get("pagination", {}).get("pages", 1)
 
-    for page in range(1, pages + 1):
-        html = scraper.get("{0}&sort=artist&sort_order=asc&page={1}".format(URL,page)).content
-        soup = BeautifulSoup(html, 'html.parser')
+    pages_data = {1: first}
 
-        list_items = soup.find_all("tr", class_="shortcut_navigable")
-        for item in list_items:
-            release = item.find("span", class_="release_title").find_all("a")
-            format = item.find_all("td")[3].text
-            new_list.append("{0} - {1} ({2})".format(release[0].text, release[1].text, format))
+    if total_pages > 1:
+        with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
+            futures = {
+                executor.submit(scraper.get, url, params=dict(params, page=p), headers=_API_HEADERS): p
+                for p in range(2, total_pages + 1)
+            }
+            for future in as_completed(futures):
+                pages_data[futures[future]] = future.result().json()
 
-    return new_list
+    items = []
+    for p in range(1, total_pages + 1):
+        items.extend(pages_data[p].get(items_key, []))
+    return items
 
-# Takes URL for either collection or wantlist, returns the number of pages.
-def count_pages(URL, scraper):
-    html = scraper.get(URL).content
-    soup = BeautifulSoup(html, 'html.parser')
-
-    collection_size = int(soup.find("li", class_="active_header_section").find("small", class_="facet_count").text.strip().replace(",",""))
-    pages = math.ceil(collection_size/25)
-
-    return pages
+def _clean_artist(artist_info):
+    name = artist_info.get("anv") or artist_info.get("name", "")
+    return re.sub(r'\s*\(\d+\)$', '', name).strip()
