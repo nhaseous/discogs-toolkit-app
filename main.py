@@ -605,7 +605,7 @@ def landingpage():
         '</a>'
         '<a href="/matcher" class="tool-card">'
         '<div class="tool-card-label">02 &middot; Collections</div>'
-        '<h3 class="tool-card-title">Matcher</h3>'
+        '<h3 class="tool-card-title">Collection Matcher</h3>'
         '<p class="tool-card-desc">Find overlap between one user\'s collection and another user\'s wantlist.</p>'
         '</a>'
         '<a href="/lookup" class="tool-card">'
