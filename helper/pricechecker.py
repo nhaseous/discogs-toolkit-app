@@ -5,7 +5,7 @@ import collections
 collections.Callable = collections.abc.Callable
 
 _list_lock = threading.Lock()
-_HEADERS = {"User-Agent": "DiscogsToolkitApp/1.0"}
+from helper.common import API_HEADERS as _HEADERS
 
 # Discogs Price Checker Module
 # Takes a public Discogs store inventory and returns pricing information on other listings on the market.
@@ -90,7 +90,7 @@ def get_inventory_ids(username, scraper):
     page = 1
 
     while True:
-        resp = scraper.get(API_URL, headers=_HEADERS, params={"page": page, "per_page": 100, "sort": "price", "sort_order": "asc"})
+        resp = scraper.get(API_URL, headers=_HEADERS, params={"page": page, "per_page": 100, "sort": "price", "sort_order": "asc", "status": "For Sale"})
 
         if resp.status_code in (401, 403):
             print("get_inventory_ids: API access blocked (HTTP {0})".format(resp.status_code))
@@ -102,12 +102,23 @@ def get_inventory_ids(username, scraper):
             release = listing.get("release", {})
             release_id = str(release.get("id", ""))
             title = release.get("title", "")
+            artist = release.get("artist", "")
+            fmt = release.get("format", "")
             thumbnail_url = release.get("thumbnail", "")
+
+            if artist and fmt:
+                display_title = "{0} - {1} ({2})".format(artist, title, fmt)
+            elif artist:
+                display_title = "{0} - {1}".format(artist, title)
+            elif fmt:
+                display_title = "{0} ({1})".format(title, fmt)
+            else:
+                display_title = title
 
             # if seller has multiple copies of the same release listed, only add it to the list once
             if release_id and release_id not in seen_ids:
                 seen_ids.add(release_id)
-                new_list.append((title, release_id, thumbnail_url))
+                new_list.append((display_title, release_id, thumbnail_url))
 
         pagination = data.get("pagination", {})
         if page >= pagination.get("pages", 1):
@@ -344,7 +355,6 @@ def print_mosaic(inventory_list):
         except (ValueError, TypeError):
             return None
 
-    count = len(inventory_list)
     recent_count  = sum(1 for e in inventory_list if e and e.daysAgo is not None)
     old_count     = sum(1 for e in inventory_list if e and getattr(e, 'yearsAgo', None) is not None)
     low_count     = sum(1 for e in inventory_list if e and _total_int(e) is not None and (_total_int(e) or 0) < 4)
@@ -367,11 +377,10 @@ def print_mosaic(inventory_list):
     ).format(recent_count, old_count, low_count, lowest_count, high_count, highest_count)
 
     count_div = (
-        '<div class="inv-count">'
+        '<div class="badge-count">'
         '<span>{0}</span>'
-        '<span>Inventory size: {1} release{2}</span>'
         '</div>'
-    ).format(badge_summary, count, "" if count == 1 else "s")
+    ).format(badge_summary)
 
     if not items:
         return count_div

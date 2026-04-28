@@ -1,7 +1,10 @@
-from flask import Flask, request, send_from_directory
-from helper import pricechecker, matcher
+from dotenv import load_dotenv
+load_dotenv()
+
+from flask import Flask, request
+from helper import pricechecker, matcher, lookup as lookup_helper
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import cloudscraper, time, html as _html
+import cloudscraper, time, html as _html, base64
 from datetime import datetime
 # Main
 
@@ -10,13 +13,15 @@ app = Flask(__name__)
 with open('static/discogs-logo.svg') as _f:
     DISCOGS_LOGO_SVG = _f.read().strip()
 
-with open('static/logo.svg') as _f:
-    LOGO_SVG = _f.read().strip().replace('<svg ', '<svg class="brand-icon" ', 1)
+with open('static/logo.svg', 'rb') as _f:
+    _logo_bytes = _f.read()
+    LOGO_SVG = _logo_bytes.decode().strip().replace('<svg ', '<svg class="brand-icon" ', 1)
+    FAVICON_DATA_URI = 'data:image/svg+xml;base64,' + base64.b64encode(_logo_bytes).decode('ascii')
 
 VINYL_PLACEHOLDER_SVG = (
     '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">'
     '<circle cx="50" cy="50" r="46" fill="currentColor"/>'
-    '<circle cx="50" cy="50" r="20" fill="#1a1208"/>'
+    '<circle cx="50" cy="50" r="20" fill="var(--rule)"/>'
     '<circle cx="50" cy="50" r="4" fill="currentColor"/>'
     '</svg>'
 )
@@ -27,19 +32,40 @@ SEARCH_ICON_SVG = (
     '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>'
 )
 
-def page_layout(content, content_class=""):
+_RATE_LIMIT_NOTICE = (
+    '<div class="lookup-notice lookup-notice--error">'
+    'Discogs is rate limiting requests right now. '
+    'Please wait 60 seconds before you try again.'
+    '</div>'
+)
+
+BACK_ARROW_SVG = (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M19 12H5"/><path d="M12 5l-7 7 7 7"/></svg>'
+)
+
+def page_layout(content, content_class="", show_platter=False, title="Discogs Toolkit"):
     path = request.path
     pc_active = ' class="active"' if path == '/pricechecker' else ''
     matcher_active = ' class="active"' if path == '/matcher' else ''
+    lookup_active = ' class="active"' if path == '/lookup' else ''
+    is_landing = path == '/'
+    platter_img = '<img src="/static/platter.png" alt="" class="sidebar-platter">' if show_platter else ''
+    sidebar_art = (
+        '<div class="sidebar-art">'
+        '<img src="/static/console-oak.png" alt="" class="sidebar-art-img">'
+        + platter_img +
+        '</div>'
+    ) if not is_landing else ''
     return (
         '<!DOCTYPE html>'
         '<html lang="en">'
         '<head>'
         '<meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        '<title>Discogs Toolkit</title>'
-        '<link rel="icon" type="image/png" sizes="64x64" href="/static/favicon.png">'
-        '<link rel="icon" type="image/svg+xml" href="/static/favicon.svg">'
+        '<title>' + title + '</title>'
+        '<link rel="icon" type="image/svg+xml" href="' + FAVICON_DATA_URI + '">'
         '<link rel="preconnect" href="https://fonts.googleapis.com">'
         '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
         '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
@@ -57,6 +83,8 @@ def page_layout(content, content_class=""):
         '<div class="sidebar-label">♪ Tools ♪</div>'
         '<a href="/pricechecker"' + pc_active + '>Price Checker</a>'
         '<a href="/matcher"' + matcher_active + '>Matcher</a>'
+        '<a href="/lookup"' + lookup_active + '>Lookup</a>'
+        + sidebar_art +
         '</nav>'
         '<main class="content' + (' ' + content_class if content_class else '') + '">'
         '<div id="content-main">'
@@ -182,28 +210,33 @@ def page_layout(content, content_class=""):
         '            });'
         '        });'
         '    }'
-        '    function revealMosaic() {'
+        '    var MOSAIC_EASE = "transform 0.35s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease";'
+        '    function slideInMosaic() {'
+        '        var w = mosaic.offsetWidth;'
+        '        var clip = document.getElementById("content-main");'
+        '        if (clip) clip.style.overflow = "hidden";'
         '        mosaic.style.transition = "none";'
+        '        mosaic.style.transform = "translateX(-" + w + "px)";'
         '        mosaic.style.opacity = "0";'
-        '        container.classList.remove("sticky-mosaic-active");'
-        '        var contentMain = document.getElementById("content-main");'
-        '        var mosaicRect = mosaic.getBoundingClientRect();'
-        '        var contentRect = contentMain ? contentMain.getBoundingClientRect() : mosaicRect;'
-        '        var startX = contentRect.left - mosaicRect.left;'
-        '        mosaic.style.transform = "translateX(" + startX + "px)";'
         '        requestAnimationFrame(function() {'
         '            requestAnimationFrame(function() {'
-        '                mosaic.style.transition = "transform 0.35s cubic-bezier(0.4,0,0.2,1), opacity 0.35s ease";'
+        '                mosaic.style.transition = MOSAIC_EASE;'
         '                mosaic.style.transform = "translateX(0)";'
         '                mosaic.style.opacity = "1";'
-        '                mosaic.addEventListener("transitionend", function cleanup() {'
+        '                mosaic.addEventListener("transitionend", function cleanup(e) {'
+        '                    if (e.propertyName !== "transform") return;'
+        '                    mosaic.removeEventListener("transitionend", cleanup);'
         '                    mosaic.style.transition = "";'
         '                    mosaic.style.transform = "";'
         '                    mosaic.style.opacity = "";'
-        '                    mosaic.removeEventListener("transitionend", cleanup);'
+        '                    if (clip) clip.style.overflow = "";'
         '                });'
         '            });'
         '        });'
+        '    }'
+        '    function revealMosaic() {'
+        '        container.classList.remove("sticky-mosaic-active");'
+        '        slideInMosaic();'
         '    }'
         '    function deactivate() {'
         '        if (!sticky) return;'
@@ -228,6 +261,7 @@ def page_layout(content, content_class=""):
         '            revealMosaic();'
         '        }).observe(invCount);'
         '    }'
+        '    slideInMosaic();'
         '})();'
         '(function() {'
         '    var tip = document.getElementById("badge-tooltip");'
@@ -280,16 +314,276 @@ def page_layout(content, content_class=""):
         '    }'
         '    attachFormAnim("pc-form");'
         '    attachFormAnim("matcher-form");'
+        '    attachFormAnim("lookup-form");'
+        '})();'
+        '(function() {'
+        '    function layoutMatchGrid(grid) {'
+        '        var allCards = Array.from(grid.querySelectorAll(".match-card"));'
+        '        if (!allCards.length) return;'
+        '        var gap = 14, minWidth = 158;'
+        '        var numCols = Math.max(1, Math.floor((grid.offsetWidth + gap) / (minWidth + gap)));'
+        '        var existing = Array.from(grid.children);'
+        '        if (existing.length === numCols && existing.every(function(c) { return c.classList.contains("match-column"); })) return;'
+        '        grid.innerHTML = "";'
+        '        var cols = [];'
+        '        for (var i = 0; i < numCols; i++) {'
+        '            var col = document.createElement("div");'
+        '            col.className = "match-column";'
+        '            grid.appendChild(col);'
+        '            cols.push(col);'
+        '        }'
+        '        allCards.forEach(function(c, i) { cols[i % numCols].appendChild(c); });'
+        '    }'
+        '    window._layoutMatchGrids = function() {'
+        '        document.querySelectorAll(".match-grid").forEach(layoutMatchGrid);'
+        '    };'
+        '    window._layoutMatchGrids();'
+        '    var _lgTimer;'
+        '    window.addEventListener("resize", function() {'
+        '        clearTimeout(_lgTimer);'
+        '        _lgTimer = setTimeout(window._layoutMatchGrids, 100);'
+        '    });'
+        '})();'
+        '(function() {'
+        '    var tabs = document.querySelectorAll(".lookup-tab");'
+        '    if (!tabs.length) return;'
+        '    var EASE = "transform 0.35s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease";'
+        '    function animateOut(el, w, onDone) {'
+        '        el.style.transition = EASE;'
+        '        el.style.transform = "translateX(-" + w + "px)";'
+        '        el.style.opacity = "0";'
+        '        el.addEventListener("transitionend", function cleanup(e) {'
+        '            if (e.propertyName !== "transform") return;'
+        '            el.removeEventListener("transitionend", cleanup);'
+        '            el.style.display = "none";'
+        '            el.style.transition = ""; el.style.transform = ""; el.style.opacity = "";'
+        '            if (onDone) onDone();'
+        '        });'
+        '    }'
+        '    function animateIn(el, w, wrap) {'
+        '        el.style.transition = "none";'
+        '        el.style.transform = "translateX(-" + w + "px)";'
+        '        el.style.opacity = "0";'
+        '        el.style.display = "";'
+        '        requestAnimationFrame(function() {'
+        '            requestAnimationFrame(function() {'
+        '                el.style.transition = EASE;'
+        '                el.style.transform = "translateX(0)";'
+        '                el.style.opacity = "1";'
+        '                el.addEventListener("transitionend", function done(e) {'
+        '                    if (e.propertyName !== "transform") return;'
+        '                    el.removeEventListener("transitionend", done);'
+        '                    el.style.transition = ""; el.style.transform = ""; el.style.opacity = "";'
+        '                    if (wrap) wrap.style.minHeight = "";'
+        '                });'
+        '            });'
+        '        });'
+        '    }'
+        '    function switchMosaics(target) {'
+        '        var all = Array.from(document.querySelectorAll(".lookup-mosaic"));'
+        '        var incoming = document.getElementById("lookup-mosaic-" + target);'
+        '        var outgoing = all.find(function(m) { return m !== incoming && m.style.display !== "none"; });'
+        '        if (!incoming && !outgoing) return;'
+        '        var wrap = (outgoing || incoming).parentNode;'
+        '        var w = wrap.offsetWidth;'
+        '        if (outgoing) {'
+        '            wrap.style.minHeight = outgoing.offsetHeight + "px";'
+        '            animateOut(outgoing, w, incoming ? function() { animateIn(incoming, w, wrap); } : function() { wrap.style.minHeight = ""; });'
+        '        } else {'
+        '            animateIn(incoming, w, wrap);'
+        '        }'
+        '    }'
+        '    var countEl = document.getElementById("lookup-count");'
+        '    tabs.forEach(function(tab) {'
+        '        tab.addEventListener("click", function() {'
+        '            tabs.forEach(function(t) { t.classList.remove("active"); });'
+        '            this.classList.add("active");'
+        '            var target = this.getAttribute("data-tab");'
+        '            document.querySelectorAll(".lookup-panel").forEach(function(panel) {'
+        '                panel.style.display = panel.id === "lookup-panel-" + target ? "" : "none";'
+        '            });'
+        '            switchMosaics(target);'
+        '            if (countEl) { var ct = this.getAttribute("data-count-text"); if (ct) countEl.textContent = ct; }'
+        '            if (window._applyTabPage) window._applyTabPage(target);'
+        '            if (window._layoutMatchGrids) window._layoutMatchGrids();'
+        '        });'
+        '    });'
+        '})();'
+        '(function() {'
+        '    var PAGE_SIZE = 50;'
+        '    var pagTabs = document.querySelectorAll(".lookup-tab");'
+        '    if (!pagTabs.length) return;'
+        '    var pagEl = document.getElementById("lookup-pagination");'
+        '    var prevBtn = document.getElementById("pag-prev");'
+        '    var nextBtn = document.getElementById("pag-next");'
+        '    var labelEl = document.getElementById("pag-label");'
+        '    var sizeBtn = document.getElementById("pag-size-btn");'
+        '    var sizeMenu = document.getElementById("pag-size-menu");'
+        '    var sizeValEl = document.getElementById("pag-size-val");'
+        '    var sizeOpts = sizeMenu ? Array.from(sizeMenu.querySelectorAll(".pag-select-opt")) : [];'
+        '    var state = {};'
+        '    function getGrid(tabName) {'
+        '        var panel = document.getElementById("lookup-panel-" + tabName);'
+        '        return panel ? panel.querySelector(".match-grid") : null;'
+        '    }'
+        '    pagTabs.forEach(function(tab) {'
+        '        var name = tab.getAttribute("data-tab");'
+        '        var grid = getGrid(name);'
+        '        var backCard = grid ? grid.querySelector(".match-card--back") : null;'
+        '        var cards = grid ? Array.from(grid.querySelectorAll(".match-card:not(.match-card--back)")) : [];'
+        '        var total = Math.max(1, Math.ceil(cards.length / PAGE_SIZE));'
+        '        state[name] = { page: 1, total: total, cards: cards, backCard: backCard, ready: false };'
+        '    });'
+        '    function syncControls(tabName) {'
+        '        if (!pagEl || !labelEl) return;'
+        '        var s = state[tabName];'
+        '        if (!s) return;'
+        '        pagEl.style.visibility = "";'
+        '        labelEl.textContent = s.page + " / " + s.total;'
+        '        prevBtn.disabled = s.page <= 1;'
+        '        nextBtn.disabled = s.page >= s.total;'
+        '    }'
+        '    function applyPage(tabName, page) {'
+        '        var s = state[tabName];'
+        '        if (!s) return;'
+        '        s.page = page;'
+        '        s.ready = true;'
+        '        var grid = getGrid(tabName);'
+        '        if (!grid) return;'
+        '        var start = (page - 1) * PAGE_SIZE;'
+        '        var pageCards = s.cards.slice(start, start + PAGE_SIZE);'
+        '        grid.innerHTML = "";'
+        '        if (s.backCard) grid.appendChild(s.backCard);'
+        '        pageCards.forEach(function(c) { grid.appendChild(c); });'
+        '    }'
+        '    window._applyTabPage = function(tabName) {'
+        '        var s = state[tabName];'
+        '        if (!s) return;'
+        '        if (!s.ready) applyPage(tabName, 1);'
+        '        syncControls(tabName);'
+        '    };'
+        '    var initTab = document.querySelector(".lookup-tab.active");'
+        '    if (initTab) {'
+        '        var initName = initTab.getAttribute("data-tab");'
+        '        applyPage(initName, 1);'
+        '        syncControls(initName);'
+        '        if (window._layoutMatchGrids) window._layoutMatchGrids();'
+        '    }'
+        '    function getActiveTab() {'
+        '        var a = document.querySelector(".lookup-tab.active");'
+        '        return a ? a.getAttribute("data-tab") : null;'
+        '    }'
+        '    if (prevBtn) prevBtn.addEventListener("click", function() {'
+        '        var name = getActiveTab();'
+        '        var s = state[name];'
+        '        if (s && s.page > 1) {'
+        '            applyPage(name, s.page - 1);'
+        '            syncControls(name);'
+        '            if (window._layoutMatchGrids) window._layoutMatchGrids();'
+        '        }'
+        '    });'
+        '    if (nextBtn) nextBtn.addEventListener("click", function() {'
+        '        var name = getActiveTab();'
+        '        var s = state[name];'
+        '        if (s && s.page < s.total) {'
+        '            applyPage(name, s.page + 1);'
+        '            syncControls(name);'
+        '            if (window._layoutMatchGrids) window._layoutMatchGrids();'
+        '        }'
+        '    });'
+        '    function applySize(value) {'
+        '        PAGE_SIZE = value;'
+        '        if (sizeValEl) sizeValEl.textContent = value;'
+        '        sizeOpts.forEach(function(o) {'
+        '            o.classList.toggle("pag-select-opt--active", parseInt(o.getAttribute("data-value"), 10) === value);'
+        '        });'
+        '        if (sizeMenu) sizeMenu.style.display = "none";'
+        '        var activeName = getActiveTab();'
+        '        for (var n in state) {'
+        '            state[n].total = Math.max(1, Math.ceil(state[n].cards.length / PAGE_SIZE));'
+        '            state[n].page = 1;'
+        '            if (n !== activeName) state[n].ready = false;'
+        '        }'
+        '        if (activeName) {'
+        '            applyPage(activeName, 1);'
+        '            syncControls(activeName);'
+        '            if (window._layoutMatchGrids) window._layoutMatchGrids();'
+        '        }'
+        '    }'
+        '    if (sizeBtn) sizeBtn.addEventListener("click", function(e) {'
+        '        e.stopPropagation();'
+        '        if (sizeMenu) sizeMenu.style.display = sizeMenu.style.display === "block" ? "none" : "block";'
+        '    });'
+        '    sizeOpts.forEach(function(opt) {'
+        '        opt.addEventListener("click", function() {'
+        '            applySize(parseInt(this.getAttribute("data-value"), 10));'
+        '        });'
+        '    });'
+        '    document.addEventListener("click", function(e) {'
+        '        if (sizeMenu && sizeMenu.style.display === "block") {'
+        '            var wrap = document.getElementById("pag-size-wrap");'
+        '            if (wrap && !wrap.contains(e.target)) sizeMenu.style.display = "none";'
+        '        }'
+        '    });'
+        '})();'
+        '(function() {'
+        '    if (window.location.pathname === "/") {'
+        '        sessionStorage.removeItem("art-tab");'
+        '        return;'
+        '    }'
+        '    var art = document.querySelector(".sidebar-art");'
+        '    if (!art) return;'
+        '    var activeLink = document.querySelector(".sidebar a.active");'
+        '    var currentTab = activeLink ? activeLink.getAttribute("href") : "";'
+        '    var prevTab = sessionStorage.getItem("art-tab");'
+        '    var artAnimating = prevTab !== currentTab;'
+        '    if (artAnimating) {'
+        '        var sidebar = document.querySelector(".sidebar");'
+        '        sidebar.style.overflow = "hidden";'
+        '        art.style.transform = "translateY(150px)";'
+        '        art.style.opacity = "0";'
+        '        requestAnimationFrame(function() {'
+        '            requestAnimationFrame(function() {'
+        '                art.style.transition = "transform 0.55s cubic-bezier(0.4,0,0.2,1), opacity 0.4s ease";'
+        '                art.style.transform = "";'
+        '                art.style.opacity = "";'
+        '                art.addEventListener("transitionend", function cleanup(e) {'
+        '                    if (e.propertyName !== "transform") return;'
+        '                    art.style.transition = "";'
+        '                    sidebar.style.overflow = "";'
+        '                    art.removeEventListener("transitionend", cleanup);'
+        '                });'
+        '            });'
+        '        });'
+        '        sessionStorage.setItem("art-tab", currentTab);'
+        '    }'
+        '    var platter = document.querySelector(".sidebar-platter");'
+        '    if (!platter) return;'
+        '    platter.style.transform = "translateY(150px)";'
+        '    platter.style.opacity = "0";'
+        '    setTimeout(function() {'
+        '        requestAnimationFrame(function() {'
+        '            requestAnimationFrame(function() {'
+        '                platter.style.transition = "transform 0.5s cubic-bezier(0.4,0,0.2,1), opacity 0.4s ease";'
+        '                platter.style.transform = "translateY(0)";'
+        '                platter.style.opacity = "1";'
+        '                platter.addEventListener("transitionend", function onDone(e) {'
+        '                    if (e.propertyName !== "transform") return;'
+        '                    platter.style.transition = "";'
+        '                    platter.style.transform = "";'
+        '                    platter.style.opacity = "";'
+        '                    platter.classList.add("spinning");'
+        '                    platter.removeEventListener("transitionend", onDone);'
+        '                });'
+        '            });'
+        '        });'
+        '    }, artAnimating ? 600 : 200);'
         '})();'
         '</script>'
         '</body></html>'
     )
 
 # Routes
-
-@app.route('/favicon.ico')
-def favicon_ico():
-    return send_from_directory(app.static_folder, 'favicon.png', mimetype='image/png')
 
 ## Landing Page ##
 
@@ -302,6 +596,7 @@ def landingpage():
         '<p class="hero-subtitle">A small set of utilities for Discogs marketplace research '
         'and collection matching. Dig through the shelves below.</p>'
         '</section>'
+        '<div class="tool-grid-wrap">'
         '<div class="tool-grid">'
         '<a href="/pricechecker" class="tool-card">'
         '<div class="tool-card-label">01 &middot; Marketplace</div>'
@@ -313,6 +608,18 @@ def landingpage():
         '<h3 class="tool-card-title">Matcher</h3>'
         '<p class="tool-card-desc">Find overlap between one user\'s collection and another user\'s wantlist.</p>'
         '</a>'
+        '<a href="/lookup" class="tool-card">'
+        '<div class="tool-card-label">03 &middot; Collections</div>'
+        '<h3 class="tool-card-title">User Lookup</h3>'
+        '<p class="tool-card-desc">Browse any user\'s full collection and wantlist as well as any lists they have made.</p>'
+        '</a>'
+        '<div class="tool-slot"></div>'
+        '<div class="tool-slot"></div>'
+        '<div class="tool-slot"></div>'
+        '<div class="tool-slot"></div>'
+        '<div class="tool-slot"></div>'
+        '<div class="tool-slot"></div>'
+        '</div>'
         '</div>'
     )
 
@@ -323,6 +630,8 @@ def pricecheckerpage():
 
     seller = request.args.get("seller", "")
     output,loadtime = "",""
+    show_platter = False
+    inventory_count = 0
 
     if seller != "":
         start_time = time.time()
@@ -333,7 +642,8 @@ def pricecheckerpage():
 
             scraper = cloudscraper.create_scraper(browser={'browser':'chrome','platform':'android','desktop':False})
             release_titles_ids = pricechecker.get_inventory_ids(seller, scraper)
-            inventory_list = [None] * len(release_titles_ids)
+            inventory_count = len(release_titles_ids)
+            inventory_list = [None] * inventory_count
 
             with ThreadPoolExecutor(max_workers=10) as executor:
                 futures = [
@@ -350,6 +660,7 @@ def pricecheckerpage():
             else:
                 results = mosaic + pricechecker.print_list(inventory_list)
             output = '<div id="results-area"><div id="results-main">' + results + '</div></div>'
+            show_platter = True
 
         except AttributeError:
             output = "No user found."
@@ -359,7 +670,8 @@ def pricecheckerpage():
         loadtime = "Search time: {0} seconds".format(round(end_time-start_time,2))
         searched_at = datetime.now().astimezone().strftime("%-I:%M %p %Z · %-d %b %y")
 
-    meta = '<div class="meta"><span><b>{0}</b> &nbsp;&middot;&nbsp; {1}</span><span>{2}</span></div>'.format(seller_meta, loadtime, searched_at) if loadtime else ""
+    inv_noun = "release" if inventory_count == 1 else "releases"
+    meta = '<div class="meta"><span><b>{0}</b> &nbsp;&middot;&nbsp; {1} {2}</span><span>{3} &nbsp;&#124;&nbsp; {4}</span></div>'.format(seller_meta, inventory_count, inv_noun, loadtime, searched_at) if loadtime else ""
 
     seller_val = seller.replace('"', '&quot;')
     sort_checked = ' checked' if request.args.get("sort","") == "yes" else ''
@@ -389,7 +701,9 @@ def pricecheckerpage():
     )
     return page_layout(
         (pc_form + pc_header + meta + output) if seller else (pc_header + pc_form),
-        content_class='has-results' if seller else ''
+        content_class='has-results' if seller else '',
+        show_platter=show_platter,
+        title='Price Checker'
     )
 
 ## Matcher Module ##
@@ -399,34 +713,37 @@ def matcherpage():
 
     collection_user = request.args.get("collection", "")
     wantlist_user = request.args.get("wantlist", "")
+    exact = request.args.get("exact", "") == "yes"
     output,loadtime = "",""
 
-    start_time = time.time()
     if collection_user != "" and wantlist_user != "" :
+        start_time = time.time()
         try:
             scraper = cloudscraper.create_scraper(browser={'browser':'chrome','platform':'android','desktop':False})
 
             collection = matcher.get_collection(collection_user, scraper)
             wantlist = matcher.get_wantlist(wantlist_user, scraper)
 
-            collection_by_key = {item["key"]: item for item in collection}
-            wantlist_set = set(wantlist)
+            lookup_field = "key" if exact else "easy_key"
+            wantlist_set = {w["strict"] if exact else w["easy"] for w in wantlist}
+            collection_by_key = {item[lookup_field]: item for item in collection}
             matches = sorted(
                 [collection_by_key[k] for k in collection_by_key if k in wantlist_set],
                 key=lambda x: x["artist"].lower()
             )
 
+            mosaic_items = ""
             match_lines = ""
             for m in matches:
                 fmt_parts = ", ".join(p for p in [m.get("format_descriptions", ""), m.get("format_text", "")] if p)
                 fmt_suffix = " ({0})".format(_html.escape(fmt_parts)) if fmt_parts else ""
-                match_lines += _html.escape(m["artist"]) + " - " + _html.escape(m["title"]) + fmt_suffix + "<br>"
-
-            mosaic_items = ""
-            for m in matches:
+                match_lines += "<b>" + _html.escape(m["artist"]) + "</b>" + " - " + _html.escape(m["title"]) + " &nbsp;&middot" + "<i>" + fmt_suffix + "</i>" + "<br>"
                 if m.get("thumb"):
                     mosaic_items += '<span class="mosaic-item"><img src="{0}" alt="" class="mosaic-thumb"></span>'.format(m["thumb"])
             mosaic = '<div id="matcher-mosaic" class="mosaic">{0}</div>'.format(mosaic_items) if mosaic_items else ""
+
+            matches_count = len(matches)
+            matches_count_text = "Matches ({0})".format(matches_count)
 
             summary = (
                 '<div class="result-card">'
@@ -434,52 +751,59 @@ def matcherpage():
                 '<div class="card-listings">'
                 'Collection: <b>{1}</b> ({0} items)<br>'
                 'Wantlist: <b>{3}</b> ({2} items)<br>'
+                '<br><b>Matches: {4} items</b><br>'
                 + ('<br>' + match_lines if match_lines else '') +
-                '<br><b>Matches: {4} items</b>'
                 '</div>'
                 '</div>'
-            ).format(len(collection), collection_user, len(wantlist), wantlist_user, len(matches))
+            ).format(len(collection), collection_user, len(wantlist), wantlist_user, matches_count)
 
-            if matches:
-                cards = ""
-                for m in matches:
-                    if m["thumb"]:
-                        art = '<img src="{0}" alt="" class="match-card-img">'.format(m["thumb"])
-                    else:
-                        art = '<div class="match-card-placeholder">' + VINYL_PLACEHOLDER_SVG + '</div>'
-                    fmt_desc_html = ('<div class="match-card-format-desc">' + _html.escape(m["format_descriptions"]) + '</div>') if m.get("format_descriptions") else ""
-                    fmt_text_html = ('<div class="match-card-format-text">' + _html.escape(m["format_text"]) + '</div>') if m.get("format_text") else ""
-                    cards += (
-                        '<a href="' + m["url"] + '" class="match-card" target="_blank" rel="noopener noreferrer">'
-                        '<div class="match-card-art">' + art + '</div>'
-                        '<div class="match-card-body">'
-                        '<div class="match-card-title">' + _html.escape(m["title"]) + '</div>'
-                        '<div class="match-card-artist">' + _html.escape(m["artist"]) + '</div>'
-                        '<div class="match-card-format">' + _html.escape(m["format"]) + '</div>'
-                        + fmt_desc_html +
-                        fmt_text_html +
-                        '</div>'
-                        '</a>'
-                    )
-                grid = '<div class="match-grid">' + cards + '</div>'
-            else:
-                grid = '<p class="match-empty">No matches found.</p>'
+            tabs_html = (
+                '<div class="lookup-tabs-row">'
+                '<div class="lookup-tabs">'
+                '<button class="lookup-tab active" data-tab="matches" data-count-text="' + _html.escape(matches_count_text) + '">' + _html.escape(matches_count_text) + '</button>'
+                '</div>'
+                '<div class="lookup-pagination" id="lookup-pagination">'
+                '<div class="pag-select" id="pag-size-wrap">'
+                '<button class="pag-select-btn" id="pag-size-btn" type="button">'
+                '<span id="pag-size-val">50</span>'
+                '<span class="pag-select-caret">&#9662;</span>'
+                '</button>'
+                '<div class="pag-select-menu" id="pag-size-menu">'
+                '<button class="pag-select-opt" type="button" data-value="10">10</button>'
+                '<button class="pag-select-opt" type="button" data-value="25">25</button>'
+                '<button class="pag-select-opt pag-select-opt--active" type="button" data-value="50">50</button>'
+                '<button class="pag-select-opt" type="button" data-value="100">100</button>'
+                '</div>'
+                '</div>'
+                '<div class="pag-divider"></div>'
+                '<button class="pag-btn" id="pag-prev">&#8249;</button>'
+                '<span class="pag-label" id="pag-label">1 / 1</span>'
+                '<button class="pag-btn" id="pag-next">&#8250;</button>'
+                '</div>'
+                '</div>'
+            )
 
-            output = mosaic + summary + grid
+            grid = _render_lookup_grid(matches) if matches else '<p class="match-empty">No matches found.</p>'
+            panel_html = '<div id="lookup-panel-matches" class="lookup-panel">' + grid + '</div>'
 
+            output = mosaic + summary + tabs_html + panel_html
+
+        except matcher.RateLimitError:
+            output = _RATE_LIMIT_NOTICE
         except AttributeError:
             output = "Unable to find a match."
 
         end_time = time.time()
-        loadtime = "Load time: {0} seconds".format(round(end_time-start_time,2))
+        loadtime = "Match time: {0} seconds".format(round(end_time-start_time,2))
         searched_at = datetime.now().astimezone().strftime("%-I:%M %p %Z · %-d %b %y")
         collection_meta = "Collection: " + collection_user
         wantlist_meta = "Wantlist: " + wantlist_user
 
-    meta = '<div class="meta"><span><b>{0}</b> &nbsp;&middot;&nbsp; <b>{1}</b> &nbsp;&middot;&nbsp; {2}</span><span>{3}</span></div>'.format(collection_meta, wantlist_meta, loadtime, searched_at) if loadtime else ""
+    meta = '<div class="meta"><span><b>{0}</b> &nbsp;&middot;&nbsp; <b>{1}</b></span><span>{2} &nbsp;&#124;&nbsp; {3}</span></div>'.format(collection_meta, wantlist_meta, loadtime, searched_at) if loadtime else ""
 
     collection_val = collection_user.replace('"', '&quot;')
     wantlist_val = wantlist_user.replace('"', '&quot;')
+    exact_checked = ' checked' if exact else ''
 
     has_results = collection_user != "" and wantlist_user != ""
     matcher_header = (
@@ -502,27 +826,300 @@ def matcherpage():
         '<input type="text" id="wantlist" name="wantlist" placeholder="username" '
         'autocomplete="off" value="' + wantlist_val + '">'
         '</div>'
+        '<div class="search-bar-divider"></div>'
+        '<label class="search-bar-toggle" for="exact">'
+        '<input type="checkbox" id="exact" name="exact" value="yes"' + exact_checked + '>'
+        '<span>Exact match</span>'
+        '</label>'
         '<button type="submit" class="search-bar-submit">Search</button>'
         '</form>'
         '<div id="spinner"><span id="spinner-icon"></span>Matching&hellip;</div>'
     )
     return page_layout(
         (matcher_form + matcher_header + meta + output) if has_results else (matcher_header + matcher_form),
-        content_class='has-results' if has_results else ''
+        content_class='has-results' if has_results else '',
+        show_platter=has_results,
+        title='Collection Matcher'
     )
 
-## Testing Page ##
+## Lookup Module ##
 
-@app.route("/test")
-def testingpage():
-    # server = server.PriceCheckerServer(user1, webhook1)
-    # server.serve()
+def _render_lookup_grid(items, show_stats=False, prepend_card=""):
+    cards = prepend_card
+    for m in items:
+        if m.get("thumb"):
+            art = '<img src="{0}" alt="" class="match-card-img">'.format(m["thumb"])
+        else:
+            art = '<div class="match-card-placeholder">' + VINYL_PLACEHOLDER_SVG + '</div>'
+        fmt_desc_html = ('<div class="match-card-format-desc">' + _html.escape(m.get("format_descriptions", "")) + '</div>') if m.get("format_descriptions") else ""
+        fmt_text_html = ('<div class="match-card-format-text">' + _html.escape(m.get("format_text", "")) + '</div>') if m.get("format_text") else ""
+        comment_html = ('<div class="match-card-comment">' + _html.escape(m.get("comment", "")) + '</div>') if m.get("comment") else ""
+        stats_html = ('<div class="match-card-stats">' + _html.escape(m.get("stats", "")) + '</div>') if show_stats and m.get("stats") else ""
+        for_sale_text = m.get("for_sale", "")
+        for_sale_url = m.get("for_sale_url", "")
+        for_sale_html = (
+            '<div class="match-card-forsale" data-href="' + _html.escape(for_sale_url) + '"'
+            ' onclick="event.stopPropagation();event.preventDefault();window.open(this.dataset.href,\'_blank\',\'noopener,noreferrer\')">'
+            + _html.escape(for_sale_text) + '</div>'
+        ) if for_sale_text and for_sale_url else ""
+        href = m.get("url") or "#"
+        cards += (
+            '<a href="' + href + '" class="match-card" target="_blank" rel="noopener noreferrer">'
+            '<div class="match-card-art">' + art + '</div>'
+            '<div class="match-card-body">'
+            '<div class="match-card-title">' + _html.escape(m.get("title", "")) + '</div>'
+            '<div class="match-card-artist">' + _html.escape(m.get("artist", "")) + '</div>'
+            + ('<div class="match-card-format">' + _html.escape(m.get("format", "")) + '</div>' if m.get("format") else "")
+            + fmt_desc_html
+            + fmt_text_html
+            + for_sale_html
+            + comment_html
+            + stats_html +
+            '</div>'
+            '</a>'
+        )
+    return '<div class="match-grid">' + cards + '</div>'
+
+
+def _render_list_index(lists, username):
+    if not lists:
+        return '<p class="match-empty">This user has no public lists.</p>'
+    cards = ""
+    for lst in lists:
+        href = '/lookup?username=' + _html.escape(username) + '&list_id=' + _html.escape(str(lst["id"]))
+        description_html = ('<div class="match-card-comment">' + _html.escape(lst["description"]) + '</div>') if lst.get("description") else ""
+        cards += (
+            '<a href="' + href + '" class="match-card">'
+            '<div class="match-card-art">'
+            '<div class="match-card-placeholder">' + VINYL_PLACEHOLDER_SVG + '</div>'
+            '<div class="match-card-art-label">' + _html.escape(lst["name"]) + '</div>'
+            '</div>'
+            '<div class="match-card-body">'
+            '<div class="match-card-title">' + _html.escape(lst["name"]) + '</div>'
+            + description_html +
+            '</div>'
+            '</a>'
+        )
+    return '<div class="match-grid">' + cards + '</div>'
+
+
+@app.route("/lookup")
+def lookuppage():
+
+    username = request.args.get("username", "")
+    list_id = request.args.get("list_id", "")
+    output, loadtime, searched_at, user_meta = "", "", "", ""
+    has_results = bool(username)
+
+    if username:
+        start_time = time.time()
+        scraper = cloudscraper.create_scraper(browser={'browser':'chrome','platform':'android','desktop':False})
+
+        collection = None
+        wantlist = None
+        lists = None
+        list_releases = None
+        user_not_found = False
+        rate_limited = False
+        collection_error = ""
+        wantlist_error = ""
+        lists_error = ""
+
+        try:
+            try:
+                collection = lookup_helper.get_collection(username, scraper)
+            except lookup_helper.UserNotFoundError:
+                user_not_found = True
+            except lookup_helper.CollectionPrivateError:
+                collection_error = "This user's collection is not public."
+
+            if not user_not_found:
+                try:
+                    wantlist = lookup_helper.get_wantlist(username, scraper)
+                except lookup_helper.UserNotFoundError:
+                    user_not_found = True
+                except lookup_helper.WantlistPrivateError:
+                    wantlist_error = "This user's wantlist is not public."
+
+            if not user_not_found:
+                try:
+                    lists = lookup_helper.get_lists(username, scraper)
+                except lookup_helper.UserNotFoundError:
+                    user_not_found = True
+                except lookup_helper.ListPrivateError:
+                    lists_error = "This user's lists are not public."
+
+            if list_id and not user_not_found:
+                list_releases = lookup_helper.get_list_releases(list_id, scraper)
+
+        except lookup_helper.RateLimitError:
+            rate_limited = True
+
+        end_time = time.time()
+        loadtime = "Lookup time: {0} seconds".format(round(end_time - start_time, 2))
+        searched_at = datetime.now().astimezone().strftime("%-I:%M %p %Z · %-d %b %y")
+        user_meta = "User: " + username
+
+        if rate_limited:
+            output = _RATE_LIMIT_NOTICE
+        elif user_not_found:
+            output = (
+                '<div class="lookup-notice lookup-notice--error">'
+                'User <b>' + _html.escape(username) + '</b> was not found on Discogs. '
+                'Check the username and try again.'
+                '</div>'
+            )
+        else:
+            col_count = len(collection) if collection is not None else 0
+            want_count = len(wantlist) if wantlist is not None else 0
+            lists_count = len(lists) if lists is not None else 0
+            active_tab = "lists" if list_id else "collection"
+
+            def _count_text(n, noun):
+                return "{0} {1}{2}".format(n, noun, "" if n == 1 else "s")
+
+            col_count_text   = _count_text(col_count, "item")
+            want_count_text  = _count_text(want_count, "item")
+            if list_id:
+                list_rel_count = len(list_releases) if list_releases else 0
+                lists_count_text = _count_text(list_rel_count, "release")
+            else:
+                lists_count_text = _count_text(lists_count, "list")
+            active_count_text = {"collection": col_count_text, "wantlist": want_count_text, "lists": lists_count_text}[active_tab]
+
+            tabs_html = (
+                '<div class="lookup-tabs-row">'
+                '<div class="lookup-tabs">'
+                '<button class="lookup-tab{0}" data-tab="collection" data-count-text="{5}">Collection ({1})</button>'
+                '<button class="lookup-tab" data-tab="wantlist" data-count-text="{6}">Wantlist ({2})</button>'
+                '<button class="lookup-tab{3}" data-tab="lists" data-count-text="{7}">Lists ({4})</button>'
+                '</div>'
+                '<div class="lookup-pagination" id="lookup-pagination">'
+                '<div class="pag-select" id="pag-size-wrap">'
+                '<button class="pag-select-btn" id="pag-size-btn" type="button">'
+                '<span id="pag-size-val">50</span>'
+                '<span class="pag-select-caret">&#9662;</span>'
+                '</button>'
+                '<div class="pag-select-menu" id="pag-size-menu">'
+                '<button class="pag-select-opt" type="button" data-value="10">10</button>'
+                '<button class="pag-select-opt" type="button" data-value="25">25</button>'
+                '<button class="pag-select-opt pag-select-opt--active" type="button" data-value="50">50</button>'
+                '<button class="pag-select-opt" type="button" data-value="100">100</button>'
+                '</div>'
+                '</div>'
+                '<div class="pag-divider"></div>'
+                '<button class="pag-btn" id="pag-prev">&#8249;</button>'
+                '<span class="pag-label" id="pag-label">1 / 1</span>'
+                '<button class="pag-btn" id="pag-next">&#8250;</button>'
+                '</div>'
+                '</div>'
+            ).format(
+                ' active' if active_tab == 'collection' else '',
+                col_count,
+                want_count,
+                ' active' if active_tab == 'lists' else '',
+                lists_count,
+                _html.escape(col_count_text),
+                _html.escape(want_count_text),
+                _html.escape(lists_count_text),
+            )
+
+            if collection_error:
+                col_content = '<div class="lookup-notice">' + _html.escape(collection_error) + '</div>'
+            elif collection:
+                col_content = _render_lookup_grid(collection, show_stats=False)
+            else:
+                col_content = '<p class="match-empty">This collection is empty.</p>'
+
+            if wantlist_error:
+                want_content = '<div class="lookup-notice">' + _html.escape(wantlist_error) + '</div>'
+            elif wantlist:
+                want_content = _render_lookup_grid(wantlist, show_stats=True)
+            else:
+                want_content = '<p class="match-empty">This wantlist is empty.</p>'
+
+            if list_id:
+                back_url = '/lookup?username=' + _html.escape(username)
+                back_card_html = (
+                    '<a href="' + back_url + '" class="match-card match-card--back">'
+                    '<div class="match-card-art">'
+                    '<div class="match-card-placeholder">' + BACK_ARROW_SVG + '</div>'
+                    '</div>'
+                    '</a>'
+                )
+                if list_releases:
+                    lists_content = _render_lookup_grid(list_releases, prepend_card=back_card_html)
+                else:
+                    lists_content = _render_lookup_grid([], prepend_card=back_card_html) + '<p class="match-empty">This list is empty.</p>'
+            elif lists_error:
+                lists_content = '<div class="lookup-notice">' + _html.escape(lists_error) + '</div>'
+            else:
+                lists_content = _render_list_index(lists or [], username)
+
+            col_mosaic_items = "".join(
+                '<a class="mosaic-item" href="{1}" target="_blank" rel="noopener noreferrer"><img src="{0}" alt="" class="mosaic-thumb"></a>'.format(m["thumb"], m.get("url", "#"))
+                for m in (collection or []) if m.get("thumb")
+            )
+            want_mosaic_items = "".join(
+                '<a class="mosaic-item" href="{1}" target="_blank" rel="noopener noreferrer"><img src="{0}" alt="" class="mosaic-thumb"></a>'.format(m["thumb"], m.get("url", "#"))
+                for m in (wantlist or []) if m.get("thumb")
+            )
+            lists_mosaic_items = "".join(
+                '<span class="mosaic-item"><img src="{0}" alt="" class="mosaic-thumb"></span>'.format(m["thumb"])
+                for m in (list_releases or []) if m.get("thumb")
+            ) if list_id else ""
+
+            col_hidden = ' style="display:none"' if active_tab != 'collection' else ''
+            want_hidden = ' style="display:none"'
+            lists_hidden = ' style="display:none"' if active_tab != 'lists' else ''
+
+            col_mosaic = '<div id="lookup-mosaic-collection" class="lookup-mosaic mosaic"{1}>{0}</div>'.format(col_mosaic_items, col_hidden) if col_mosaic_items else ""
+            want_mosaic = '<div id="lookup-mosaic-wantlist" class="lookup-mosaic mosaic"{1}>{0}</div>'.format(want_mosaic_items, want_hidden) if want_mosaic_items else ""
+            lists_mosaic = '<div id="lookup-mosaic-lists" class="lookup-mosaic mosaic"{1}>{0}</div>'.format(lists_mosaic_items, lists_hidden) if lists_mosaic_items else ""
+            mosaics_html = '<div class="lookup-mosaic-wrap">' + col_mosaic + want_mosaic + lists_mosaic + '</div>' if (col_mosaic or want_mosaic or lists_mosaic) else ""
+
+            count_html = '<div id="lookup-count" class="lookup-count">' + _html.escape(active_count_text) + '</div>'
+
+            output = (
+                mosaics_html +
+                count_html +
+                tabs_html +
+                '<div id="lookup-panel-collection" class="lookup-panel"{0}>'.format(col_hidden) + col_content + '</div>' +
+                '<div id="lookup-panel-wantlist" class="lookup-panel"{0}>'.format(want_hidden) + want_content + '</div>' +
+                '<div id="lookup-panel-lists" class="lookup-panel"{0}>'.format(lists_hidden) + lists_content + '</div>'
+            )
+
+    meta = '<div class="meta"><span><b>{0}</b></span><span>{1} &nbsp;&#124;&nbsp; {2}</span></div>'.format(user_meta, loadtime, searched_at) if loadtime else ""
+
+    username_val = username.replace('"', '&quot;')
+
+    lookup_header = (
+        '<div class="page-header">'
+        '<div class="page-eyebrow">Collections</div>'
+        '<h2>User <em>Lookup</em></h2>'
+        '</div>'
+    )
+    lookup_form = (
+        '<form id="lookup-form" class="search-bar" action="" method="get" role="search">'
+        '<span class="search-bar-icon" aria-hidden="true">' + SEARCH_ICON_SVG + '</span>'
+        '<div class="search-bar-segment">'
+        '<label class="search-bar-label" for="username">Username</label>'
+        '<input type="text" id="username" name="username" placeholder="Discogs username" '
+        'autocomplete="off" value="' + username_val + '">'
+        '</div>'
+        '<button type="submit" class="search-bar-submit">Search</button>'
+        '</form>'
+        '<div id="spinner"><span id="spinner-icon"></span>Looking up user&hellip;</div>'
+    )
     return page_layout(
-        """
-        <input type="text" name="wantlist">
-        testing
-        """
+        (lookup_form + lookup_header + meta + output) if has_results else (lookup_header + lookup_form),
+        content_class='has-results' if has_results else '',
+        show_platter=has_results,
+        title='User Lookup'
     )
+
+
+## Local Testing ##
 
 if __name__ == "__main__":
-    app.run(host="127.0.0.1", port=8080, debug=True)
+    app.run(host="127.0.0.1", port=8080, debug=True, threaded=True)

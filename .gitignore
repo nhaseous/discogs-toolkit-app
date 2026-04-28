@@ -14,3 +14,11 @@ venv.bak/
 
 # Google App Engine
 .gcloudignore
+app.yaml
+
+# Runtime artifacts
+nohup.out
+state.bin
+
+# Claude Code local settings
+.claude/settings.local.json
