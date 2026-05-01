@@ -1,4 +1,4 @@
-import csv, os, re
+import base64, csv, json, os, re
 
 import gspread
 from google.oauth2 import service_account
@@ -27,14 +27,22 @@ _HEADER_KEYWORDS = {
 # ── Credentials ──────────────────────────────────────────────────────────────
 
 def _get_client():
+    # Prefer an explicit key file (local dev)
     key_file = os.environ.get('GOOGLE_APPLICATION_CREDENTIALS')
     if key_file and os.path.exists(key_file):
         creds = service_account.Credentials.from_service_account_file(
             key_file, scopes=_SCOPES
         )
+    # GAE: metadata-server credentials can't be scoped for Workspace APIs,
+    # so we require the key JSON delivered as a base64 env var.
+    elif os.environ.get('GOOGLE_SA_KEY_B64'):
+        info = json.loads(base64.b64decode(os.environ['GOOGLE_SA_KEY_B64']))
+        creds = service_account.Credentials.from_service_account_info(
+            info, scopes=_SCOPES
+        )
     else:
         creds, _ = google.auth.default(scopes=_SCOPES)
-    return gspread.authorize(creds)
+    return gspread.Client(auth=creds)
 
 # ── Row utilities ─────────────────────────────────────────────────────────────
 
@@ -89,12 +97,6 @@ def _is_sold_record(row):
     first  = _get(row, 0)
     second = _get(row, 1)
     if not first or not second:
-        return False
-    if _is_numeric(first) or _is_numeric(second):
-        return False
-    if _parse_price(_get(row, 2)) is None:
-        return False
-    if _parse_price(_get(row, 3)) is None:
         return False
     if not _DATE_RE.search(_get(row, 4)):
         return False

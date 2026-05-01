@@ -1292,7 +1292,7 @@ def _render_records_dashboard(stats):
             + '</div>'
         )
 
-    # ── Collection group ──────────────────────────────────────────────────────
+    # ── Collection + Inventory group (shared stat grid, per-tab breakdown) ──────
     col_sf_active = [s for s in stats['col_sf_stats'] if s['count']]
     col_breakdown_rows = ''.join(
         sf_row(s['name'], s['count'], s['median_total'], 'median', s['cost_total'], 'spent')
@@ -1302,22 +1302,7 @@ def _render_records_dashboard(stats):
         {'name': s['name'], 'value': s['count'], 'color': _PIE_COLORS[i % len(_PIE_COLORS)]}
         for i, s in enumerate(col_sf_active)
     ]
-    col_group = dash_group(
-        'collection',
-        cards_html=(
-            stat_card('Collection Value', _fmt_money(stats['col_median_total']),
-                      '{0} records'.format(stats['col_count']))
-            + stat_card('Collection &middot; Spent', _fmt_money(stats['col_cost_total']),
-                        '{0} records'.format(stats['col_count']))
-        ),
-        breakdown_html=(
-            breakdown_section('Collection', col_breakdown_rows)
-            + _pie_section('Breakdown', col_pie_segs)
-        ) if col_breakdown_rows else '',
-        active=True,
-    )
 
-    # ── Inventory group ───────────────────────────────────────────────────────
     inv_sf_active = [s for s in stats['inv_sf_stats'] if s['count']]
     inv_breakdown_rows = ''.join(
         sf_row(s['name'], s['count'], s['total_total'], 'spent')
@@ -1327,14 +1312,26 @@ def _render_records_dashboard(stats):
         {'name': s['name'], 'value': s['count'], 'color': _PIE_COLORS[i % len(_PIE_COLORS)]}
         for i, s in enumerate(inv_sf_active)
     ]
-    inv_group = dash_group(
-        'inventory',
-        cards_html=stat_card('Inventory &middot; Spent', _fmt_money(stats['inv_total_total']),
-                             '{0} records'.format(stats['inv_count'])),
-        breakdown_html=(
-            breakdown_section('Inventory', inv_breakdown_rows)
-            + _pie_section('Breakdown', inv_pie_segs)
-        ) if inv_breakdown_rows else '',
+
+    col_inv_group = (
+        '<div class="rec-dash-group" data-tab-group="col-inv">'
+        + '<div class="rec-stat-grid">'
+        + stat_card('Collection Value', _fmt_money(stats['col_median_total']),
+                    '{0} records'.format(stats['col_count']))
+        + stat_card('Collection &middot; Spent', _fmt_money(stats['col_cost_total']),
+                    '{0} records'.format(stats['col_count']))
+        + stat_card('Inventory &middot; Spent', _fmt_money(stats['inv_total_total']),
+                    '{0} records'.format(stats['inv_count']))
+        + '</div>'
+        + '<div class="rec-breakdown">'
+        + '<div class="rec-breakdown-pane" data-breakdown-pane="collection">'
+        + ((breakdown_section('Collection', col_breakdown_rows) + _pie_section('Breakdown', col_pie_segs)) if col_breakdown_rows else '')
+        + '</div>'
+        + '<div class="rec-breakdown-pane" data-breakdown-pane="inventory" style="display:none;opacity:0">'
+        + ((breakdown_section('Inventory', inv_breakdown_rows) + _pie_section('Breakdown', inv_pie_segs)) if inv_breakdown_rows else '')
+        + '</div>'
+        + '</div>'
+        + '</div>'
     )
 
     # ── Sold group ────────────────────────────────────────────────────────────
@@ -1368,7 +1365,7 @@ def _render_records_dashboard(stats):
         breakdown_html=breakdown_section('Sold by Year', sold_breakdown_rows, wide=True) if sold_breakdown_rows else '',
     )
 
-    return '<div class="rec-dashboard">' + col_group + inv_group + sold_group + '</div>'
+    return '<div class="rec-dashboard">' + col_inv_group + sold_group + '</div>'
 
 
 def _render_col_table(collection):
@@ -1639,12 +1636,20 @@ _RECORDS_JS = '''
         dashGroups[g.dataset.tabGroup] = g;
     });
 
-    function switchDashGroup(target) {
+    // Breakdown panes within the col-inv group
+    var breakdownPanes = {};
+    document.querySelectorAll('.rec-breakdown-pane').forEach(function(p) {
+        breakdownPanes[p.dataset.breakdownPane] = p;
+    });
+
+    var TAB_TO_GROUP = { collection: 'col-inv', inventory: 'col-inv', sold: 'sold' };
+
+    function switchBreakdownPane(target) {
         var current = null;
-        Object.keys(dashGroups).forEach(function(k) {
-            if (dashGroups[k].style.display !== 'none') current = dashGroups[k];
+        Object.keys(breakdownPanes).forEach(function(k) {
+            if (breakdownPanes[k].style.display !== 'none') current = breakdownPanes[k];
         });
-        var next = dashGroups[target];
+        var next = breakdownPanes[target];
         if (!next || next === current) return;
 
         if (current) {
@@ -1655,11 +1660,46 @@ _RECORDS_JS = '''
             }, 180);
         }
 
-        next.style.cssText = '';  // clear inline display:none;opacity:0
+        next.style.cssText = '';
         next.classList.add('rec-dash-entering');
-        // Force reflow so the entering state is painted before we remove the class
         void next.offsetWidth;
         next.classList.remove('rec-dash-entering');
+    }
+
+    function switchDashGroup(target) {
+        var groupKey = TAB_TO_GROUP[target] || target;
+        var currentGroup = null;
+        Object.keys(dashGroups).forEach(function(k) {
+            if (dashGroups[k].style.display !== 'none') currentGroup = dashGroups[k];
+        });
+        var nextGroup = dashGroups[groupKey];
+
+        if (breakdownPanes[target] !== undefined) {
+            if (currentGroup === nextGroup) {
+                // Same group (collection ↔ inventory): animate just the pane
+                switchBreakdownPane(target);
+            } else {
+                // Different group: set the correct pane instantly while the group is hidden
+                Object.keys(breakdownPanes).forEach(function(k) {
+                    breakdownPanes[k].style.cssText = k === target ? '' : 'display:none;opacity:0';
+                });
+            }
+        }
+
+        if (!nextGroup || nextGroup === currentGroup) return;
+
+        if (currentGroup) {
+            currentGroup.classList.add('rec-dash-leaving');
+            setTimeout(function() {
+                currentGroup.style.display = 'none';
+                currentGroup.classList.remove('rec-dash-leaving');
+            }, 180);
+        }
+
+        nextGroup.style.cssText = '';
+        nextGroup.classList.add('rec-dash-entering');
+        void nextGroup.offsetWidth;
+        nextGroup.classList.remove('rec-dash-entering');
     }
 
     // Main tab switching
