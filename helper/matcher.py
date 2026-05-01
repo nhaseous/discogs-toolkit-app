@@ -43,6 +43,7 @@ def get_collection(username, scraper):
             "format_descriptions": fmt_descriptions,
             "format_text":      fmt_text,
             "thumb":            info.get("thumb", ""),
+            "cover_image":      info.get("cover_image", ""),
             "url":              "https://www.discogs.com/release/{0}".format(release_id) if release_id else "",
         })
     return result

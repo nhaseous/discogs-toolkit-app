@@ -4,7 +4,7 @@ load_dotenv()
 from flask import Flask, request
 from helper import pricechecker, matcher, lookup as lookup_helper
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import cloudscraper, time, html as _html, base64
+import cloudscraper, time, html as _html
 from datetime import datetime
 # Main
 
@@ -13,10 +13,8 @@ app = Flask(__name__)
 with open('static/discogs-logo.svg') as _f:
     DISCOGS_LOGO_SVG = _f.read().strip()
 
-with open('static/logo.svg', 'rb') as _f:
-    _logo_bytes = _f.read()
-    LOGO_SVG = _logo_bytes.decode().strip().replace('<svg ', '<svg class="brand-icon" ', 1)
-    FAVICON_DATA_URI = 'data:image/svg+xml;base64,' + base64.b64encode(_logo_bytes).decode('ascii')
+with open('static/logo.svg') as _f:
+    LOGO_SVG = _f.read().strip().replace('<svg ', '<svg class="brand-icon" ', 1)
 
 VINYL_PLACEHOLDER_SVG = (
     '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">'
@@ -45,6 +43,26 @@ BACK_ARROW_SVG = (
     '<path d="M19 12H5"/><path d="M12 5l-7 7 7 7"/></svg>'
 )
 
+EYE_CLOSED_SVG = (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M3 12Q12 17 21 12"/>'
+    '<line x1="3" y1="12" x2="1.5" y2="15"/>'
+    '<line x1="7.5" y1="13.8" x2="6.8" y2="17.2"/>'
+    '<line x1="12" y1="14.5" x2="12" y2="18"/>'
+    '<line x1="16.5" y1="13.8" x2="17.2" y2="17.2"/>'
+    '<line x1="21" y1="12" x2="22.5" y2="15"/>'
+    '</svg>'
+)
+
+EYE_OPEN_SVG = (
+    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
+    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
+    '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>'
+    '<circle cx="12" cy="12" r="3"/>'
+    '</svg>'
+)
+
 def page_layout(content, content_class="", show_platter=False, title="Discogs Toolkit"):
     path = request.path
     pc_active = ' class="active"' if path == '/pricechecker' else ''
@@ -65,13 +83,13 @@ def page_layout(content, content_class="", show_platter=False, title="Discogs To
         '<meta charset="utf-8">'
         '<meta name="viewport" content="width=device-width, initial-scale=1">'
         '<title>' + title + '</title>'
-        '<link rel="icon" type="image/svg+xml" href="' + FAVICON_DATA_URI + '">'
+        '<link rel="icon" type="image/svg+xml" href="/static/logo.svg">'
         '<link rel="preconnect" href="https://fonts.googleapis.com">'
         '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
         '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
         'family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400;1,9..144,500'
         '&family=Inter:wght@400;500;600;700&display=swap">'
-        '<link rel="stylesheet" href="/static/style.css">'
+        '<link rel="stylesheet" href="/static/style.css?v=2">'
         '</head>'
         '<body>'
         '<div class="layout">'
@@ -527,6 +545,16 @@ def page_layout(content, content_class="", show_platter=False, title="Discogs To
         '    });'
         '})();'
         '(function() {'
+        '    var btn = document.getElementById("pag-expand-btn");'
+        '    if (!btn) return;'
+        '    btn.addEventListener("click", function() {'
+        '        var on = this.classList.toggle("active");'
+        '        document.querySelectorAll(".match-grid").forEach(function(g) {'
+        '            g.classList.toggle("match-grid--expanded", on);'
+        '        });'
+        '    });'
+        '})();'
+        '(function() {'
         '    if (window.location.pathname === "/") {'
         '        sessionStorage.removeItem("art-tab");'
         '        return;'
@@ -593,8 +621,13 @@ def landingpage():
         '<section class="hero">'
         '<div class="hero-eyebrow">Discogs Toolkit</div>'
         '<h1 class="hero-title">Tools for <em>crate diggers</em>, collectors, and sellers.</h1>'
-        '<p class="hero-subtitle">A small set of utilities for Discogs marketplace research '
-        'and collection matching. Dig through the shelves below.</p>'
+        '<p class="hero-subtitle">A small set of utilities for marketplace research '
+        'and collection matching for the Discogs platform. Dig through the shelves below.</p>'
+        '<br><p class="hero-subtitle">\ Dev Notes \<br>'
+        '01 &middot; Price Checker doesn\'t work when running on the cloud/web because webscraping gets blocked by Cloudflare. Works locally.<br>'
+        '02 &middot; All good.<br>'
+        '03 &middot; Displaying user lists doesn\'t work for the same issue with webscraping and Cloudflare.<br>'
+        '( Report bugs to @curefortheitch on Instagram, Discogs, etc. )</p>'
         '</section>'
         '<div class="tool-grid-wrap">'
         '<div class="tool-grid">'
@@ -763,6 +796,10 @@ def matcherpage():
                 '<button class="lookup-tab active" data-tab="matches" data-count-text="' + _html.escape(matches_count_text) + '">' + _html.escape(matches_count_text) + '</button>'
                 '</div>'
                 '<div class="lookup-pagination" id="lookup-pagination">'
+                '<button class="pag-expand-btn" id="pag-expand-btn" type="button" title="Expand all cards">'
+                '<span class="pag-eye pag-eye--closed">' + EYE_CLOSED_SVG + '</span>'
+                '<span class="pag-eye pag-eye--open">' + EYE_OPEN_SVG + '</span>'
+                '</button>'
                 '<div class="pag-select" id="pag-size-wrap">'
                 '<button class="pag-select-btn" id="pag-size-btn" type="button">'
                 '<span id="pag-size-val">50</span>'
@@ -847,8 +884,9 @@ def matcherpage():
 def _render_lookup_grid(items, show_stats=False, prepend_card=""):
     cards = prepend_card
     for m in items:
-        if m.get("thumb"):
-            art = '<img src="{0}" alt="" class="match-card-img">'.format(m["thumb"])
+        img_src = m.get("cover_image") or m.get("thumb")
+        if img_src:
+            art = '<img src="{0}" alt="" class="match-card-img">'.format(img_src)
         else:
             art = '<div class="match-card-placeholder">' + VINYL_PLACEHOLDER_SVG + '</div>'
         fmt_desc_html = ('<div class="match-card-format-desc">' + _html.escape(m.get("format_descriptions", "")) + '</div>') if m.get("format_descriptions") else ""
@@ -908,7 +946,7 @@ def lookuppage():
 
     username = request.args.get("username", "")
     list_id = request.args.get("list_id", "")
-    output, loadtime, searched_at, user_meta = "", "", "", ""
+    output, loadtime, searched_at, user_meta, active_count_text = "", "", "", "", ""
     has_results = bool(username)
 
     if username:
@@ -995,6 +1033,10 @@ def lookuppage():
                 '<button class="lookup-tab{3}" data-tab="lists" data-count-text="{7}">Lists ({4})</button>'
                 '</div>'
                 '<div class="lookup-pagination" id="lookup-pagination">'
+                '<button class="pag-expand-btn" id="pag-expand-btn" type="button" title="Expand all cards">'
+                '<span class="pag-eye pag-eye--closed">' + EYE_CLOSED_SVG + '</span>'
+                '<span class="pag-eye pag-eye--open">' + EYE_OPEN_SVG + '</span>'
+                '</button>'
                 '<div class="pag-select" id="pag-size-wrap">'
                 '<button class="pag-select-btn" id="pag-size-btn" type="button">'
                 '<span id="pag-size-val">50</span>'
@@ -1078,18 +1120,16 @@ def lookuppage():
             lists_mosaic = '<div id="lookup-mosaic-lists" class="lookup-mosaic mosaic"{1}>{0}</div>'.format(lists_mosaic_items, lists_hidden) if lists_mosaic_items else ""
             mosaics_html = '<div class="lookup-mosaic-wrap">' + col_mosaic + want_mosaic + lists_mosaic + '</div>' if (col_mosaic or want_mosaic or lists_mosaic) else ""
 
-            count_html = '<div id="lookup-count" class="lookup-count">' + _html.escape(active_count_text) + '</div>'
-
             output = (
                 mosaics_html +
-                count_html +
                 tabs_html +
                 '<div id="lookup-panel-collection" class="lookup-panel"{0}>'.format(col_hidden) + col_content + '</div>' +
                 '<div id="lookup-panel-wantlist" class="lookup-panel"{0}>'.format(want_hidden) + want_content + '</div>' +
                 '<div id="lookup-panel-lists" class="lookup-panel"{0}>'.format(lists_hidden) + lists_content + '</div>'
             )
 
-    meta = '<div class="meta"><span><b>{0}</b></span><span>{1} &nbsp;&#124;&nbsp; {2}</span></div>'.format(user_meta, loadtime, searched_at) if loadtime else ""
+    count_span = ' &nbsp;&middot;&nbsp; <span id="lookup-count">{0}</span>'.format(_html.escape(active_count_text)) if active_count_text else ''
+    meta = '<div class="meta"><span><b>{0}</b>{1}</span><span>{2} &nbsp;&#124;&nbsp; {3}</span></div>'.format(user_meta, count_span, loadtime, searched_at) if loadtime else ""
 
     username_val = username.replace('"', '&quot;')
 

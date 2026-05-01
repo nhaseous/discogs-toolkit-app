@@ -172,7 +172,7 @@ def get_listings(scraper, inventory_list, sorted_inventory_list, username, relea
     for listing in listings:
         count += 1
         if is_user(username, listing) and not user_found:
-            formatted_listings += "<mark>{0} (You) ({1})</mark><br>".format(get_price(listing), count)
+            formatted_listings += "<mark>{0} (You)</mark><br>".format(get_price(listing))
             your_place = count
             user_found = True
         elif is_user(username, listing):
@@ -244,12 +244,13 @@ def print_list(unsorted_inventory_list):
     output = ""
     for count, entry in enumerate(unsorted_inventory_list, 1):
         item_id = _item_id(entry)
+        place_html = '<span>({0})</span>'.format(entry.place) if entry.place else ''
         output += (
             '<div class="result-card" id="card-{0}" data-badges="{3}">'
-            '<div class="card-number">#{1}</div>'
+            '<div class="card-number"><span>#{1}</span>{4}</div>'
             '{2}'
             '</div>'
-        ).format(item_id, count, entry, _entry_badges(entry))
+        ).format(item_id, count, entry, _entry_badges(entry), place_html)
     return output
 
 # Prints a sorted inventory list.
@@ -293,12 +294,13 @@ def print_sorted_list(sorted_inventory_list):
         for entry in sorted(sorted_inventory_list[index], key=lambda e: e.index):
             item_count += 1
             item_id = _item_id(entry)
+            place_html = '<span>({0})</span>'.format(entry.place) if entry.place else ''
             cards += (
                 '<div class="result-card" id="card-{0}" data-badges="{3}">'
-                '<div class="card-number">#{1}</div>'
+                '<div class="card-number"><span>#{1}</span>{4}</div>'
                 '{2}'
                 '</div>'
-            ).format(item_id, item_count, entry, _entry_badges(entry))
+            ).format(item_id, item_count, entry, _entry_badges(entry), place_html)
 
     scroll_script = (
         '<script>'

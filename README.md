@@ -2,9 +2,7 @@
 
 Flask web app for Discogs marketplace research and collection browsing. Deployed on Google App Engine.
 
-**Live:** curefxrtheitch.com
-
-or https://discogs-toolkit.uc.r.appspot.com
+**Live:** https://discogs-toolkit.uc.r.appspot.com
 
 ---
 

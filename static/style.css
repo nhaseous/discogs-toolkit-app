@@ -500,6 +500,11 @@ html:has(.tool-grid-wrap) .tool-grid { height: 128.27%; }
 .search-bar-submit:hover { background: var(--rust-hover); }
 .search-bar-submit:active { transform: translateY(1px); }
 
+@media (max-width: 768px) {
+    .sidebar { display: none; }
+    .content { margin-left: 0; padding: 24px 20px 48px; }
+}
+
 @media (max-width: 680px) {
     .search-bar {
         border-radius: 14px;
@@ -769,6 +774,9 @@ html:has(.tool-grid-wrap) .tool-grid { height: 128.27%; }
     color: var(--ink-muted);
     letter-spacing: 0.02em;
     margin-bottom: 6px;
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
 }
 
 .card-title {
@@ -1161,12 +1169,6 @@ mark {
     overflow: hidden;
 }
 
-.lookup-count {
-    font-size: 13px;
-    color: var(--ink-soft);
-    text-align: right;
-    letter-spacing: 0.01em;
-}
 
 .lookup-tabs-row {
     display: flex;
@@ -1175,6 +1177,9 @@ mark {
     margin: 20px 0 0;
     background: var(--paper-alt);
     border-bottom: 1px solid var(--rule);
+    position: sticky;
+    top: 0;
+    z-index: 10;
 }
 
 .lookup-tabs {
@@ -1370,4 +1375,51 @@ mark {
     height: 36px;
     animation: none;
     color: var(--ink-soft);
+}
+
+/* =========================================================
+   Expand-all toggle button
+   ========================================================= */
+
+.pag-expand-btn {
+    background: transparent;
+    border: 1px solid var(--rule);
+    border-radius: 4px;
+    width: 26px;
+    height: 24px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    cursor: pointer;
+    color: var(--ink-muted);
+    transition: color 0.12s ease, border-color 0.12s ease, background 0.12s ease;
+    padding: 0;
+    flex-shrink: 0;
+}
+
+.pag-expand-btn svg {
+    width: 14px;
+    height: 14px;
+    display: block;
+}
+
+.pag-expand-btn:hover {
+    color: var(--ink);
+    border-color: var(--rule-strong);
+}
+
+.pag-expand-btn.active {
+    color: var(--rust);
+    border-color: var(--rust);
+    background: color-mix(in srgb, var(--rust) 8%, transparent);
+}
+
+.pag-eye { display: inline-flex; align-items: center; }
+.pag-eye--open { display: none; }
+.pag-expand-btn.active .pag-eye--closed { display: none; }
+.pag-expand-btn.active .pag-eye--open { display: inline-flex; }
+
+.match-grid--expanded .match-card-body {
+    max-height: 220px;
+    padding: 10px 12px 12px;
 }
