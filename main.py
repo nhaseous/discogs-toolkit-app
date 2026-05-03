@@ -14,7 +14,11 @@ _CONSUMER_KEY    = os.environ.get('DISCOGS_CONSUMER_KEY', '')
 _CONSUMER_SECRET = os.environ.get('DISCOGS_CONSUMER_SECRET', '')
 _CALLBACK_URL    = os.environ.get('DISCOGS_CALLBACK_URL', 'http://127.0.0.1:8080/callback')
 
-app = Flask(__name__)
+import sys
+if getattr(sys, 'frozen', False):
+    app = Flask(__name__, template_folder=os.path.join(os.environ.get('RESOURCEPATH', os.getcwd()), 'templates'), static_folder=os.path.join(os.environ.get('RESOURCEPATH', os.getcwd()), 'static'))
+else:
+    app = Flask(__name__)
 app.config['SECRET_KEY']              = os.environ.get('FLASK_SECRET_KEY', '')
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
@@ -714,9 +718,11 @@ def lookuppage():
 
 ## Records ##
 
-
 @app.route("/records")
 def recordspage():
+    if session.get('discogs_username') != 'curefortheitch':
+        return "Access Denied: You do not have permission to access this page. This feature is restricted to authorized users only.", 403
+
     stats = _records_data['stats']
     collection = _records_data['collection']
     inventory  = _records_data['inventory']
