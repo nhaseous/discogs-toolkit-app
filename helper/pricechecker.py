@@ -2,6 +2,9 @@ from bs4 import BeautifulSoup
 from datetime import date, datetime
 import threading
 import collections
+import re
+import json
+import html as _html
 collections.Callable = collections.abc.Callable
 
 _list_lock = threading.Lock()
@@ -14,7 +17,7 @@ from helper.common import API_HEADERS as _HEADERS
 
 class FormattedEntry: # Formatted marketplace entry for a single release and its listings
 
-    def __init__(self,title,url,imgUrl,listings,place,total,lastSold,daysAgo,yearsAgo=None,index=0):
+    def __init__(self,title,url,imgUrl,listings,place,total,lastSold,daysAgo,yearsAgo=None,index=0,price_badges="",listing_ids=None,reprice_data=None):
         self.title = title
         self.url = url
         self.imgUrl = imgUrl
@@ -25,6 +28,9 @@ class FormattedEntry: # Formatted marketplace entry for a single release and its
         self.daysAgo = daysAgo
         self.yearsAgo = yearsAgo
         self.index = index
+        self.price_badges = price_badges
+        self.listing_ids = listing_ids if listing_ids is not None else []
+        self.reprice_data = reprice_data if reprice_data is not None else []
 
     def __str__(self):
         if self.imgUrl:
@@ -86,7 +92,7 @@ def get_inventory_ids(username, scraper):
     API_URL = "https://api.discogs.com/users/{0}/inventory".format(username)
 
     new_list = []
-    seen_ids = set()
+    seen_ids = {}  # release_id -> index in new_list
     page = 1
 
     while True:
@@ -101,6 +107,7 @@ def get_inventory_ids(username, scraper):
         for listing in data.get("listings", []):
             release = listing.get("release", {})
             release_id = str(release.get("id", ""))
+            listing_id = str(listing.get("id", ""))
             title = release.get("title", "")
             artist = release.get("artist", "")
             fmt = release.get("format", "")
@@ -115,10 +122,12 @@ def get_inventory_ids(username, scraper):
             else:
                 display_title = title
 
-            # if seller has multiple copies of the same release listed, only add it to the list once
-            if release_id and release_id not in seen_ids:
-                seen_ids.add(release_id)
-                new_list.append((display_title, release_id, thumbnail_url))
+            if release_id:
+                if release_id not in seen_ids:
+                    seen_ids[release_id] = len(new_list)
+                    new_list.append([display_title, release_id, thumbnail_url, [listing_id]])
+                else:
+                    new_list[seen_ids[release_id]][3].append(listing_id)
 
         pagination = data.get("pagination", {})
         if page >= pagination.get("pages", 1):
@@ -127,9 +136,8 @@ def get_inventory_ids(username, scraper):
 
     return new_list
 
-# TBD: account for when user has multiple listings
 # Given username and item_id, scrapes marketplace for listings and stores them in provided list.
-def get_listings(scraper, inventory_list, sorted_inventory_list, username, release_title, item_id, thumbnail_url, index):
+def get_listings(scraper, inventory_list, sorted_inventory_list, username, release_title, item_id, thumbnail_url, listing_ids, index):
 
     count, your_place, total = 0, 0, 0
     listings = []
@@ -168,21 +176,83 @@ def get_listings(scraper, inventory_list, sorted_inventory_list, username, relea
             if img:
                 thumbnail_url = img.get("src", "")
 
-    formatted_listings, user_found = "", False
+    # First pass: build formatted listings and collect user copies (condition -> [price, ...])
+    user_copies = {}  # condition_key -> [price_float, ...]
+    user_listing_details = []  # (listing_id, price_float, condition_key) for reprice data
+    formatted_listings = ""
     for listing in listings:
         count += 1
-        if is_user(username, listing) and not user_found:
-            formatted_listings += "<mark>{0} (You)</mark><br>".format(get_price(listing))
-            your_place = count
-            user_found = True
-        elif is_user(username, listing):
-            formatted_listings += "{0} (You)<br>".format(get_price(listing))
+        if is_user(username, listing):
+            ckey = _get_condition_key(listing)
+            pfloat = _parse_price_float(listing)
+            if ckey and pfloat is not None:
+                user_copies.setdefault(ckey, []).append(pfloat)
+            if your_place == 0:
+                your_place = count
+            scraped_listing_id = ""
+            a_title = listing.find("a", class_="item_description_title")
+            if a_title:
+                m = re.search(r'/sell/item/(\d+)', a_title.get("href", ""))
+                if m:
+                    scraped_listing_id = m.group(1)
+            if scraped_listing_id and ckey and pfloat is not None:
+                user_listing_details.append((scraped_listing_id, pfloat, ckey))
+            if scraped_listing_id:
+                formatted_listings += '<mark><a href="https://www.discogs.com/sell/item/{0}" target="_blank">{1} (You)</a></mark><br>'.format(scraped_listing_id, get_price(listing))
+            else:
+                formatted_listings += "<mark>{0} (You)</mark><br>".format(get_price(listing))
         elif check_scam(listing):
             formatted_listings += "{0} (SCAM)<br>".format(get_price(listing))
         else:
             formatted_listings += "{0}<br>".format(get_price(listing))
 
-    entry = FormattedEntry(release_title,URL,thumbnail_url,formatted_listings,your_place,total,last_sold,days_ago,years_ago,index)
+    # Second pass: find the minimum price per condition pair across all listings
+    condition_cheapest = {}  # condition_key -> (min_price, is_user_listing)
+    if user_copies:
+        for listing in listings:
+            ckey = _get_condition_key(listing)
+            if ckey not in user_copies:
+                continue
+            pfloat = _parse_price_float(listing)
+            if pfloat is None:
+                continue
+            current = condition_cheapest.get(ckey)
+            if current is None or pfloat < current[0]:
+                condition_cheapest[ckey] = (pfloat, bool(is_user(username, listing)))
+
+    # Compute CHEAPEST / OVERPRICED badges for each user condition pair
+    price_badges_html = ""
+    for ckey, user_prices in user_copies.items():
+        user_min = min(user_prices)
+        if ckey not in condition_cheapest:
+            price_badges_html += '<span class="card-cheapest-badge">{0} CHEAPEST</span>'.format(ckey)
+            continue
+        cheapest_price, cheapest_is_user = condition_cheapest[ckey]
+        if cheapest_is_user or user_min <= cheapest_price:
+            price_badges_html += '<span class="card-cheapest-badge">{0} CHEAPEST</span>'.format(ckey)
+        else:
+            pct = (user_min - cheapest_price) / cheapest_price * 100
+            if pct > 0:
+                price_badges_html += (
+                    '<span class="card-overpriced-pct">+{1:.0f}%</span>'
+                    '<span class="card-overpriced-badge">{0} OVERPRICED</span>'
+                ).format(ckey, pct)
+
+    reprice_data = []
+    for lid, sprice, ckey in user_listing_details:
+        if ckey not in condition_cheapest:
+            continue
+        cheapest_price, cheapest_is_user = condition_cheapest[ckey]
+        if cheapest_is_user or sprice <= cheapest_price:
+            continue
+        reprice_data.append({
+            "id": lid,
+            "seller_price": round(sprice, 2),
+            "cheapest_price": round(cheapest_price, 2),
+            "condition": ckey
+        })
+
+    entry = FormattedEntry(release_title,URL,thumbnail_url,formatted_listings,your_place,total,last_sold,days_ago,years_ago,index,price_badges_html,listing_ids,reprice_data)
     inventory_list[index] = entry
     with _list_lock:
         if your_place < 10:
@@ -193,7 +263,7 @@ def get_listings(scraper, inventory_list, sorted_inventory_list, username, relea
     return
 
 # Gets the price of a provided listing.
-def get_price(listing): 
+def get_price(listing):
 
     try:
         item_condition = listing.find("p", class_="item_condition").text
@@ -231,6 +301,11 @@ def _entry_badges(entry):
             badges.append('high')
     except (ValueError, TypeError):
         pass
+    pb = getattr(entry, 'price_badges', '')
+    if 'card-cheapest-badge' in pb:
+        badges.append('cheapest')
+    if 'card-overpriced-badge' in pb:
+        badges.append('overpriced')
     return ' '.join(badges)
 
 def ordinal(n):
@@ -245,12 +320,19 @@ def print_list(unsorted_inventory_list):
     for count, entry in enumerate(unsorted_inventory_list, 1):
         item_id = _item_id(entry)
         place_html = '<span>({0})</span>'.format(entry.place) if entry.place else ''
+        price_badges = getattr(entry, 'price_badges', '')
+        reprice_data = getattr(entry, 'reprice_data', [])
+        reprice_attr = ' data-reprice="{0}"'.format(_html.escape(json.dumps(reprice_data))) if reprice_data else ''
+        listing_ids = getattr(entry, 'listing_ids', [])
+        listing_ids_attr = ' data-listing-ids="{0}"'.format(_html.escape(json.dumps(listing_ids))) if listing_ids else ''
+        title_attr = ' data-title="{0}"'.format(_html.escape(entry.title)) if entry.title else ''
+        thumb_attr = ' data-thumb="{0}"'.format(_html.escape(entry.imgUrl)) if entry.imgUrl else ''
         output += (
-            '<div class="result-card" id="card-{0}" data-badges="{3}">'
-            '<div class="card-number"><span>#{1}</span>{4}</div>'
+            '<div class="result-card" id="card-{0}" data-badges="{3}"{6}{7}{8}{9}>'
+            '<div class="card-number"><span>#{1}</span><div class="card-number-right">{4}{5}</div></div>'
             '{2}'
             '</div>'
-        ).format(item_id, count, entry, _entry_badges(entry), place_html)
+        ).format(item_id, count, entry, _entry_badges(entry), price_badges, place_html, reprice_attr, listing_ids_attr, title_attr, thumb_attr)
     return output
 
 # Prints a sorted inventory list.
@@ -295,12 +377,19 @@ def print_sorted_list(sorted_inventory_list):
             item_count += 1
             item_id = _item_id(entry)
             place_html = '<span>({0})</span>'.format(entry.place) if entry.place else ''
+            price_badges = getattr(entry, 'price_badges', '')
+            reprice_data = getattr(entry, 'reprice_data', [])
+            reprice_attr = ' data-reprice="{0}"'.format(_html.escape(json.dumps(reprice_data))) if reprice_data else ''
+            listing_ids = getattr(entry, 'listing_ids', [])
+            listing_ids_attr = ' data-listing-ids="{0}"'.format(_html.escape(json.dumps(listing_ids))) if listing_ids else ''
+            title_attr = ' data-title="{0}"'.format(_html.escape(entry.title)) if entry.title else ''
+            thumb_attr = ' data-thumb="{0}"'.format(_html.escape(entry.imgUrl)) if entry.imgUrl else ''
             cards += (
-                '<div class="result-card" id="card-{0}" data-badges="{3}">'
-                '<div class="card-number"><span>#{1}</span>{4}</div>'
+                '<div class="result-card" id="card-{0}" data-badges="{3}"{6}{7}{8}{9}>'
+                '<div class="card-number"><span>#{1}</span><div class="card-number-right">{4}{5}</div></div>'
                 '{2}'
                 '</div>'
-            ).format(item_id, item_count, entry, _entry_badges(entry), place_html)
+            ).format(item_id, item_count, entry, _entry_badges(entry), price_badges, place_html, reprice_attr, listing_ids_attr, title_attr, thumb_attr)
 
     scroll_script = (
         '<script>'
@@ -357,12 +446,14 @@ def print_mosaic(inventory_list):
         except (ValueError, TypeError):
             return None
 
-    recent_count  = sum(1 for e in inventory_list if e and e.daysAgo is not None)
-    old_count     = sum(1 for e in inventory_list if e and getattr(e, 'yearsAgo', None) is not None)
-    low_count     = sum(1 for e in inventory_list if e and _total_int(e) is not None and (_total_int(e) or 0) < 4)
-    lowest_count  = sum(1 for e in inventory_list if e and _total_int(e) == 1)
-    high_count    = sum(1 for e in inventory_list if e and _total_int(e) is not None and (_total_int(e) or 0) > 4)
-    highest_count = sum(1 for e in inventory_list if e and _total_int(e) is not None and (_total_int(e) or 0) > 9)
+    recent_count   = sum(1 for e in inventory_list if e and e.daysAgo is not None)
+    old_count      = sum(1 for e in inventory_list if e and getattr(e, 'yearsAgo', None) is not None)
+    low_count      = sum(1 for e in inventory_list if e and _total_int(e) is not None and (_total_int(e) or 0) < 4)
+    lowest_count   = sum(1 for e in inventory_list if e and _total_int(e) == 1)
+    high_count     = sum(1 for e in inventory_list if e and _total_int(e) is not None and (_total_int(e) or 0) > 4)
+    highest_count  = sum(1 for e in inventory_list if e and _total_int(e) is not None and (_total_int(e) or 0) > 9)
+    cheapest_count = sum(1 for e in inventory_list if e and 'card-cheapest-badge' in getattr(e, 'price_badges', ''))
+    overpriced_count = sum(1 for e in inventory_list if e and 'card-overpriced-badge' in getattr(e, 'price_badges', ''))
 
     badge_summary = (
         '<span class="isrecent-badge inv-count-badge" data-filter="recent" data-tooltip="Last sold within the past 10 days">RECENT</span> {0}'
@@ -376,7 +467,11 @@ def print_mosaic(inventory_list):
         '<span class="card-high-badge inv-count-badge" data-filter="high" data-tooltip="5 marketplace listings or more">HIGH</span> {4}'
         ' &ensp;'
         '<span class="card-high-badge card-high-badge--highest inv-count-badge" data-filter="highest" data-tooltip="10 marketplace listings or more">HIGHEST</span> {5}'
-    ).format(recent_count, old_count, low_count, lowest_count, high_count, highest_count)
+        ' &ensp;'
+        '<span class="card-cheapest-badge inv-count-badge" data-filter="cheapest" data-tooltip="Cheapest listing for its condition">CHEAPEST</span> {6}'
+        ' &ensp;'
+        '<span class="card-overpriced-badge inv-count-badge" data-filter="overpriced" data-tooltip="More than 10% above cheapest for its condition">OVERPRICED</span> {7}'
+    ).format(recent_count, old_count, low_count, lowest_count, high_count, highest_count, cheapest_count, overpriced_count)
 
     count_div = (
         '<div class="badge-count">'
@@ -420,17 +515,39 @@ def check_scam(listing):
 
     return listing.find(string="0.0%")
 
+# Parses condition key (e.g. "(VG+/VG+)") from a listing without side effects.
+def _get_condition_key(listing):
+    try:
+        text = listing.find("p", class_="item_condition").text
+        parts = text.split("(")
+        media = parts[1].split(")")[0].split(" or")[0].strip()
+        try:
+            sleeve = parts[2].split(")")[0].split(" or")[0].strip()
+            return "({0}/{1})".format(media, sleeve)
+        except IndexError:
+            return "({0})".format(media)
+    except (AttributeError, IndexError):
+        return None
+
+# Parses the converted price as a float from a listing.
+def _parse_price_float(listing):
+    try:
+        price_text = listing.find("span", class_="converted_price").text.strip()
+        return float(re.sub(r'[^\d.]', '', price_text))
+    except (AttributeError, ValueError):
+        return None
+
 
 ## State ##
 
 # # Pickles an inventory list as a save state in a bin file.
-# def save_state(inventory_list): 
+# def save_state(inventory_list):
 
 #     with open("state.bin", "wb") as f:
 #         pickle.dump(inventory_list, f)
 
 # # Loads a pickled inventory list from a bin file.
-# def load_state(): 
+# def load_state():
 
 #     with open("state.bin", "rb") as f:
 #         try:

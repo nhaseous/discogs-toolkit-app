@@ -1,11 +1,12 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-from flask import Flask, request
+from flask import Flask, request, render_template
 from helper import pricechecker, matcher, lookup as lookup_helper, records as records_helper
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import cloudscraper, time, html as _html, re as _re, math as _math
+import cloudscraper, time, html as _html, re as _re, math as _math, requests as _requests
 from datetime import datetime
+import assets
 # Main
 
 app = Flask(__name__)
@@ -15,608 +16,9 @@ try:
 except Exception:
     _records_data = records_helper.empty_data()
 
-with open('static/discogs-logo.svg') as _f:
-    DISCOGS_LOGO_SVG = _f.read().strip()
-
-with open('static/logo.svg') as _f:
-    LOGO_SVG = _f.read().strip().replace('<svg ', '<svg class="brand-icon" ', 1)
-
-VINYL_PLACEHOLDER_SVG = (
-    '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg">'
-    '<circle cx="50" cy="50" r="46" fill="currentColor"/>'
-    '<circle cx="50" cy="50" r="20" fill="var(--rule)"/>'
-    '<circle cx="50" cy="50" r="4" fill="currentColor"/>'
-    '</svg>'
-)
-
-SEARCH_ICON_SVG = (
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
-    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
-    '<circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>'
-)
-
-_RATE_LIMIT_NOTICE = (
-    '<div class="lookup-notice lookup-notice--error">'
-    'Discogs is rate limiting requests right now. '
-    'Please wait 60 seconds before you try again.'
-    '</div>'
-)
-
-BACK_ARROW_SVG = (
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
-    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
-    '<path d="M19 12H5"/><path d="M12 5l-7 7 7 7"/></svg>'
-)
-
-EYE_CLOSED_SVG = (
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
-    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
-    '<path d="M3 12Q12 17 21 12"/>'
-    '<line x1="3" y1="12" x2="1.5" y2="15"/>'
-    '<line x1="7.5" y1="13.8" x2="6.8" y2="17.2"/>'
-    '<line x1="12" y1="14.5" x2="12" y2="18"/>'
-    '<line x1="16.5" y1="13.8" x2="17.2" y2="17.2"/>'
-    '<line x1="21" y1="12" x2="22.5" y2="15"/>'
-    '</svg>'
-)
-
-EYE_OPEN_SVG = (
-    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
-    'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
-    '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/>'
-    '<circle cx="12" cy="12" r="3"/>'
-    '</svg>'
-)
-
-def page_layout(content, content_class="", show_platter=False, title="Discogs Toolkit"):
-    path = request.path
-    pc_active = ' class="active"' if path == '/pricechecker' else ''
-    matcher_active = ' class="active"' if path == '/matcher' else ''
-    lookup_active = ' class="active"' if path == '/lookup' else ''
-    records_active = ' class="active"' if path == '/records' else ''
-    is_landing = path == '/'
-    platter_img = '<img src="/static/platter.png" alt="" class="sidebar-platter">' if show_platter else ''
-    sidebar_art = (
-        '<div class="sidebar-art">'
-        '<img src="/static/console-oak.png" alt="" class="sidebar-art-img">'
-        + platter_img +
-        '</div>'
-    ) if not is_landing else ''
-    return (
-        '<!DOCTYPE html>'
-        '<html lang="en">'
-        '<head>'
-        '<meta charset="utf-8">'
-        '<meta name="viewport" content="width=device-width, initial-scale=1">'
-        '<title>' + title + '</title>'
-        '<link rel="icon" type="image/svg+xml" href="/static/logo.svg">'
-        '<link rel="preconnect" href="https://fonts.googleapis.com">'
-        '<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>'
-        '<link rel="stylesheet" href="https://fonts.googleapis.com/css2?'
-        'family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400;1,9..144,500'
-        '&family=Inter:wght@400;500;600;700&display=swap">'
-        '<link rel="stylesheet" href="/static/style.css?v=2">'
-        '</head>'
-        '<body>'
-        '<div class="layout">'
-        '<nav class="sidebar">'
-        '<a href="/" class="sidebar-brand">'
-        + LOGO_SVG +
-        '<span class="brand-text"><span class="brand-discogs-logo">' + DISCOGS_LOGO_SVG + '</span>Toolkit</span>'
-        '</a>'
-        '<div class="sidebar-label">♪ Tools ♪</div>'
-        '<a href="/pricechecker"' + pc_active + '>Price Checker</a>'
-        '<a href="/matcher"' + matcher_active + '>Matcher</a>'
-        '<a href="/lookup"' + lookup_active + '>Lookup</a>'
-        '<a href="/records"' + records_active + '>Records</a>'
-        + sidebar_art +
-        '</nav>'
-        '<main class="content' + (' ' + content_class if content_class else '') + '">'
-        '<div id="content-main">'
-    ) + content + (
-        '</div>'
-        '</main>'
-        '</div>'
-        '<div id="badge-tooltip"></div>'
-        '<script>'
-        'document.querySelectorAll(".sidebar a").forEach(function(link) {'
-        '    link.addEventListener("click", function(e) {'
-        '        if (this.pathname === window.location.pathname) {'
-        '            e.preventDefault();'
-        '            window.scrollTo({ top: 0, behavior: "smooth" });'
-        '            history.replaceState(null, "", window.location.pathname + window.location.search);'
-        '        }'
-        '    });'
-        '});'
-        '(function() {'
-        '    var active = new Set();'
-        '    var pills = document.querySelectorAll(".inv-count-badge[data-filter]");'
-        '    if (!pills.length) return;'
-        '    pills.forEach(function(pill) {'
-        '        pill.addEventListener("click", function() {'
-        '            var f = this.getAttribute("data-filter");'
-        '            if (active.has(f)) {'
-        '                active.delete(f);'
-        '                this.classList.remove("filter-active");'
-        '                if (f === "low") {'
-        '                    active.delete("lowest");'
-        '                    var lb = document.querySelector(".inv-count-badge[data-filter=\'lowest\']");'
-        '                    if (lb) lb.classList.remove("filter-active");'
-        '                }'
-        '            } else {'
-        '                active.add(f);'
-        '                this.classList.add("filter-active");'
-        '                if (f === "lowest") {'
-        '                    active.add("low");'
-        '                    var lowb = document.querySelector(".inv-count-badge[data-filter=\'low\']");'
-        '                    if (lowb) lowb.classList.add("filter-active");'
-        '                }'
-        '                if (f === "recent") {'
-        '                    active.delete("old");'
-        '                    var oldb = document.querySelector(".inv-count-badge[data-filter=\'old\']");'
-        '                    if (oldb) oldb.classList.remove("filter-active");'
-        '                }'
-        '                if (f === "old") {'
-        '                    active.delete("recent");'
-        '                    var recentb = document.querySelector(".inv-count-badge[data-filter=\'recent\']");'
-        '                    if (recentb) recentb.classList.remove("filter-active");'
-        '                }'
-        '            }'
-        '            filter();'
-        '        });'
-        '    });'
-        '    function filter() {'
-        '        document.querySelectorAll(".result-card").forEach(function(card) {'
-        '            if (!active.size) { card.style.display = ""; return; }'
-        '            var cb = (card.getAttribute("data-badges") || "").split(" ");'
-        '            var show = true;'
-        '            active.forEach(function(f) { if (cb.indexOf(f) === -1) show = false; });'
-        '            card.style.display = show ? "" : "none";'
-        '        });'
-        '        document.querySelectorAll(".sort-group-header").forEach(function(hdr) {'
-        '            if (!active.size) { hdr.style.display = ""; return; }'
-        '            var sib = hdr.nextElementSibling;'
-        '            var vis = false;'
-        '            while (sib && !sib.classList.contains("sort-group-header")) {'
-        '                if (sib.classList.contains("result-card") && sib.style.display !== "none") { vis = true; break; }'
-        '                sib = sib.nextElementSibling;'
-        '            }'
-        '            hdr.style.display = vis ? "" : "none";'
-        '        });'
-        '    }'
-        '})();'
-        '(function() {'
-        '    var mosaic = document.getElementById("results-mosaic");'
-        '    if (!mosaic) return;'
-        '    var container = mosaic.closest(".content");'
-        '    var sticky = null;'
-        '    var syncObservers = [];'
-        '    function reposition() {'
-        '        if (!sticky) return;'
-        '        sticky.style.left = document.getElementById("content-main").getBoundingClientRect().right + 48 + "px";'
-        '    }'
-        '    function activate() {'
-        '        if (sticky) return;'
-        '        sticky = document.createElement("div");'
-        '        sticky.id = "sticky-mosaic";'
-        '        mosaic.querySelectorAll(".mosaic-item").forEach(function(item) {'
-        '            sticky.appendChild(item.cloneNode(true));'
-        '        });'
-        '        var invCount = mosaic.nextElementSibling;'
-        '        if (invCount) {'
-        '            var cloned = invCount.cloneNode(true);'
-        '            cloned.querySelectorAll(".inv-count-badge[data-filter]").forEach(function(cb) {'
-        '                cb.addEventListener("click", function(e) {'
-        '                    e.stopPropagation();'
-        '                    var orig = invCount.querySelector(".inv-count-badge[data-filter=\'" + this.getAttribute("data-filter") + "\']");'
-        '                    if (orig) orig.click();'
-        '                });'
-        '            });'
-        '            invCount.querySelectorAll(".inv-count-badge[data-filter]").forEach(function(ob) {'
-        '                var mo = new MutationObserver(function() {'
-        '                    var cb = cloned.querySelector(".inv-count-badge[data-filter=\'" + ob.getAttribute("data-filter") + "\']");'
-        '                    if (cb) cb.classList.toggle("filter-active", ob.classList.contains("filter-active"));'
-        '                });'
-        '                mo.observe(ob, { attributes: true, attributeFilter: ["class"] });'
-        '                syncObservers.push(mo);'
-        '            });'
-        '            sticky.appendChild(cloned);'
-        '        }'
-        '        document.body.appendChild(sticky);'
-        '        reposition();'
-        '        window.addEventListener("resize", reposition);'
-        '        container.classList.add("sticky-mosaic-active");'
-        '        sticky.style.transform = "translateY(-100%)";'
-        '        requestAnimationFrame(function() {'
-        '            requestAnimationFrame(function() {'
-        '                if (!sticky) return;'
-        '                sticky.style.transition = "transform 0.35s cubic-bezier(0.4,0,0.2,1)";'
-        '                sticky.style.transform = "translateY(0)";'
-        '            });'
-        '        });'
-        '    }'
-        '    var MOSAIC_EASE = "transform 0.35s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease";'
-        '    function slideInMosaic() {'
-        '        var w = mosaic.offsetWidth;'
-        '        var clip = document.getElementById("content-main");'
-        '        if (clip) clip.style.overflow = "hidden";'
-        '        mosaic.style.transition = "none";'
-        '        mosaic.style.transform = "translateX(-" + w + "px)";'
-        '        mosaic.style.opacity = "0";'
-        '        requestAnimationFrame(function() {'
-        '            requestAnimationFrame(function() {'
-        '                mosaic.style.transition = MOSAIC_EASE;'
-        '                mosaic.style.transform = "translateX(0)";'
-        '                mosaic.style.opacity = "1";'
-        '                mosaic.addEventListener("transitionend", function cleanup(e) {'
-        '                    if (e.propertyName !== "transform") return;'
-        '                    mosaic.removeEventListener("transitionend", cleanup);'
-        '                    mosaic.style.transition = "";'
-        '                    mosaic.style.transform = "";'
-        '                    mosaic.style.opacity = "";'
-        '                    if (clip) clip.style.overflow = "";'
-        '                });'
-        '            });'
-        '        });'
-        '    }'
-        '    function revealMosaic() {'
-        '        container.classList.remove("sticky-mosaic-active");'
-        '        slideInMosaic();'
-        '    }'
-        '    function deactivate() {'
-        '        if (!sticky) return;'
-        '        syncObservers.forEach(function(mo) { mo.disconnect(); });'
-        '        syncObservers = [];'
-        '        window.removeEventListener("resize", reposition);'
-        '        var el = sticky;'
-        '        sticky = null;'
-        '        el.style.transition = "transform 0.35s cubic-bezier(0.4,0,0.2,1)";'
-        '        el.style.transform = "translateY(-100%)";'
-        '        el.addEventListener("transitionend", function() { el.remove(); revealMosaic(); }, { once: true });'
-        '    }'
-        '    new IntersectionObserver(function(entries) {'
-        '        if (!entries[0].isIntersecting && entries[0].boundingClientRect.top < 0) { activate(); }'
-        '    }).observe(mosaic);'
-        '    var invCount = mosaic.nextElementSibling;'
-        '    if (invCount) {'
-        '        new IntersectionObserver(function(entries) {'
-        '            if (!entries[0].isIntersecting) return;'
-        '            if (sticky) { deactivate(); return; }'
-        '            if (!container.classList.contains("sticky-mosaic-active")) return;'
-        '            revealMosaic();'
-        '        }).observe(invCount);'
-        '    }'
-        '    slideInMosaic();'
-        '})();'
-        '(function() {'
-        '    var tip = document.getElementById("badge-tooltip");'
-        '    if (!tip) return;'
-        '    document.querySelectorAll(".inv-count-badge[data-tooltip]").forEach(function(badge) {'
-        '        badge.addEventListener("mouseenter", function(e) {'
-        '            var s = window.getComputedStyle(this);'
-        '            tip.textContent = this.getAttribute("data-tooltip");'
-        '            tip.style.background = s.backgroundColor;'
-        '            tip.style.color = s.color;'
-        '            tip.style.left = e.clientX + "px";'
-        '            tip.style.top = e.clientY + "px";'
-        '            tip.style.display = "block";'
-        '        });'
-        '        badge.addEventListener("mousemove", function(e) {'
-        '            tip.style.left = e.clientX + "px";'
-        '            tip.style.top = e.clientY + "px";'
-        '        });'
-        '        badge.addEventListener("mouseleave", function() {'
-        '            tip.style.display = "none";'
-        '        });'
-        '    });'
-        '})();'
-        '(function() {'
-        '    function attachFormAnim(formId) {'
-        '        var form = document.getElementById(formId);'
-        '        if (!form) return;'
-        '        form.addEventListener("submit", function(e) {'
-        '            e.preventDefault();'
-        '            form.nextElementSibling.style.display = "block";'
-        '            var header = document.querySelector(".page-header");'
-        '            if (header) {'
-        '                var formRect = form.getBoundingClientRect();'
-        '                var gap = parseInt(window.getComputedStyle(form).marginBottom) || 22;'
-        '                var targetTop = 30;'
-        '                var delta = targetTop - formRect.top;'
-        '                if (delta < 0) {'
-        '                    var headerShift = (targetTop + formRect.height + gap) - header.getBoundingClientRect().top;'
-        '                    var ease = "transform 0.4s cubic-bezier(0.4,0,0.2,1)";'
-        '                    form.style.transition = ease;'
-        '                    form.style.transform = "translateY(" + delta + "px)";'
-        '                    header.style.transition = ease;'
-        '                    header.style.transform = "translateY(" + headerShift + "px)";'
-        '                    form.addEventListener("transitionend", function() { form.submit(); }, { once: true });'
-        '                    return;'
-        '                }'
-        '            }'
-        '            requestAnimationFrame(function() { requestAnimationFrame(function() { form.submit(); }); });'
-        '        });'
-        '    }'
-        '    attachFormAnim("pc-form");'
-        '    attachFormAnim("matcher-form");'
-        '    attachFormAnim("lookup-form");'
-        '})();'
-        '(function() {'
-        '    function layoutMatchGrid(grid) {'
-        '        var allCards = Array.from(grid.querySelectorAll(".match-card"));'
-        '        if (!allCards.length) return;'
-        '        var gap = 14, minWidth = 158;'
-        '        var numCols = Math.max(1, Math.floor((grid.offsetWidth + gap) / (minWidth + gap)));'
-        '        var existing = Array.from(grid.children);'
-        '        if (existing.length === numCols && existing.every(function(c) { return c.classList.contains("match-column"); })) return;'
-        '        grid.innerHTML = "";'
-        '        var cols = [];'
-        '        for (var i = 0; i < numCols; i++) {'
-        '            var col = document.createElement("div");'
-        '            col.className = "match-column";'
-        '            grid.appendChild(col);'
-        '            cols.push(col);'
-        '        }'
-        '        allCards.forEach(function(c, i) { cols[i % numCols].appendChild(c); });'
-        '    }'
-        '    window._layoutMatchGrids = function() {'
-        '        document.querySelectorAll(".match-grid").forEach(layoutMatchGrid);'
-        '    };'
-        '    window._layoutMatchGrids();'
-        '    var _lgTimer;'
-        '    window.addEventListener("resize", function() {'
-        '        clearTimeout(_lgTimer);'
-        '        _lgTimer = setTimeout(window._layoutMatchGrids, 100);'
-        '    });'
-        '})();'
-        '(function() {'
-        '    var tabs = document.querySelectorAll(".lookup-tab");'
-        '    if (!tabs.length) return;'
-        '    var EASE = "transform 0.35s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease";'
-        '    function animateOut(el, w, onDone) {'
-        '        el.style.transition = EASE;'
-        '        el.style.transform = "translateX(-" + w + "px)";'
-        '        el.style.opacity = "0";'
-        '        el.addEventListener("transitionend", function cleanup(e) {'
-        '            if (e.propertyName !== "transform") return;'
-        '            el.removeEventListener("transitionend", cleanup);'
-        '            el.style.display = "none";'
-        '            el.style.transition = ""; el.style.transform = ""; el.style.opacity = "";'
-        '            if (onDone) onDone();'
-        '        });'
-        '    }'
-        '    function animateIn(el, w, wrap) {'
-        '        el.style.transition = "none";'
-        '        el.style.transform = "translateX(-" + w + "px)";'
-        '        el.style.opacity = "0";'
-        '        el.style.display = "";'
-        '        requestAnimationFrame(function() {'
-        '            requestAnimationFrame(function() {'
-        '                el.style.transition = EASE;'
-        '                el.style.transform = "translateX(0)";'
-        '                el.style.opacity = "1";'
-        '                el.addEventListener("transitionend", function done(e) {'
-        '                    if (e.propertyName !== "transform") return;'
-        '                    el.removeEventListener("transitionend", done);'
-        '                    el.style.transition = ""; el.style.transform = ""; el.style.opacity = "";'
-        '                    if (wrap) wrap.style.minHeight = "";'
-        '                });'
-        '            });'
-        '        });'
-        '    }'
-        '    function switchMosaics(target) {'
-        '        var all = Array.from(document.querySelectorAll(".lookup-mosaic"));'
-        '        var incoming = document.getElementById("lookup-mosaic-" + target);'
-        '        var outgoing = all.find(function(m) { return m !== incoming && m.style.display !== "none"; });'
-        '        if (!incoming && !outgoing) return;'
-        '        var wrap = (outgoing || incoming).parentNode;'
-        '        var w = wrap.offsetWidth;'
-        '        if (outgoing) {'
-        '            wrap.style.minHeight = outgoing.offsetHeight + "px";'
-        '            animateOut(outgoing, w, incoming ? function() { animateIn(incoming, w, wrap); } : function() { wrap.style.minHeight = ""; });'
-        '        } else {'
-        '            animateIn(incoming, w, wrap);'
-        '        }'
-        '    }'
-        '    var countEl = document.getElementById("lookup-count");'
-        '    tabs.forEach(function(tab) {'
-        '        tab.addEventListener("click", function() {'
-        '            tabs.forEach(function(t) { t.classList.remove("active"); });'
-        '            this.classList.add("active");'
-        '            var target = this.getAttribute("data-tab");'
-        '            document.querySelectorAll(".lookup-panel").forEach(function(panel) {'
-        '                panel.style.display = panel.id === "lookup-panel-" + target ? "" : "none";'
-        '            });'
-        '            switchMosaics(target);'
-        '            if (countEl) { var ct = this.getAttribute("data-count-text"); if (ct) countEl.textContent = ct; }'
-        '            if (window._applyTabPage) window._applyTabPage(target);'
-        '            if (window._layoutMatchGrids) window._layoutMatchGrids();'
-        '        });'
-        '    });'
-        '})();'
-        '(function() {'
-        '    var PAGE_SIZE = 50;'
-        '    var pagTabs = document.querySelectorAll(".lookup-tab");'
-        '    if (!pagTabs.length) return;'
-        '    var pagEl = document.getElementById("lookup-pagination");'
-        '    var prevBtn = document.getElementById("pag-prev");'
-        '    var nextBtn = document.getElementById("pag-next");'
-        '    var labelEl = document.getElementById("pag-label");'
-        '    var sizeBtn = document.getElementById("pag-size-btn");'
-        '    var sizeMenu = document.getElementById("pag-size-menu");'
-        '    var sizeValEl = document.getElementById("pag-size-val");'
-        '    var sizeOpts = sizeMenu ? Array.from(sizeMenu.querySelectorAll(".pag-select-opt")) : [];'
-        '    var state = {};'
-        '    function getGrid(tabName) {'
-        '        var panel = document.getElementById("lookup-panel-" + tabName);'
-        '        return panel ? panel.querySelector(".match-grid") : null;'
-        '    }'
-        '    pagTabs.forEach(function(tab) {'
-        '        var name = tab.getAttribute("data-tab");'
-        '        var grid = getGrid(name);'
-        '        var backCard = grid ? grid.querySelector(".match-card--back") : null;'
-        '        var cards = grid ? Array.from(grid.querySelectorAll(".match-card:not(.match-card--back)")) : [];'
-        '        var total = Math.max(1, Math.ceil(cards.length / PAGE_SIZE));'
-        '        state[name] = { page: 1, total: total, cards: cards, backCard: backCard, ready: false };'
-        '    });'
-        '    function syncControls(tabName) {'
-        '        if (!pagEl || !labelEl) return;'
-        '        var s = state[tabName];'
-        '        if (!s) return;'
-        '        pagEl.style.visibility = "";'
-        '        labelEl.textContent = s.page + " / " + s.total;'
-        '        prevBtn.disabled = s.page <= 1;'
-        '        nextBtn.disabled = s.page >= s.total;'
-        '    }'
-        '    function applyPage(tabName, page) {'
-        '        var s = state[tabName];'
-        '        if (!s) return;'
-        '        s.page = page;'
-        '        s.ready = true;'
-        '        var grid = getGrid(tabName);'
-        '        if (!grid) return;'
-        '        var start = (page - 1) * PAGE_SIZE;'
-        '        var pageCards = s.cards.slice(start, start + PAGE_SIZE);'
-        '        grid.innerHTML = "";'
-        '        if (s.backCard) grid.appendChild(s.backCard);'
-        '        pageCards.forEach(function(c) { grid.appendChild(c); });'
-        '    }'
-        '    window._applyTabPage = function(tabName) {'
-        '        var s = state[tabName];'
-        '        if (!s) return;'
-        '        if (!s.ready) applyPage(tabName, 1);'
-        '        syncControls(tabName);'
-        '    };'
-        '    var initTab = document.querySelector(".lookup-tab.active");'
-        '    if (initTab) {'
-        '        var initName = initTab.getAttribute("data-tab");'
-        '        applyPage(initName, 1);'
-        '        syncControls(initName);'
-        '        if (window._layoutMatchGrids) window._layoutMatchGrids();'
-        '    }'
-        '    function getActiveTab() {'
-        '        var a = document.querySelector(".lookup-tab.active");'
-        '        return a ? a.getAttribute("data-tab") : null;'
-        '    }'
-        '    if (prevBtn) prevBtn.addEventListener("click", function() {'
-        '        var name = getActiveTab();'
-        '        var s = state[name];'
-        '        if (s && s.page > 1) {'
-        '            applyPage(name, s.page - 1);'
-        '            syncControls(name);'
-        '            if (window._layoutMatchGrids) window._layoutMatchGrids();'
-        '        }'
-        '    });'
-        '    if (nextBtn) nextBtn.addEventListener("click", function() {'
-        '        var name = getActiveTab();'
-        '        var s = state[name];'
-        '        if (s && s.page < s.total) {'
-        '            applyPage(name, s.page + 1);'
-        '            syncControls(name);'
-        '            if (window._layoutMatchGrids) window._layoutMatchGrids();'
-        '        }'
-        '    });'
-        '    function applySize(value) {'
-        '        PAGE_SIZE = value;'
-        '        if (sizeValEl) sizeValEl.textContent = value;'
-        '        sizeOpts.forEach(function(o) {'
-        '            o.classList.toggle("pag-select-opt--active", parseInt(o.getAttribute("data-value"), 10) === value);'
-        '        });'
-        '        if (sizeMenu) sizeMenu.style.display = "none";'
-        '        var activeName = getActiveTab();'
-        '        for (var n in state) {'
-        '            state[n].total = Math.max(1, Math.ceil(state[n].cards.length / PAGE_SIZE));'
-        '            state[n].page = 1;'
-        '            if (n !== activeName) state[n].ready = false;'
-        '        }'
-        '        if (activeName) {'
-        '            applyPage(activeName, 1);'
-        '            syncControls(activeName);'
-        '            if (window._layoutMatchGrids) window._layoutMatchGrids();'
-        '        }'
-        '    }'
-        '    if (sizeBtn) sizeBtn.addEventListener("click", function(e) {'
-        '        e.stopPropagation();'
-        '        if (sizeMenu) sizeMenu.style.display = sizeMenu.style.display === "block" ? "none" : "block";'
-        '    });'
-        '    sizeOpts.forEach(function(opt) {'
-        '        opt.addEventListener("click", function() {'
-        '            applySize(parseInt(this.getAttribute("data-value"), 10));'
-        '        });'
-        '    });'
-        '    document.addEventListener("click", function(e) {'
-        '        if (sizeMenu && sizeMenu.style.display === "block") {'
-        '            var wrap = document.getElementById("pag-size-wrap");'
-        '            if (wrap && !wrap.contains(e.target)) sizeMenu.style.display = "none";'
-        '        }'
-        '    });'
-        '})();'
-        '(function() {'
-        '    var btn = document.getElementById("pag-expand-btn");'
-        '    if (!btn) return;'
-        '    btn.addEventListener("click", function() {'
-        '        var on = this.classList.toggle("active");'
-        '        document.querySelectorAll(".match-grid").forEach(function(g) {'
-        '            g.classList.toggle("match-grid--expanded", on);'
-        '        });'
-        '    });'
-        '})();'
-        '(function() {'
-        '    if (window.location.pathname === "/") {'
-        '        sessionStorage.removeItem("art-tab");'
-        '        return;'
-        '    }'
-        '    var art = document.querySelector(".sidebar-art");'
-        '    if (!art) return;'
-        '    var activeLink = document.querySelector(".sidebar a.active");'
-        '    var currentTab = activeLink ? activeLink.getAttribute("href") : "";'
-        '    var prevTab = sessionStorage.getItem("art-tab");'
-        '    var artAnimating = prevTab !== currentTab;'
-        '    if (artAnimating) {'
-        '        var sidebar = document.querySelector(".sidebar");'
-        '        sidebar.style.overflow = "hidden";'
-        '        art.style.transform = "translateY(150px)";'
-        '        art.style.opacity = "0";'
-        '        requestAnimationFrame(function() {'
-        '            requestAnimationFrame(function() {'
-        '                art.style.transition = "transform 0.55s cubic-bezier(0.4,0,0.2,1), opacity 0.4s ease";'
-        '                art.style.transform = "";'
-        '                art.style.opacity = "";'
-        '                art.addEventListener("transitionend", function cleanup(e) {'
-        '                    if (e.propertyName !== "transform") return;'
-        '                    art.style.transition = "";'
-        '                    sidebar.style.overflow = "";'
-        '                    art.removeEventListener("transitionend", cleanup);'
-        '                });'
-        '            });'
-        '        });'
-        '        sessionStorage.setItem("art-tab", currentTab);'
-        '    }'
-        '    var platter = document.querySelector(".sidebar-platter");'
-        '    if (!platter) return;'
-        '    platter.style.transform = "translateY(150px)";'
-        '    platter.style.opacity = "0";'
-        '    setTimeout(function() {'
-        '        requestAnimationFrame(function() {'
-        '            requestAnimationFrame(function() {'
-        '                platter.style.transition = "transform 0.5s cubic-bezier(0.4,0,0.2,1), opacity 0.4s ease";'
-        '                platter.style.transform = "translateY(0)";'
-        '                platter.style.opacity = "1";'
-        '                platter.addEventListener("transitionend", function onDone(e) {'
-        '                    if (e.propertyName !== "transform") return;'
-        '                    platter.style.transition = "";'
-        '                    platter.style.transform = "";'
-        '                    platter.style.opacity = "";'
-        '                    platter.classList.add("spinning");'
-        '                    platter.removeEventListener("transitionend", onDone);'
-        '                });'
-        '            });'
-        '        });'
-        '    }, artAnimating ? 600 : 200);'
-        '})();'
-        '</script>'
-        '</body></html>'
-    )
+@app.context_processor
+def _inject_globals():
+    return {'logo_svg': assets.LOGO_SVG, 'discogs_logo_svg': assets.DISCOGS_LOGO_SVG}
 
 # Routes
 
@@ -624,7 +26,8 @@ def page_layout(content, content_class="", show_platter=False, title="Discogs To
 
 @app.route("/")
 def landingpage():
-    return page_layout(
+    return render_template('landing.html',
+        content=(
         '<section class="hero">'
         '<div class="hero-eyebrow">Discogs Toolkit</div>'
         '<h1 class="hero-title">Tools for <em>crate diggers</em>, collectors, and sellers.</h1>'
@@ -661,6 +64,7 @@ def landingpage():
         '<div class="tool-slot"></div>'
         '</div>'
         '</div>'
+        ),
     )
 
 ## Price Checker Module ##
@@ -688,7 +92,7 @@ def pricecheckerpage():
             with ThreadPoolExecutor(max_workers=10) as executor:
                 futures = [
                     executor.submit(pricechecker.get_listings, scraper, inventory_list,
-                                    sorted_inventory_list, seller, release[0], release[1], release[2], i)
+                                    sorted_inventory_list, seller, release[0], release[1], release[2], release[3], i)
                     for i, release in enumerate(release_titles_ids)
                 ]
                 for f in as_completed(futures):
@@ -724,7 +128,7 @@ def pricecheckerpage():
     )
     pc_form = (
         '<form id="pc-form" class="search-bar" action="" method="get" role="search">'
-        '<span class="search-bar-icon" aria-hidden="true">' + SEARCH_ICON_SVG + '</span>'
+        '<span class="search-bar-icon" aria-hidden="true">' + assets.SEARCH_ICON_SVG + '</span>'
         '<div class="search-bar-segment">'
         '<label class="search-bar-label" for="seller">Seller</label>'
         '<input type="text" id="seller" name="seller" placeholder="Discogs username" '
@@ -739,12 +143,127 @@ def pricecheckerpage():
         '</form>'
         '<div id="spinner"><span id="spinner-icon"></span>Pulling listings&hellip;</div>'
     )
-    return page_layout(
-        (pc_form + pc_header + meta + output) if seller else (pc_header + pc_form),
+    return render_template('pricechecker.html',
+        content=(pc_form + pc_header + meta + output) if seller else (pc_header + pc_form),
         content_class='has-results' if seller else '',
         show_platter=show_platter,
         title='Price Checker'
     )
+
+@app.route("/reprice", methods=["POST"])
+def repricepage():
+    from helper.common import API_HEADERS as _pc_headers
+    data = request.get_json()
+    if not data:
+        return {"error": "No JSON body"}, 400
+
+    listings = data.get("listings", [])
+    results = []
+    headers = dict(_pc_headers)
+
+    def _throttle(resp):
+        try:
+            remaining = int(resp.headers.get("X-Discogs-Ratelimit-Remaining", 20))
+            if remaining < 10:
+                time.sleep(2)
+        except (ValueError, TypeError):
+            pass
+
+    for item in listings:
+        lid = str(item.get("id", ""))
+        seller_price = float(item.get("seller_price", 0))
+        cheapest_price = float(item.get("cheapest_price", 0))
+
+        if not lid:
+            results.append({"id": lid, "status": "error", "message": "Missing listing id"})
+            continue
+
+        pct = (seller_price - cheapest_price) / cheapest_price * 100 if cheapest_price > 0 else 0
+        new_price = seller_price * 0.9 if pct > 10 else cheapest_price - 0.5
+        new_price = round(new_price, 2)
+
+        base_url = "https://api.discogs.com/marketplace/listings/{}".format(lid)
+
+        get_resp = _requests.get(base_url, headers=headers)
+        _throttle(get_resp)
+
+        if get_resp.status_code != 200:
+            results.append({"id": lid, "status": "error", "message": "GET failed: HTTP {}".format(get_resp.status_code)})
+            continue
+
+        ld = get_resp.json()
+        shipping = float((ld.get("shipping_price") or {}).get("value") or 0)
+        old_price = float((ld.get("price") or {}).get("value") or 0)
+
+        final_price = round(new_price - shipping, 2)
+        if final_price <= 0:
+            results.append({"id": lid, "status": "error", "message": "Price after shipping would be ${:.2f}".format(final_price)})
+            continue
+
+        release_id = (ld.get("release") or {}).get("id")
+        condition = ld.get("condition", "")
+        sleeve_condition = ld.get("sleeve_condition", "")
+        status = ld.get("status", "For Sale")
+        comments = ld.get("comments", "")
+        allow_offers = ld.get("allow_offers")
+        external_id = ld.get("external_id", "")
+        location = ld.get("location", "")
+
+        if not release_id or not condition:
+            results.append({"id": lid, "status": "error", "message": "Could not read listing fields"})
+            continue
+
+        post_body = {"release_id": release_id, "condition": condition, "price": final_price, "status": status}
+        if sleeve_condition:
+            post_body["sleeve_condition"] = sleeve_condition
+        if comments:
+            post_body["comments"] = comments
+        if allow_offers is not None:
+            post_body["allow_offers"] = allow_offers
+        if external_id:
+            post_body["external_id"] = external_id
+        if location:
+            post_body["location"] = location
+
+        post_resp = _requests.post(base_url, headers=headers, json=post_body)
+        _throttle(post_resp)
+
+        if post_resp.status_code in (200, 204):
+            results.append({"id": lid, "status": "success", "old_price": old_price, "new_price": final_price, "shipping": shipping})
+        else:
+            results.append({"id": lid, "status": "error", "message": "POST failed: HTTP {} — {}".format(post_resp.status_code, post_resp.text[:200])})
+
+    return {"results": results}
+
+
+@app.route("/refresh_card", methods=["POST"])
+def refresh_card():
+    data = request.get_json()
+    seller = data.get("seller", "")
+    release_id = str(data.get("release_id", ""))
+    listing_ids = data.get("listing_ids", [])
+    title = data.get("title", "")
+    thumbnail = data.get("thumbnail", "")
+    if not seller or not release_id:
+        return {"error": "missing params"}, 400
+    scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'android', 'desktop': False})
+    inventory_list = [None]
+    sorted_inventory_list = [[] for _ in range(10)]
+    pricechecker.get_listings(scraper, inventory_list, sorted_inventory_list, seller, title, release_id, thumbnail, listing_ids, 0)
+    entry = inventory_list[0]
+    if entry is None:
+        return {"error": "scrape failed"}, 500
+    price_badges = getattr(entry, 'price_badges', '')
+    reprice_data = getattr(entry, 'reprice_data', [])
+    place_html = '<span>({0})</span>'.format(entry.place) if entry.place else ''
+    return {
+        "inner_html": str(entry),
+        "price_badges": price_badges,
+        "place_html": place_html,
+        "data_badges": pricechecker._entry_badges(entry),
+        "reprice_data": reprice_data,
+    }
+
 
 ## Matcher Module ##
 
@@ -804,8 +323,8 @@ def matcherpage():
                 '</div>'
                 '<div class="lookup-pagination" id="lookup-pagination">'
                 '<button class="pag-expand-btn" id="pag-expand-btn" type="button" title="Expand all cards">'
-                '<span class="pag-eye pag-eye--closed">' + EYE_CLOSED_SVG + '</span>'
-                '<span class="pag-eye pag-eye--open">' + EYE_OPEN_SVG + '</span>'
+                '<span class="pag-eye pag-eye--closed">' + assets.EYE_CLOSED_SVG + '</span>'
+                '<span class="pag-eye pag-eye--open">' + assets.EYE_OPEN_SVG + '</span>'
                 '</button>'
                 '<div class="pag-select" id="pag-size-wrap">'
                 '<button class="pag-select-btn" id="pag-size-btn" type="button">'
@@ -833,7 +352,7 @@ def matcherpage():
             output = mosaic + summary + tabs_html + panel_html
 
         except matcher.RateLimitError:
-            output = _RATE_LIMIT_NOTICE
+            output = assets.RATE_LIMIT_NOTICE
         except AttributeError:
             output = "Unable to find a match."
 
@@ -858,7 +377,7 @@ def matcherpage():
     )
     matcher_form = (
         '<form id="matcher-form" class="search-bar" action="" method="get" role="search">'
-        '<span class="search-bar-icon" aria-hidden="true">' + SEARCH_ICON_SVG + '</span>'
+        '<span class="search-bar-icon" aria-hidden="true">' + assets.SEARCH_ICON_SVG + '</span>'
         '<div class="search-bar-segment">'
         '<label class="search-bar-label" for="collection">Collection</label>'
         '<input type="text" id="collection" name="collection" placeholder="username" '
@@ -879,8 +398,8 @@ def matcherpage():
         '</form>'
         '<div id="spinner"><span id="spinner-icon"></span>Matching&hellip;</div>'
     )
-    return page_layout(
-        (matcher_form + matcher_header + meta + output) if has_results else (matcher_header + matcher_form),
+    return render_template('matcher.html',
+        content=(matcher_form + matcher_header + meta + output) if has_results else (matcher_header + matcher_form),
         content_class='has-results' if has_results else '',
         show_platter=has_results,
         title='Collection Matcher'
@@ -895,7 +414,7 @@ def _render_lookup_grid(items, show_stats=False, prepend_card=""):
         if img_src:
             art = '<img src="{0}" alt="" class="match-card-img">'.format(img_src)
         else:
-            art = '<div class="match-card-placeholder">' + VINYL_PLACEHOLDER_SVG + '</div>'
+            art = '<div class="match-card-placeholder">' + assets.VINYL_PLACEHOLDER_SVG + '</div>'
         fmt_desc_html = ('<div class="match-card-format-desc">' + _html.escape(m.get("format_descriptions", "")) + '</div>') if m.get("format_descriptions") else ""
         fmt_text_html = ('<div class="match-card-format-text">' + _html.escape(m.get("format_text", "")) + '</div>') if m.get("format_text") else ""
         comment_html = ('<div class="match-card-comment">' + _html.escape(m.get("comment", "")) + '</div>') if m.get("comment") else ""
@@ -936,7 +455,7 @@ def _render_list_index(lists, username):
         cards += (
             '<a href="' + href + '" class="match-card">'
             '<div class="match-card-art">'
-            '<div class="match-card-placeholder">' + VINYL_PLACEHOLDER_SVG + '</div>'
+            '<div class="match-card-placeholder">' + assets.VINYL_PLACEHOLDER_SVG + '</div>'
             '<div class="match-card-art-label">' + _html.escape(lst["name"]) + '</div>'
             '</div>'
             '<div class="match-card-body">'
@@ -1006,7 +525,7 @@ def lookuppage():
         user_meta = "User: " + username
 
         if rate_limited:
-            output = _RATE_LIMIT_NOTICE
+            output = assets.RATE_LIMIT_NOTICE
         elif user_not_found:
             output = (
                 '<div class="lookup-notice lookup-notice--error">'
@@ -1041,8 +560,8 @@ def lookuppage():
                 '</div>'
                 '<div class="lookup-pagination" id="lookup-pagination">'
                 '<button class="pag-expand-btn" id="pag-expand-btn" type="button" title="Expand all cards">'
-                '<span class="pag-eye pag-eye--closed">' + EYE_CLOSED_SVG + '</span>'
-                '<span class="pag-eye pag-eye--open">' + EYE_OPEN_SVG + '</span>'
+                '<span class="pag-eye pag-eye--closed">' + assets.EYE_CLOSED_SVG + '</span>'
+                '<span class="pag-eye pag-eye--open">' + assets.EYE_OPEN_SVG + '</span>'
                 '</button>'
                 '<div class="pag-select" id="pag-size-wrap">'
                 '<button class="pag-select-btn" id="pag-size-btn" type="button">'
@@ -1092,7 +611,7 @@ def lookuppage():
                 back_card_html = (
                     '<a href="' + back_url + '" class="match-card match-card--back">'
                     '<div class="match-card-art">'
-                    '<div class="match-card-placeholder">' + BACK_ARROW_SVG + '</div>'
+                    '<div class="match-card-placeholder">' + assets.BACK_ARROW_SVG + '</div>'
                     '</div>'
                     '</a>'
                 )
@@ -1148,7 +667,7 @@ def lookuppage():
     )
     lookup_form = (
         '<form id="lookup-form" class="search-bar" action="" method="get" role="search">'
-        '<span class="search-bar-icon" aria-hidden="true">' + SEARCH_ICON_SVG + '</span>'
+        '<span class="search-bar-icon" aria-hidden="true">' + assets.SEARCH_ICON_SVG + '</span>'
         '<div class="search-bar-segment">'
         '<label class="search-bar-label" for="username">Username</label>'
         '<input type="text" id="username" name="username" placeholder="Discogs username" '
@@ -1158,8 +677,8 @@ def lookuppage():
         '</form>'
         '<div id="spinner"><span id="spinner-icon"></span>Looking up user&hellip;</div>'
     )
-    return page_layout(
-        (lookup_form + lookup_header + meta + output) if has_results else (lookup_header + lookup_form),
+    return render_template('lookup.html',
+        content=(lookup_form + lookup_header + meta + output) if has_results else (lookup_header + lookup_form),
         content_class='has-results' if has_results else '',
         show_platter=has_results,
         title='User Lookup'
@@ -1394,7 +913,7 @@ def _render_col_table(collection):
         for r in sf['records']:
             rows += (
                 '<tr data-sf="{sf}" data-artist="{artist}" data-album="{album}"'
-                ' data-cost="{cost_v}" data-median="{med_v}" data-idx="{idx}">'
+                ' data-cost="{cost_v}" data-median="{med_v}" data-acquired="{acquired_v}" data-idx="{idx}">'
                 '<td>{artist_d}</td>'
                 '<td>{album_d}</td>'
                 '<td>{cost_d}</td>'
@@ -1411,6 +930,7 @@ def _render_col_table(collection):
                 album=_html.escape(r['album'].lower()),
                 cost_v=r['cost_val'] if r['cost_val'] is not None else '',
                 med_v=r['median_val'] if r['median_val'] is not None else '',
+                acquired_v=_html.escape(r['acquired']),
                 idx=idx,
                 artist_d=_html.escape(r['artist']),
                 album_d=_html.escape(r['album']),
@@ -1437,7 +957,7 @@ def _render_col_table(collection):
         '<th class="sortable" data-col="album">Album</th>'
         '<th class="sortable" data-col="cost">Cost</th>'
         '<th class="sortable" data-col="median">Median</th>'
-        '<th>Acquired</th>'
+        '<th class="sortable" data-col="acquired">Acquired</th>'
         '<th>Color</th>'
         '<th>Type</th>'
         '<th>#</th>'
@@ -1572,7 +1092,7 @@ def _render_sold_table(sold):
             profit_class = 'rec-profit--pos' if (profit is not None and profit >= 0) else ('rec-profit--neg' if profit is not None else '')
             rows += (
                 '<tr data-sf="{sf}" data-artist="{artist}" data-album="{album}"'
-                ' data-cost="{cost_v}" data-sold-for="{sold_v}" data-idx="{idx}">'
+                ' data-cost="{cost_v}" data-sold-for="{sold_v}" data-date="{date_v}" data-idx="{idx}">'
                 '<td>{artist_d}</td>'
                 '<td>{album_d}</td>'
                 '<td>{cost_d}</td>'
@@ -1587,6 +1107,7 @@ def _render_sold_table(sold):
                 album=_html.escape(r['album'].lower()),
                 cost_v=r['cost_val'] if r['cost_val'] is not None else '',
                 sold_v=r['sold_for_val'] if r['sold_for_val'] is not None else '',
+                date_v=_html.escape(r['sold_date']),
                 idx=idx,
                 artist_d=_html.escape(r['artist']),
                 album_d=_html.escape(r['album']),
@@ -1614,7 +1135,7 @@ def _render_sold_table(sold):
         '<th class="sortable" data-col="cost">Bought For</th>'
         '<th class="sortable" data-col="sold-for">Sold For</th>'
         '<th class="sortable" data-col="sold-for">Profit</th>'
-        '<th>Date</th>'
+        '<th class="sortable" data-col="date">Date</th>'
         '<th>Location</th>'
         '</tr></thead>'
         '<tbody>' + rows + '</tbody>'
@@ -1625,6 +1146,16 @@ def _render_sold_table(sold):
 
 _RECORDS_JS = '''
 (function() {
+    function parseDateKey(str) {
+        if (!str) return 0;
+        var parts = str.split(/[\/\-\.]/);
+        if (parts.length !== 3) return 0;
+        var a = parseInt(parts[0], 10), b = parseInt(parts[1], 10), c = parseInt(parts[2], 10);
+        if (parts[0].length === 4) return a * 10000 + b * 100 + c;  // YYYY-first
+        var y = c < 100 ? c + 2000 : c;
+        return y * 10000 + a * 100 + b;  // M/D/YY or M/D/YYYY
+    }
+
     var panels = { collection: null, inventory: null, sold: null };
     ['collection','inventory','sold'].forEach(function(id) {
         panels[id] = document.getElementById('rec-panel-' + id);
@@ -1769,7 +1300,9 @@ _RECORDS_JS = '''
         function sortTable(col, dir) {
             var recs = recordRows();
             var numeric = ['cost','median','total','sold-for'].indexOf(col) !== -1;
+            var isDate  = ['acquired','date'].indexOf(col) !== -1;
             recs.sort(function(a, b) {
+                if (isDate)  return dir * (parseDateKey(a.dataset[col]) - parseDateKey(b.dataset[col]));
                 var av = numeric ? (parseFloat(a.dataset[col]) || 0) : (a.dataset[col] || '');
                 var bv = numeric ? (parseFloat(b.dataset[col]) || 0) : (b.dataset[col] || '');
                 if (numeric) return dir * (av - bv);
@@ -1869,8 +1402,8 @@ def recordspage():
         '</div>'
     )
 
-    return page_layout(
-        records_header + content,
+    return render_template('records.html',
+        content=records_header + content,
         content_class='has-results',
         show_platter=True,
         title='Records'

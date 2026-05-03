@@ -49,7 +49,7 @@ body {
     text-rendering: optimizeLegibility;
 }
 
-a { color: var(--rust); text-decoration: none; }
+a { color: var(--ink); text-decoration: none; }
 a:hover { text-decoration: underline; text-underline-offset: 3px; }
 
 em { font-style: normal; }
@@ -617,6 +617,16 @@ html:has(.tool-grid-wrap) .tool-grid { height: 128.27%; }
     color: #fff;
 }
 
+.inv-count-badge[data-filter="cheapest"].filter-active {
+    background: #1e7016;
+    color: #fff;
+}
+
+.inv-count-badge[data-filter="overpriced"].filter-active {
+    background: #7a1010;
+    color: #fff;
+}
+
 /* =========================================================
    Results area sticky layout
    ========================================================= */
@@ -883,6 +893,42 @@ html:has(.tool-grid-wrap) .tool-grid { height: 128.27%; }
 .card-high-badge--highest {
     background: #c82020;
     color: #fff;
+}
+
+.card-cheapest-badge,
+.card-overpriced-badge {
+    display: inline-block;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 2px 8px;
+    border-radius: 999px;
+}
+
+.card-cheapest-badge {
+    background: #8fda80;
+    color: #1a5912;
+}
+
+.card-overpriced-badge {
+    background: #c82020;
+    color: #fff;
+}
+
+.card-overpriced-pct {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: #c82020;
+    margin-left: 3px;
+}
+
+.card-number-right {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
 }
 
 #badge-tooltip {
@@ -1483,7 +1529,6 @@ mark {
 }
 
 .rec-stat-value {
-    font-family: 'Fraunces', Georgia, serif;
     font-size: 22px;
     font-weight: 500;
     color: var(--ink);
@@ -1775,4 +1820,160 @@ mark {
 
 @media (max-width: 480px) {
     .rec-stat-grid  { grid-template-columns: 1fr; }
+}
+
+/* =========================================================
+   Reprice UI
+   ========================================================= */
+
+.reprice-controls {
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    flex-shrink: 0;
+}
+
+.reprice-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1.5px solid #c82020;
+    background: #c82020;
+    color: white;
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s;
+    font-family: inherit;
+}
+
+.reprice-btn:hover,
+.reprice-btn.active {
+    border: 1.5px solid #7a1010;
+    background: #7a1010;
+    color: #fff;
+}
+.reprice-btn.active::after {
+    content: "\00D7";
+    margin-left: 4px;
+}
+
+.reprice-action-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 999px;
+    border: 1.5px solid var(--amber);
+    background: var(--amber);
+    color: var(--paper);
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.07em;
+    text-transform: uppercase;
+    cursor: pointer;
+    transition: background 0.12s, color 0.12s, border-color 0.12s, opacity 0.12s;
+    font-family: inherit;
+}
+
+.reprice-action-btn:hover {
+    opacity: 0.78;
+}
+
+.reprice-action-btn.active {
+    background: var(--ink);
+    color: var(--paper);
+    border-color: var(--ink);
+    opacity: 1;
+}
+
+.reprice-submit-btn {
+    border-color: #1e7016;
+    background: #1e7016;
+    color: #fff;
+}
+
+.reprice-submit-btn:hover {
+    background: #165810;
+    border-color: #165810;
+    opacity: 1;
+}
+
+.reprice-submit-btn:disabled {
+    opacity: 0.6;
+    cursor: default;
+}
+
+.reprice-status {
+    font-size: 11px;
+    color: #c82020;
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* Card selection states */
+.result-card.reprice-selectable {
+    cursor: pointer;
+    transition: border-color 0.12s, box-shadow 0.12s, outline 0.12s;
+}
+
+.result-card.reprice-selectable:hover {
+    border-color: #c8202060;
+    box-shadow: 0 0 0 3px rgba(200, 32, 32, 0.08);
+}
+
+.result-card.reprice-selected {
+    border-color: #c82020;
+    box-shadow: 0 0 0 3px rgba(200, 32, 32, 0.14);
+    position: relative;
+}
+
+/* Review mode — elevate selected cards above overlay */
+.result-card.reprice-review-visible {
+    position: relative;
+    z-index: 101;
+}
+
+#reprice-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.42);
+    z-index: 100;
+    pointer-events: none;
+}
+
+.badge-count.reprice-review-bar {
+    position: sticky;
+    top: 0;
+    z-index: 102;
+    background: var(--paper);
+    padding-top: 8px;
+    padding-bottom: 8px;
+    margin-bottom: 4px;
+}
+
+/* In-card repriced price display */
+.reprice-old {
+    text-decoration: line-through;
+    opacity: 0.45;
+    font-size: 0.9em;
+}
+
+.reprice-arrow {
+    color: var(--ink-muted);
+    font-size: 0.9em;
+}
+
+a.reprice-new {
+    color: #1a5912;
+    font-weight: 600;
+}
+
+mark.mark--done {
+    background: #d4f0cc;
+    outline: 1.5px solid #5aac44;
 }
