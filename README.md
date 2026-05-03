@@ -86,6 +86,29 @@ gcloud app deploy
 
 ---
 
+## macOS Desktop App
+
+You can package the application as a standalone macOS desktop app using `py2app`. This creates a `.app` bundle that runs a local Flask server and displays the interface in a native `webview` window.
+
+### Prerequisites
+- macOS
+- Python 3.9+
+- Dependencies installed via `requirements.txt`
+
+### Build Instructions
+Run the following command to generate the build:
+```bash
+python3 setup.py py2app
+```
+
+### Build Artifacts
+- **`build/`**: Temporary directory used during the build process (ignored by git).
+- **`dist/macos/Discogs Toolkit.app`**: The final standalone application.
+
+The build script automatically moves the completed bundle to `dist/macos/` and cleans up the intermediate `dist/` artifacts. The application includes your `.env` file and all static assets.
+
+---
+
 ## Server Module (`server/`) — Currently Down
 
 Standalone background monitor unrelated to the web routes. A `Worker` polls a seller's inventory on a configurable interval, compares it against the previous snapshot, and sends a Discord webhook notification when listings are added, removed, or repriced. Managed by `server.py`. Not currently running.

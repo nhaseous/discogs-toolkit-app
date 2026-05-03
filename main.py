@@ -36,6 +36,15 @@ def _oauth_auth():
                        session['discogs_access_secret'])
     return None
 
+def _is_price_checker_enabled():
+    is_gae = os.environ.get('GAE_ENV', '').startswith('standard')
+    is_local = request.host.startswith('127.0.0.1') or request.host.startswith('localhost')
+    is_frozen = getattr(sys, 'frozen', False)
+    # Price Checker is disabled on GAE, enabled on local dev and macOS dist.
+    if is_gae:
+        return False
+    return is_frozen or is_local
+
 @app.context_processor
 def _inject_globals():
     return {
@@ -43,6 +52,7 @@ def _inject_globals():
         'discogs_logo_svg': assets.DISCOGS_LOGO_SVG,
         'session_user': session.get('discogs_username'),
         'session_avatar': session.get('discogs_avatar', ''),
+        'price_checker_enabled': _is_price_checker_enabled(),
     }
 
 # Routes
@@ -91,6 +101,7 @@ def logout():
 
 @app.route("/")
 def landingpage():
+    pc_enabled = _is_price_checker_enabled()
     if not session.get('discogs_username'):
         login_card = (
             '<a href="/login" class="tool-card tool-card--login">'
@@ -101,6 +112,15 @@ def landingpage():
         )
     else:
         login_card = ''
+    
+    pc_card = (
+        '<a href="/pricechecker" class="tool-card">'
+        '<div class="tool-card-label">01 &middot; Marketplace</div>'
+        '<h3 class="tool-card-title">Price Checker</h3>'
+        '<p class="tool-card-desc">See where a seller\'s listings rank against the rest of the marketplace.</p>'
+        '</a>'
+    ) if pc_enabled else ''
+
     return render_template('landing.html',
         content=(
         '<section class="hero">'
@@ -116,11 +136,7 @@ def landingpage():
         '</section>'
         '<div class="tool-grid-wrap">'
         '<div class="tool-grid">'
-        '<a href="/pricechecker" class="tool-card">'
-        '<div class="tool-card-label">01 &middot; Marketplace</div>'
-        '<h3 class="tool-card-title">Price Checker</h3>'
-        '<p class="tool-card-desc">See where a seller\'s listings rank against the rest of the marketplace.</p>'
-        '</a>'
+        + pc_card +
         '<a href="/matcher" class="tool-card">'
         '<div class="tool-card-label">02 &middot; Collections</div>'
         '<h3 class="tool-card-title">Collection Matcher</h3>'
@@ -147,6 +163,8 @@ def landingpage():
 
 @app.route("/pricechecker")
 def pricecheckerpage():
+    if not _is_price_checker_enabled():
+        return "Price Checker doesn't work when running on the cloud/web because webscraping gets blocked by Cloudflare. Contact curefortheitch if interested in a local solution."
 
     seller = request.args.get("seller", "")
     output,loadtime = "",""

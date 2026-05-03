@@ -20,5 +20,10 @@ app.yaml
 nohup.out
 state.bin
 
+# Build and Distribution
+build/
+dist/
+*.egg-info/
+
 # Claude Code local settings
 .claude/settings.local.json

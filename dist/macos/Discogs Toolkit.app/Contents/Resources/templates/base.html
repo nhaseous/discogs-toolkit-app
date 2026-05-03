@@ -18,7 +18,9 @@
             <span class="brand-text"><span class="brand-discogs-logo">{{ discogs_logo_svg | safe }}</span>Toolkit</span>
         </a>
         <div class="sidebar-label">♪ Tools ♪</div>
+        {% if price_checker_enabled %}
         <a href="/pricechecker"{% if request.path == '/pricechecker' %} class="active"{% endif %}>Price Checker</a>
+        {% endif %}
         <a href="/matcher"{% if request.path == '/matcher' %} class="active"{% endif %}>Matcher</a>
         <a href="/lookup"{% if request.path == '/lookup' %} class="active"{% endif %}>Lookup</a>
         {% if session_user == 'curefortheitch' %}
