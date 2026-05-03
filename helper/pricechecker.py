@@ -87,7 +87,7 @@ class FormattedEntry: # Formatted marketplace entry for a single release and its
 ## Get ##
 
 # Given a seller username, returns a list of the releases in their inventory and their item ids.
-def get_inventory_ids(username, scraper):
+def get_inventory_ids(username, scraper, auth=None):
 
     API_URL = "https://api.discogs.com/users/{0}/inventory".format(username)
 
@@ -96,7 +96,7 @@ def get_inventory_ids(username, scraper):
     page = 1
 
     while True:
-        resp = scraper.get(API_URL, headers=_HEADERS, params={"page": page, "per_page": 100, "sort": "price", "sort_order": "asc", "status": "For Sale"})
+        resp = scraper.get(API_URL, headers=_HEADERS, params={"page": page, "per_page": 100, "sort": "price", "sort_order": "asc", "status": "For Sale"}, auth=auth)
 
         if resp.status_code in (401, 403):
             print("get_inventory_ids: API access blocked (HTTP {0})".format(resp.status_code))

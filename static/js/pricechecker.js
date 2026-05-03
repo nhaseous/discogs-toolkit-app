@@ -60,12 +60,28 @@
     repriceBtn.addEventListener("click", function() {
         if (!repriceMode) enterRepriceMode(); else exitRepriceMode();
     });
+    function _repriceAuthNotice(msg) {
+        statusEl.textContent = msg;
+        statusEl.style.display = "";
+        repriceControls.style.display = "";
+    }
     function enterRepriceMode() {
+        var seller = new URLSearchParams(window.location.search).get("seller") || "";
+        var user = window.TOOLKIT_CONFIG ? window.TOOLKIT_CONFIG.session_user : null;
+        if (!user) {
+            _repriceAuthNotice("Log in to use REPRICE");
+            return;
+        }
+        if (seller && user.toLowerCase() !== seller.toLowerCase()) {
+            _repriceAuthNotice("You can only reprice your own listings (signed in as " + user + ")");
+            return;
+        }
         repriceMode = true;
         repriceBtn.classList.add("active");
         pillsSpan.style.display = "none";
         addAllBtn.style.display = "";
         reviewBtn.style.display = "";
+        statusEl.style.display = "none";
         document.querySelectorAll(".result-card").forEach(function(card) {
             card.classList.add("reprice-selectable");
             card.addEventListener("click", onCardClick);
@@ -256,6 +272,7 @@
             }
             refreshNext();
         }
+        var _seller = new URLSearchParams(window.location.search).get("seller") || "";
         function processNext(i) {
             if (i >= total) {
                 submitBtn.textContent = (done - errCount) + " updated" + (errCount ? ", " + errCount + " failed" : "");
@@ -271,10 +288,20 @@
             fetch("/reprice", {
                 method: "POST",
                 headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({listings: [listings[i]]})
+                body: JSON.stringify({listings: [listings[i]], seller: _seller})
             })
-            .then(function(r) { return r.json(); })
-            .then(function(data) {
+            .then(function(r) {
+                return r.json().then(function(data) { return {ok: r.ok, status: r.status, data: data}; });
+            })
+            .then(function(res) {
+                if (!res.ok) {
+                    submitBtn.disabled = false;
+                    submitBtn.textContent = "SUBMIT";
+                    statusEl.textContent = (res.data && res.data.message) ? res.data.message : "Auth error";
+                    statusEl.style.display = "";
+                    return;
+                }
+                var data = res.data;
                 var result = data.results[0];
                 done++;
                 if (result && result.status === "success") {

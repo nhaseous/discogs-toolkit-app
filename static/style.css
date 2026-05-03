@@ -160,8 +160,64 @@ em { font-style: normal; }
     background: color-mix(in srgb, var(--rust) 8%, transparent);
 }
 
-.sidebar-art {
+.sidebar-auth {
     margin-top: auto;
+    padding: 14px 0 0;
+    border-top: 1px solid var(--rule);
+}
+
+.sidebar-auth-link {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    padding: 7px 20px;
+    border-left: 2px solid transparent;
+    color: var(--ink-2);
+    text-decoration: none;
+    transition: color 0.15s, background 0.15s;
+}
+
+.sidebar-login-link {
+    color: var(--rust);
+    border-left-color: var(--rust);
+    background: color-mix(in srgb, var(--rust) 6%, transparent);
+}
+
+.sidebar-login-link:hover {
+    background: color-mix(in srgb, var(--rust) 12%, transparent);
+}
+
+.sidebar-logout-link:hover {
+    color: var(--ink);
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.sidebar-user {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 0 20px 8px;
+}
+
+.sidebar-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.sidebar-username {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sidebar-art {
     border-top: 1px solid var(--rule);
     overflow: hidden;
     position: relative;
@@ -349,6 +405,18 @@ html:has(.tool-grid-wrap) .tool-grid { height: 128.27%; }
     font-size: 13.5px;
     color: var(--ink-soft);
     max-width: 280px;
+}
+
+.tool-card--login {
+    border-color: color-mix(in srgb, var(--rust) 30%, var(--rule));
+    background: color-mix(in srgb, var(--rust) 4%, var(--card));
+}
+
+.tool-card--login .tool-card-label { color: var(--rust); }
+
+.tool-card--login:hover {
+    border-color: var(--rust);
+    background: color-mix(in srgb, var(--rust) 7%, var(--card));
 }
 
 /* =========================================================

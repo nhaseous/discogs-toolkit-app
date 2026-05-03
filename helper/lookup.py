@@ -3,7 +3,7 @@ collections.Callable = collections.abc.Callable
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from bs4 import BeautifulSoup
-import json, math, re
+import html as _html, json, math, re
 
 from helper.common import API_HEADERS as _API_HEADERS
 _MAX_WORKERS = 5
@@ -25,11 +25,11 @@ class RateLimitError(Exception):
     pass
 
 
-def get_collection(username, scraper):
+def get_collection(username, scraper, auth=None):
     url = "https://api.discogs.com/users/{0}/collection/folders/0/releases".format(username)
     params = {"sort": "artist", "sort_order": "asc", "per_page": 100}
 
-    first_resp = scraper.get(url, params=dict(params, page=1), headers=_API_HEADERS)
+    first_resp = scraper.get(url, params=dict(params, page=1), headers=_API_HEADERS, auth=auth)
     if first_resp.status_code == 404:
         raise UserNotFoundError(username)
     if first_resp.status_code in (401, 403):
@@ -44,7 +44,7 @@ def get_collection(username, scraper):
         return []
 
     result = []
-    for r in _fetch_all_pages(url, "releases", scraper, first_data, params):
+    for r in _fetch_all_pages(url, "releases", scraper, first_data, params, auth=auth):
         info = r["basic_information"]
         artist = _clean_artist(info["artists"][0]) if info.get("artists") else ""
         title = info.get("title", "")
@@ -67,11 +67,11 @@ def get_collection(username, scraper):
     return result
 
 
-def get_wantlist(username, scraper):
+def get_wantlist(username, scraper, auth=None):
     url = "https://api.discogs.com/users/{0}/wants".format(username)
     params = {"sort": "artist", "sort_order": "asc", "per_page": 100}
 
-    first_resp = scraper.get(url, params=dict(params, page=1), headers=_API_HEADERS)
+    first_resp = scraper.get(url, params=dict(params, page=1), headers=_API_HEADERS, auth=auth)
     if first_resp.status_code == 404:
         raise UserNotFoundError(username)
     if first_resp.status_code in (401, 403):
@@ -86,7 +86,7 @@ def get_wantlist(username, scraper):
         return []
 
     result = []
-    for w in _fetch_all_pages(url, "wants", scraper, first_data, params):
+    for w in _fetch_all_pages(url, "wants", scraper, first_data, params, auth=auth):
         info = w["basic_information"]
         artist = _clean_artist(info["artists"][0]) if info.get("artists") else ""
         title = info.get("title", "")
@@ -110,11 +110,11 @@ def get_wantlist(username, scraper):
     return result
 
 
-def get_lists(username, scraper):
+def get_lists(username, scraper, auth=None):
     url = "https://api.discogs.com/users/{0}/lists".format(username)
     params = {"per_page": 100}
 
-    first_resp = scraper.get(url, params=dict(params, page=1), headers=_API_HEADERS)
+    first_resp = scraper.get(url, params=dict(params, page=1), headers=_API_HEADERS, auth=auth)
     if first_resp.status_code == 404:
         raise UserNotFoundError(username)
     if first_resp.status_code in (401, 403):
@@ -129,7 +129,7 @@ def get_lists(username, scraper):
         return []
 
     result = []
-    for lst in _fetch_all_pages(url, "lists", scraper, first_data, params):
+    for lst in _fetch_all_pages(url, "lists", scraper, first_data, params, auth=auth):
         if not lst.get("public", True):
             continue
         result.append({
@@ -269,14 +269,14 @@ def _extract_list_items(cache):
     return results
 
 
-def _fetch_all_pages(url, items_key, scraper, first_page_data, params):
+def _fetch_all_pages(url, items_key, scraper, first_page_data, params, auth=None):
     total_pages = first_page_data.get("pagination", {}).get("pages", 1)
     pages_data = {1: first_page_data}
 
     if total_pages > 1:
         with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
             futures = {
-                executor.submit(scraper.get, url, params=dict(params, page=p), headers=_API_HEADERS): p
+                executor.submit(scraper.get, url, params=dict(params, page=p), headers=_API_HEADERS, auth=auth): p
                 for p in range(2, total_pages + 1)
             }
             for future in as_completed(futures):
@@ -306,3 +306,67 @@ def _safe_json(resp):
 def _clean_artist(artist_info):
     name = artist_info.get("anv") or artist_info.get("name", "")
     return re.sub(r'\s*\(\d+\)$', '', name).strip()
+
+
+# ── Render helpers ────────────────────────────────────────────────────────────
+
+import assets as _assets
+
+def render_lookup_grid(items, show_stats=False, prepend_card=""):
+    cards = prepend_card
+    for m in items:
+        img_src = m.get("cover_image") or m.get("thumb")
+        if img_src:
+            art = '<img src="{0}" alt="" class="match-card-img">'.format(img_src)
+        else:
+            art = '<div class="match-card-placeholder">' + _assets.VINYL_PLACEHOLDER_SVG + '</div>'
+        fmt_desc_html = ('<div class="match-card-format-desc">' + _html.escape(m.get("format_descriptions", "")) + '</div>') if m.get("format_descriptions") else ""
+        fmt_text_html = ('<div class="match-card-format-text">' + _html.escape(m.get("format_text", "")) + '</div>') if m.get("format_text") else ""
+        comment_html = ('<div class="match-card-comment">' + _html.escape(m.get("comment", "")) + '</div>') if m.get("comment") else ""
+        stats_html = ('<div class="match-card-stats">' + _html.escape(m.get("stats", "")) + '</div>') if show_stats and m.get("stats") else ""
+        for_sale_text = m.get("for_sale", "")
+        for_sale_url = m.get("for_sale_url", "")
+        for_sale_html = (
+            '<div class="match-card-forsale" data-href="' + _html.escape(for_sale_url) + '"'
+            ' onclick="event.stopPropagation();event.preventDefault();window.open(this.dataset.href,\'_blank\',\'noopener,noreferrer\')">'
+            + _html.escape(for_sale_text) + '</div>'
+        ) if for_sale_text and for_sale_url else ""
+        href = m.get("url") or "#"
+        cards += (
+            '<a href="' + href + '" class="match-card" target="_blank" rel="noopener noreferrer">'
+            '<div class="match-card-art">' + art + '</div>'
+            '<div class="match-card-body">'
+            '<div class="match-card-title">' + _html.escape(m.get("title", "")) + '</div>'
+            '<div class="match-card-artist">' + _html.escape(m.get("artist", "")) + '</div>'
+            + ('<div class="match-card-format">' + _html.escape(m.get("format", "")) + '</div>' if m.get("format") else "")
+            + fmt_desc_html
+            + fmt_text_html
+            + for_sale_html
+            + comment_html
+            + stats_html +
+            '</div>'
+            '</a>'
+        )
+    return '<div class="match-grid">' + cards + '</div>'
+
+
+def render_list_index(lists, username):
+    if not lists:
+        return '<p class="match-empty">This user has no public lists.</p>'
+    cards = ""
+    for lst in lists:
+        href = '/lookup?username=' + _html.escape(username) + '&list_id=' + _html.escape(str(lst["id"]))
+        description_html = ('<div class="match-card-comment">' + _html.escape(lst["description"]) + '</div>') if lst.get("description") else ""
+        cards += (
+            '<a href="' + href + '" class="match-card">'
+            '<div class="match-card-art">'
+            '<div class="match-card-placeholder">' + _assets.VINYL_PLACEHOLDER_SVG + '</div>'
+            '<div class="match-card-art-label">' + _html.escape(lst["name"]) + '</div>'
+            '</div>'
+            '<div class="match-card-body">'
+            '<div class="match-card-title">' + _html.escape(lst["name"]) + '</div>'
+            + description_html +
+            '</div>'
+            '</a>'
+        )
+    return '<div class="match-grid">' + cards + '</div>'

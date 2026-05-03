@@ -22,10 +22,10 @@ def _strict_key(artist, title, fmt, fmt_descriptions, fmt_text):
 def _easy_key(artist, title, fmt):
     return "{0} - {1} | {2}".format(artist, title, fmt)
 
-def get_collection(username, scraper):
+def get_collection(username, scraper, auth=None):
     url = "https://api.discogs.com/users/{0}/collection/folders/0/releases".format(username)
     result = []
-    for r in _fetch_all_pages(url, "releases", scraper):
+    for r in _fetch_all_pages(url, "releases", scraper, auth=auth):
         info = r["basic_information"]
         artist = _clean_artist(info["artists"][0]) if info.get("artists") else ""
         title = info.get("title", "")
@@ -48,10 +48,10 @@ def get_collection(username, scraper):
         })
     return result
 
-def get_wantlist(username, scraper):
+def get_wantlist(username, scraper, auth=None):
     url = "https://api.discogs.com/users/{0}/wants".format(username)
     result = []
-    for w in _fetch_all_pages(url, "wants", scraper):
+    for w in _fetch_all_pages(url, "wants", scraper, auth=auth):
         info = w["basic_information"]
         artist = _clean_artist(info["artists"][0]) if info.get("artists") else ""
         title = info.get("title", "")
@@ -67,11 +67,11 @@ def get_wantlist(username, scraper):
 
 ## Helper Functions ##
 
-def _fetch_all_pages(url, items_key, scraper):
+def _fetch_all_pages(url, items_key, scraper, auth=None):
     params = {"sort": "artist", "sort_order": "asc", "per_page": 100}
 
     try:
-        first_resp = scraper.get(url, params=dict(params, page=1), headers=_API_HEADERS)
+        first_resp = scraper.get(url, params=dict(params, page=1), headers=_API_HEADERS, auth=auth)
     except Exception:
         return []
     if first_resp.status_code == 429:
@@ -87,7 +87,7 @@ def _fetch_all_pages(url, items_key, scraper):
     if total_pages > 1:
         with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
             futures = {
-                executor.submit(scraper.get, url, params=dict(params, page=p), headers=_API_HEADERS): p
+                executor.submit(scraper.get, url, params=dict(params, page=p), headers=_API_HEADERS, auth=auth): p
                 for p in range(2, total_pages + 1)
             }
             for future in as_completed(futures):

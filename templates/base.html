@@ -22,6 +22,17 @@
         <a href="/matcher"{% if request.path == '/matcher' %} class="active"{% endif %}>Matcher</a>
         <a href="/lookup"{% if request.path == '/lookup' %} class="active"{% endif %}>Lookup</a>
         <a href="/records"{% if request.path == '/records' %} class="active"{% endif %}>Records</a>
+        <div class="sidebar-auth">
+            {% if session_user %}
+            <div class="sidebar-user">
+                {% if session_avatar %}<img src="{{ session_avatar }}" alt="" class="sidebar-avatar">{% endif %}
+                <span class="sidebar-username">{{ session_user }}</span>
+            </div>
+            <a href="/logout" class="sidebar-auth-link sidebar-logout-link">Log out</a>
+            {% else %}
+            <a href="/login" class="sidebar-auth-link sidebar-login-link">Login with Discogs</a>
+            {% endif %}
+        </div>
         {% if request.path != '/' %}
         <div class="sidebar-art">
             <img src="/static/console-oak.png" alt="" class="sidebar-art-img">
