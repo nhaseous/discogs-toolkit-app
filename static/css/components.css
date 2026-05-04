@@ -1,0 +1,310 @@
+/* =========================================================
+   components.css — search bar, spinner, meta, and badges
+   Loaded on: /pricechecker, /matcher, /lookup
+   Refactored for standard CSS nesting compatibility.
+   ========================================================= */
+
+/* =========================================================
+   Search bar (pill)
+   ========================================================= */
+
+.search-bar {
+    display: flex;
+    align-items: stretch;
+    flex-wrap: wrap;
+    background: var(--card);
+    border: 1px solid var(--rule-strong);
+    border-radius: 999px;
+    padding: 2px 3px 2px 16px;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: 22px;
+    transition: border-color 0.15s ease, box-shadow 0.15s ease;
+    gap: 2px;
+    min-height: 40px;
+
+    &:focus-within {
+        border-color: var(--rust);
+        box-shadow: 0 0 0 4px var(--focus-ring);
+    }
+
+    input[type="text"] {
+        border: none;
+        background: transparent;
+        outline: none;
+        flex: 1;
+        min-width: 0;
+        width: 100%;
+        font-family: inherit;
+        font-size: 15px;
+        color: var(--ink);
+        padding: 5px 0;
+        letter-spacing: -0.005em;
+
+        &::placeholder { color: var(--ink-muted); font-style: italic; }
+    }
+}
+
+.search-bar-icon {
+    display: flex;
+    align-items: center;
+    color: var(--ink-muted);
+    padding-right: 10px;
+    flex-shrink: 0;
+
+    svg { width: 18px; height: 18px; }
+}
+
+.search-bar-segment {
+    display: flex;
+    align-items: baseline;
+    gap: 10px;
+    padding: 3px 14px 0;
+    min-width: 0;
+    flex: 1 1 160px;
+}
+
+.search-bar-label {
+    font-size: 10px;
+    font-weight: 700;
+    color: var(--ink-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    white-space: nowrap;
+    flex-shrink: 0;
+}
+
+.search-bar-divider {
+    width: 1px;
+    background: var(--rule);
+    margin: 8px 0;
+    flex-shrink: 0;
+}
+
+.search-bar-toggle {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 0 16px;
+    white-space: nowrap;
+    cursor: pointer;
+    user-select: none;
+    color: var(--ink-soft);
+    font-size: 13.5px;
+    font-weight: 500;
+    flex-shrink: 0;
+
+    input[type="checkbox"] {
+        appearance: none;
+        -webkit-appearance: none;
+        width: 16px;
+        height: 16px;
+        border: 1.5px solid var(--rule-strong);
+        border-radius: 4px;
+        background: var(--card);
+        cursor: pointer;
+        position: relative;
+        flex-shrink: 0;
+        transition: background 0.12s ease, border-color 0.12s ease;
+
+        &:checked {
+            background: var(--rust);
+            border-color: var(--rust);
+
+            &::after {
+                content: "";
+                position: absolute;
+                left: 4px;
+                top: 0px;
+                width: 5px;
+                height: 10px;
+                border: solid #fff;
+                border-width: 0 2px 2px 0;
+                transform: rotate(45deg);
+            }
+        }
+    }
+}
+
+.search-bar-submit {
+    background: var(--rust);
+    color: #fff;
+    border: none;
+    border-radius: 999px;
+    padding: 0 26px;
+    margin-left: 4px;
+    font-family: inherit;
+    font-size: 14px;
+    font-weight: 600;
+    letter-spacing: 0.01em;
+    cursor: pointer;
+    display: inline-flex;
+    align-items: center;
+    gap: 8px;
+    transition: background 0.12s ease, transform 0.05s ease;
+    flex-shrink: 0;
+
+    &:hover  { background: color-mix(in srgb, var(--rust) 74%, #000); }
+    &:active { transform: translateY(1px); }
+}
+
+@media (max-width: 680px) {
+    .search-bar {
+        border-radius: 14px;
+        padding: 10px;
+        flex-direction: column;
+        align-items: stretch;
+    }
+
+    .search-bar-divider { display: none; }
+    .search-bar-icon    { display: none; }
+    .search-bar-segment { padding: 8px 10px; border-bottom: 1px solid var(--rule); }
+    .search-bar-toggle  { padding: 10px; }
+    .search-bar-submit  { padding: 12px; margin: 4px 0 0; justify-content: center; }
+}
+
+/* =========================================================
+   Spinner
+   ========================================================= */
+
+#spinner {
+    display: none;
+    margin: 4px 0 16px;
+    color: var(--ink-soft);
+    font-size: 13px;
+    font-style: italic;
+}
+
+#spinner-icon {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--rule);
+    border-top-color: var(--rust);
+    border-radius: 50%;
+    animation: rotate 0.8s linear infinite;
+    vertical-align: middle;
+    margin-right: 8px;
+}
+
+/* =========================================================
+   Meta line and badge count
+   ========================================================= */
+
+.meta,
+.badge-count {
+    font-size: 14px;
+    color: var(--ink-soft);
+    margin-bottom: 20px;
+    letter-spacing: 0.01em;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 16px;
+}
+
+.meta {
+    padding: 16px 0;
+    border-top: 1px solid var(--rule);
+    border-bottom: 1px solid var(--rule);
+    align-items: baseline;
+
+    b { color: var(--ink); font-weight: 600; }
+}
+
+/* =========================================================
+   Inv-count filter badges
+   ========================================================= */
+
+.inv-count-badge {
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.12s ease, color 0.12s ease;
+}
+
+.inv-count-badge.filter-active {
+    color: #fff;
+    &::after { content: " \00D7"; }
+}
+
+.inv-count-badge[data-filter="recent"].filter-active   { background: #b07010; }
+.inv-count-badge[data-filter="old"].filter-active      { background: #a07030; }
+.inv-count-badge[data-filter="low"].filter-active      { background: #5a6e28; }
+.inv-count-badge[data-filter="lowest"].filter-active,
+.inv-count-badge[data-filter="cheapest"].filter-active { background: var(--green); }
+.inv-count-badge[data-filter="high"].filter-active     { background: #a02020; }
+.inv-count-badge[data-filter="highest"].filter-active,
+.inv-count-badge[data-filter="overpriced"].filter-active { background: var(--red-deep); }
+
+/* =========================================================
+   Pill badges (shared base + per-type colors)
+   ========================================================= */
+
+.isrecent-badge,
+.card-recency-badge,
+.card-low-badge,
+.card-old-badge,
+.card-high-badge,
+.card-cheapest-badge,
+.card-overpriced-badge {
+    display: inline-block;
+    font-size: 10.5px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.06em;
+    padding: 2px 8px;
+    border-radius: 999px;
+}
+
+.isrecent-badge,
+.card-recency-badge    { background: var(--amber-soft); color: var(--amber); }
+
+.card-low-badge        { background: var(--olive-soft); color: var(--olive); }
+
+.card-low-badge.card-low-badge--lowest,
+.card-cheapest-badge   { background: var(--green-soft); color: var(--green-text); }
+
+.card-old-badge        { background: #e8d0a8; color: #7a5220; }
+
+.card-high-badge       { background: #fdd8d8; color: var(--red); }
+
+.card-high-badge.card-high-badge--highest,
+.card-overpriced-badge { background: var(--red); color: #fff; }
+
+.card-overpriced-pct {
+    font-size: 10.5px;
+    font-weight: 700;
+    color: var(--red);
+    margin-left: 3px;
+}
+
+.card-number-right {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    flex-wrap: wrap;
+    justify-content: flex-end;
+}
+
+#badge-tooltip {
+    display: none;
+    position: fixed;
+    pointer-events: none;
+    z-index: 9999;
+    padding: 5px 11px;
+    border-radius: 6px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+    box-shadow: 0 3px 10px rgba(43, 29, 18, 0.22);
+    transform: translate(14px, 14px);
+}
+
+mark {
+    background: var(--mark);
+    color: var(--ink);
+    padding: 1px 4px;
+    border-radius: 3px;
+    font-weight: 500;
+}

@@ -1,0 +1,128 @@
+/* =========================================================
+   tools.css — landing page hero, tool grid, and tool cards
+   Loaded on: /
+   ========================================================= */
+
+.hero {
+    padding: 16px 0 36px;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 36px;
+
+    .hero-eyebrow { margin-bottom: 14px; }
+}
+
+.hero-title {
+    font-weight: 500;
+    font-size: 30px;
+    line-height: 1.08;
+    letter-spacing: -0.02em;
+    color: var(--ink);
+    max-width: 760px;
+    margin-bottom: 18px;
+}
+
+.hero-subtitle {
+    font-size: 15px;
+    color: var(--ink-soft);
+    max-width: 560px;
+    line-height: 1.6;
+}
+
+.tool-grid-wrap {
+    background: url(/static/record-bins.png) no-repeat top center / 100% auto;
+    aspect-ratio: 1253 / 1225;
+    padding: 0 8% 7% 4%;
+    box-sizing: border-box;
+}
+
+.tool-grid {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    grid-template-rows: 42fr 45fr 27fr;
+    height: 100%;
+    gap: 0;
+}
+
+/* Landing page: clip scroll to bottom of 2nd tool-grid row.
+   Rows 1+2 = 87/114 of grid. Accounting for 7% bottom padding:
+   visible wrapper height = (0.93 × 87/114 + 0.07) × original ≈ 77.97% → aspect 1253/955.
+   Grid height stays at original via calc(128.27%) so rows don't squish. */
+html:has(.tool-grid-wrap) {
+    .layout { min-height: 0; }
+    .content { padding-bottom: 0; }
+
+    .tool-grid-wrap {
+        aspect-ratio: 1253 / 955;
+        overflow: hidden;
+    }
+
+    .tool-grid { height: 128.27%; }
+}
+
+.tool-card {
+    display: block;
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 10px;
+    padding: 22px 22px 26px;
+    color: var(--ink) !important;
+    text-decoration: none !important;
+    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+    position: relative;
+    overflow: hidden;
+    align-self: start;
+    margin: 8px;
+
+    &::after {
+        content: "→";
+        position: absolute;
+        right: 22px;
+        top: 22px;
+        color: var(--ink-muted);
+        font-size: 18px;
+        transition: transform 0.15s ease, color 0.15s ease;
+    }
+
+    &:hover {
+        border-color: var(--rule-strong);
+        box-shadow: var(--shadow-md);
+        transform: translateY(-1px);
+        text-decoration: none !important;
+
+        &::after { transform: translateX(3px); color: var(--rust); }
+    }
+}
+
+.tool-card-label {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    color: var(--rust);
+    margin-bottom: 14px;
+}
+
+.tool-card-title {
+    font-weight: 500;
+    font-size: 22px;
+    letter-spacing: -0.01em;
+    margin-bottom: 8px;
+}
+
+.tool-card-desc {
+    font-size: 13.5px;
+    color: var(--ink-soft);
+    max-width: 280px;
+}
+
+.tool-card--login {
+    border-color: color-mix(in srgb, var(--rust) 30%, var(--rule));
+    background: color-mix(in srgb, var(--rust) 4%, var(--card));
+
+    .tool-card-label { color: var(--rust); }
+
+    &:hover {
+        border-color: var(--rust);
+        background: color-mix(in srgb, var(--rust) 7%, var(--card));
+    }
+}

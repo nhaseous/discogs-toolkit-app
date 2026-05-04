@@ -1,0 +1,170 @@
+/* =========================================================
+   sidebar.css — sidebar navigation and brand
+   Loaded on every page.
+   ========================================================= */
+
+.sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 220px;
+    height: 100vh;
+    overflow-y: auto;
+    background: var(--paper-alt);
+    padding: 30px 0 0;
+    display: flex;
+    flex-direction: column;
+
+    a:not(.sidebar-brand) {
+        display: flex;
+        align-items: center;
+        padding: 9px 22px;
+        color: var(--ink-soft);
+        font-weight: 500;
+        border-left: 3px solid transparent;
+        transition: background 0.12s ease, color 0.12s ease;
+
+        &:hover {
+            background: color-mix(in srgb, var(--rust) 6%, transparent);
+            color: var(--rust);
+            text-decoration: none;
+        }
+
+        &.active {
+            border-left-color: var(--rust);
+            color: var(--rust);
+            background: color-mix(in srgb, var(--rust) 8%, transparent);
+        }
+    }
+}
+
+.sidebar-brand {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 0 22px 22px;
+    margin-bottom: 8px;
+    border-bottom: 1px solid var(--rule);
+    color: var(--ink) !important;
+    text-decoration: none !important;
+}
+
+.sidebar-label {
+    font-size: 10px;
+    font-weight: 600;
+    color: var(--ink-muted);
+    text-transform: uppercase;
+    letter-spacing: 0.14em;
+    padding: 14px 22px 8px;
+}
+
+.sidebar-auth {
+    margin-top: auto;
+    padding: 14px 0 0;
+    border-top: 1px solid var(--rule);
+}
+
+.sidebar-auth-link {
+    display: block;
+    font-size: 0.78rem;
+    font-weight: 500;
+    letter-spacing: 0.04em;
+    padding: 7px 20px;
+    border-left: 2px solid transparent;
+    color: var(--ink-soft);
+    text-decoration: none;
+    transition: color 0.15s, background 0.15s;
+}
+
+.sidebar-login-link {
+    color: var(--rust);
+    border-left-color: var(--rust);
+    background: color-mix(in srgb, var(--rust) 6%, transparent);
+}
+
+.sidebar-login-link:hover { background: color-mix(in srgb, var(--rust) 12%, transparent); }
+
+.sidebar-logout-link:hover {
+    color: var(--ink);
+    background: color-mix(in srgb, var(--ink) 6%, transparent);
+}
+
+.sidebar-user {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    padding: 0 20px 8px;
+}
+
+.sidebar-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    object-fit: cover;
+    flex-shrink: 0;
+}
+
+.sidebar-username {
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--ink);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.sidebar-art {
+    border-top: 1px solid var(--rule);
+    overflow: hidden;
+    position: relative;
+}
+
+.sidebar-art-img {
+    display: block;
+    width: 100%;
+    height: auto;
+    opacity: 0.88;
+    transition: opacity 0.2s ease;
+}
+
+.sidebar-art-img:hover { opacity: 1; }
+
+.sidebar-platter {
+    position: absolute;
+    width: 73px;
+    top: 16px;
+    left: 73px;
+    pointer-events: none;
+}
+
+.sidebar-platter.spinning { animation: rotate 3s linear infinite; }
+
+.brand-icon {
+    width: 34px;
+    height: 34px;
+    color: var(--rust);
+    flex-shrink: 0;
+    animation: rotate 24s linear infinite;
+}
+
+.brand-text {
+    font-family: 'Fraunces', Georgia, serif;
+    font-size: 20px;
+    font-weight: 550;
+    line-height: 1.1;
+    letter-spacing: -0.01em;
+
+    em {
+        font-style: oblique;
+        color: var(--rust);
+        font-weight: 400;
+    }
+}
+
+.brand-discogs-logo {
+    display: block;
+    color: var(--rust);
+    line-height: 0;
+
+    svg { height: 25px; width: auto; display: block; }
+}

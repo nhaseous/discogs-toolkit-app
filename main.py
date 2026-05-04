@@ -5,10 +5,11 @@ from flask import Flask, request, render_template, session, redirect
 from helper import pricechecker, matcher, lookup as lookup_helper, records as records_helper
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import cloudscraper, time, html as _html, os, requests as _requests
-from datetime import datetime
+from datetime import datetime, timedelta
 from requests_oauthlib import OAuth1 as _OAuth1
 import discogs_client as _discogs_client
 import assets
+from helper import auth as auth_persistence
 
 _CONSUMER_KEY    = os.environ.get('DISCOGS_CONSUMER_KEY', '')
 _CONSUMER_SECRET = os.environ.get('DISCOGS_CONSUMER_SECRET', '')
@@ -23,11 +24,25 @@ app.config['SECRET_KEY']              = os.environ.get('FLASK_SECRET_KEY', '')
 app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE']   = os.environ.get('GAE_ENV', '').startswith('standard')
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=90)
 
 try:
     _records_data = records_helper.load_all()
 except Exception:
     _records_data = records_helper.empty_data()
+
+@app.before_request
+def _load_persistent_auth():
+    if not session.get('discogs_username') and auth_persistence.is_macos_dist():
+        data = auth_persistence.get_from_keychain()
+        if data:
+            session.permanent = True
+            session['discogs_access_token']  = data.get('access_token')
+            session['discogs_access_secret'] = data.get('access_secret')
+            session['discogs_username']      = data.get('username')
+            session['discogs_avatar']        = data.get('avatar_url', '')
+    elif session.get('discogs_username') and not session.permanent:
+        session.permanent = True
 
 def _oauth_auth():
     if session.get('discogs_access_token'):
@@ -53,6 +68,7 @@ def _inject_globals():
         'session_user': session.get('discogs_username'),
         'session_avatar': session.get('discogs_avatar', ''),
         'price_checker_enabled': _is_price_checker_enabled(),
+        'is_frozen': getattr(sys, 'frozen', False),
     }
 
 # Routes
@@ -88,6 +104,9 @@ def oauth_callback():
         session['discogs_access_secret'] = access_secret
         session['discogs_username']      = username
         session['discogs_avatar']        = avatar_url
+        session.permanent = True
+        if auth_persistence.is_macos_dist():
+            auth_persistence.save_to_keychain(username, access_token, access_secret, avatar_url)
     except Exception:
         pass
     return redirect('/')
@@ -95,6 +114,8 @@ def oauth_callback():
 @app.route('/logout')
 def logout():
     session.clear()
+    if auth_persistence.is_macos_dist():
+        auth_persistence.delete_from_keychain()
     return redirect(request.referrer or '/')
 
 ## Landing Page ##
@@ -285,9 +306,13 @@ def repricepage():
             results.append({"id": lid, "status": "error", "message": "Missing listing id"})
             continue
 
-        pct = (seller_price - cheapest_price) / cheapest_price * 100 if cheapest_price > 0 else 0
-        new_price = seller_price * 0.9 if pct > 10 else cheapest_price - 0.5
-        new_price = round(new_price, 2)
+        custom_price_raw = item.get("custom_price")
+        if custom_price_raw is not None:
+            new_price = round(float(custom_price_raw), 2)
+        else:
+            pct = (seller_price - cheapest_price) / cheapest_price * 100 if cheapest_price > 0 else 0
+            new_price = seller_price * 0.9 if pct > 10 else cheapest_price - 0.5
+            new_price = round(new_price, 2)
 
         base_url = "https://api.discogs.com/marketplace/listings/{}".format(lid)
 
@@ -703,7 +728,7 @@ def lookuppage():
                 '<div id="lookup-panel-lists" class="lookup-panel"{0}>'.format(lists_hidden) + lists_content + '</div>'
             )
 
-    count_span = ' &nbsp;&middot;&nbsp; <span id="lookup-count">{0}</span>'.format(_html.escape(active_count_text)) if active_count_text else ''
+    count_span = ' &nbsp;&#183;&nbsp; <span id="lookup-count">{0}</span>'.format(_html.escape(active_count_text)) if active_count_text else ''
     meta = '<div class="meta"><span><b>{0}</b>{1}</span><span>{2} &nbsp;&#124;&nbsp; {3}</span></div>'.format(user_meta, count_span, loadtime, searched_at) if loadtime else ""
 
     username_val = username.replace('"', '&quot;')

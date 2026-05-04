@@ -538,3 +538,54 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
         });
     }, artAnimating ? 600 : 200);
 })();
+
+// External link handling for pywebview (MacOS App)
+(function() {
+    function getExternalUrl(el) {
+        if (!el) return null;
+        var href = el.getAttribute('href') || el.dataset.href;
+        if (!href) return null;
+        
+        // Check if it's a relative URL or points to the same host
+        var a = document.createElement('a');
+        a.href = href;
+        if (a.hostname && a.hostname !== window.location.hostname && a.hostname !== 'localhost') {
+            return a.href;
+        }
+        return null;
+    }
+
+    function openExternal(url) {
+        if (window.pywebview && window.pywebview.api && window.pywebview.api.open_external) {
+            window.pywebview.api.open_external(url);
+            return true;
+        }
+        return false;
+    }
+
+    document.addEventListener('click', function(e) {
+        var el = e.target.closest('a, [data-href]');
+        if (!el) return;
+
+        var url = getExternalUrl(el);
+        if (url && openExternal(url)) {
+            e.preventDefault();
+            e.stopPropagation();
+        }
+    }, true);
+
+    // Intercept window.open
+    var originalOpen = window.open;
+    window.open = function(url, target, features) {
+        if (url) {
+            var a = document.createElement('a');
+            a.href = url;
+            if (a.hostname && a.hostname !== window.location.hostname && a.hostname !== 'localhost') {
+                if (openExternal(a.href)) {
+                    return null;
+                }
+            }
+        }
+        return originalOpen(url, target, features);
+    };
+})();

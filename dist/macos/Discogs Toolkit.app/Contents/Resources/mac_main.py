@@ -3,11 +3,16 @@ import sys
 import threading
 import time
 import webview
+import webbrowser
 
 # Set the callback URL for Discogs OAuth to match our local port
 os.environ['DISCOGS_CALLBACK_URL'] = 'http://127.0.0.1:8888/callback'
 
 from main import app
+
+class Api:
+    def open_external(self, url):
+        webbrowser.open(url)
 
 def start_flask():
     # Use a less common port to avoid collisions
@@ -21,11 +26,13 @@ if __name__ == '__main__':
     # Wait for Flask to start
     time.sleep(1.5)
     
+    api = Api()
     webview.create_window(
         'Discogs Toolkit', 
         'http://127.0.0.1:8888', 
         width=1280, 
         height=850,
-        min_size=(1000, 700)
+        min_size=(1000, 700),
+        js_api=api
     )
     webview.start()

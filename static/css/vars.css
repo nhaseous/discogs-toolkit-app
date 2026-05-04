@@ -1,0 +1,117 @@
+/* =========================================================
+   vars.css — variables, reset, and global layout
+   Loaded on every page.
+   ========================================================= */
+
+:root {
+    /* warm paper palette[cite: 3] */
+    --paper:         #f6ecd6;
+    --paper-alt:     #efe1c2;
+    --card:          #fffaf0;
+    --card-alt:      #fbf2dd;
+
+    /* ink[cite: 3] */
+    --ink:           #2b1d12;
+    --ink-soft:      #6e5740;
+    --ink-muted:     #9a8870;
+
+    /* rules[cite: 3] */
+    --rule:          #e6d6b6;
+    --rule-strong:   #d1b98b;
+
+    /* accents[cite: 3] */
+    --rust:          #b8432a;
+    --rust-soft:     #f3dbce;
+    --amber:         #a5791c;
+    --amber-soft:    #f2e2a8;
+    --olive:         #6d7a3a;
+    --olive-soft:    #e6e4b8;
+    --red:           #c82020;
+    --red-deep:      #7a1010;
+    --green:         #1e7016;
+    --green-soft:    #8fda80;
+    --green-text:    #1a5912;
+
+    /* interaction[cite: 3] */
+    --mark:          #f4da8a;
+    --focus-ring:    rgba(184, 67, 42, 0.25);
+    --shadow-sm:     0 1px 2px rgba(43, 29, 18, 0.05);
+    --shadow-md:     0 2px 6px rgba(43, 29, 18, 0.06), 0 1px 2px rgba(43, 29, 18, 0.04);
+}
+
+/* Reset[cite: 3] */
+* { box-sizing: border-box; margin: 0; padding: 0; }
+
+html { scroll-behavior: smooth; }
+
+body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    font-size: 14px;
+    font-feature-settings: "ss01", "cv11";
+    line-height: 1.55;
+    background: var(--paper);
+    color: var(--ink);
+    -webkit-font-smoothing: antialiased;
+    text-rendering: optimizeLegibility;
+}
+
+a { color: var(--ink); text-decoration: none; }
+a:hover { text-decoration: underline; text-underline-offset: 3px; }
+
+em { font-style: normal; }
+
+::selection { background: var(--mark); color: var(--ink); }
+
+@keyframes rotate { to { transform: rotate(360deg); } }
+
+/* Layout & Global containers[cite: 3] */
+.layout {
+    display: flex;
+    min-height: 100vh;
+}
+
+.content {
+    margin-left: 220px;
+    padding: 40px 48px 64px;
+    max-width: 1040px;
+    width: 100%;
+
+    /* Standard nesting: replaced '&.has-results'[cite: 3] */
+    &.has-results { 
+        padding-top: 30px; 
+    }
+}
+
+.page-header {
+    padding-bottom: 20px;
+
+    h1, h2 {
+        font-weight: 550;
+        font-size: 34px;
+        color: var(--ink);
+        letter-spacing: -0.015em;
+        line-height: 1.1;
+
+        em {
+            color: var(--rust);
+            font-weight: 550;
+            font-style: oblique;
+        }
+    }
+}
+
+.page-eyebrow,
+.hero-eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--rust);
+    margin-bottom: 8px;
+}
+
+/* Responsive[cite: 3] */
+@media (max-width: 768px) {
+    .sidebar { display: none; }
+    .content { margin-left: 0; padding: 24px 20px 48px; }
+}

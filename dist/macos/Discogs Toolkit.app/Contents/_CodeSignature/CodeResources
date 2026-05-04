@@ -580,6 +580,10 @@
 		<data>
 		2jmj7l5rSw0yVb/vlWAYkK/YBwk=
 		</data>
+		<key>Resources/lib/python3.9/helper/auth.py</key>
+		<data>
+		Bdu6IBXdG/n8UHXdcmqJysNj680=
+		</data>
 		<key>Resources/lib/python3.9/helper/common.py</key>
 		<data>
 		Qa6l+CzPUFMdqCLFE3iXUFbaI4Y=
@@ -1286,11 +1290,11 @@
 		</data>
 		<key>Resources/lib/python39.zip</key>
 		<data>
-		dpZRDuPA7EW2IGWvLfjgzOXJ7l4=
+		6Z98xxeUUOKwj1JB6E7nGFDH/KA=
 		</data>
 		<key>Resources/mac_main.py</key>
 		<data>
-		rqHAAw+V+4AvW2ZZajLRvllCoy8=
+		sv3P+MRn1oek8Fw3su9PnYO+unQ=
 		</data>
 		<key>Resources/openssl.ca/cert.pem</key>
 		<data>
@@ -1298,7 +1302,7 @@
 		</data>
 		<key>Resources/site.pyc</key>
 		<data>
-		a+IiOk6mxnwknLmIU+yoYpRAGc4=
+		tFbkj0lo34mNdRiL9O2IPMGWo2c=
 		</data>
 		<key>Resources/static/console-oak.png</key>
 		<data>
@@ -1307,6 +1311,26 @@
 		<key>Resources/static/console-walnut.jpeg</key>
 		<data>
 		xvdQ1FvEbgQf5tKjZOiF47bKJfA=
+		</data>
+		<key>Resources/static/css/components.css</key>
+		<data>
+		veDBdgQUbn/aCy7x64fn0XQPS14=
+		</data>
+		<key>Resources/static/css/results.css</key>
+		<data>
+		xD3rHcpF6BGH0eYc00+LjECSEM4=
+		</data>
+		<key>Resources/static/css/sidebar.css</key>
+		<data>
+		FSzf4VzKrfk/DnlJ+x7CCindM/0=
+		</data>
+		<key>Resources/static/css/tools.css</key>
+		<data>
+		l1470H+UdSVbwg+HQXZ6NYZ4SPw=
+		</data>
+		<key>Resources/static/css/vars.css</key>
+		<data>
+		jeu0gA09/++fgL5U5EcOt1ud7mM=
 		</data>
 		<key>Resources/static/discogs-logo.svg</key>
 		<data>
@@ -1318,11 +1342,11 @@
 		</data>
 		<key>Resources/static/js/main.js</key>
 		<data>
-		6CXj0Q2oHO7Lo7aDVmAgKN7FQIQ=
+		5lNW5SVDzBJYe709zFn4tGi5Tok=
 		</data>
 		<key>Resources/static/js/pricechecker.js</key>
 		<data>
-		wtg6hOgW0MxcP3svjp8HIzE4uCY=
+		+vxAAzNmonsVXbFfLacoSrjwOHE=
 		</data>
 		<key>Resources/static/js/records.js</key>
 		<data>
@@ -1331,10 +1355,6 @@
 		<key>Resources/static/logo.svg</key>
 		<data>
 		cnWjM5P21r7CW3WreJIj19LiOs0=
-		</data>
-		<key>Resources/static/open-closed.jpg</key>
-		<data>
-		R574xs7zhEs9s6WWORdxleqVAtw=
 		</data>
 		<key>Resources/static/platter.png</key>
 		<data>
@@ -1348,13 +1368,9 @@
 		<data>
 		6LNOcbD+Jbt1TBD5a0rfQGtbuS8=
 		</data>
-		<key>Resources/static/style.css</key>
-		<data>
-		oXlR8PS5ZptJj7CCaGyEb6LDx+Q=
-		</data>
 		<key>Resources/templates/base.html</key>
 		<data>
-		4IKc0Q7aCuXWR6GBQOPiQBwz+M4=
+		5wRE+KLwCf1QOhFcHjgP2h66iqw=
 		</data>
 		<key>Resources/templates/landing.html</key>
 		<data>
@@ -2983,6 +2999,17 @@
 			<key>hash2</key>
 			<data>
 			47DEQpj8HBSa+/TImW+5JCeuQeRkm5NMpJWZG3hSuFU=
+			</data>
+		</dict>
+		<key>Resources/lib/python3.9/helper/auth.py</key>
+		<dict>
+			<key>hash</key>
+			<data>
+			Bdu6IBXdG/n8UHXdcmqJysNj680=
+			</data>
+			<key>hash2</key>
+			<data>
+			y/KMp7eqLLWgQRbcFnx+3uBB+dz1coijKn3gRYF+KV0=
 			</data>
 		</dict>
 		<key>Resources/lib/python3.9/helper/common.py</key>
@@ -4930,22 +4957,22 @@
 		<dict>
 			<key>hash</key>
 			<data>
-			dpZRDuPA7EW2IGWvLfjgzOXJ7l4=
+			6Z98xxeUUOKwj1JB6E7nGFDH/KA=
 			</data>
 			<key>hash2</key>
 			<data>
-			QCR7tJ2nLOZSVPWZK5z9sr9l05yLtmEW52hvG/AxgMg=
+			cXLHZuvvNQE5xzoSoDPS5mnJ+YrK593E7vvEYt1PcDE=
 			</data>
 		</dict>
 		<key>Resources/mac_main.py</key>
 		<dict>
 			<key>hash</key>
 			<data>
-			rqHAAw+V+4AvW2ZZajLRvllCoy8=
+			sv3P+MRn1oek8Fw3su9PnYO+unQ=
 			</data>
 			<key>hash2</key>
 			<data>
-			JyizvKZJq98EzTCwPijykVbh4+3Xfx7akvUsDe/lfUM=
+			NVX0T4+hZm+V8+Ksfn9oi4JRhGy7Huw/U6AAUgCfVcs=
 			</data>
 		</dict>
 		<key>Resources/openssl.ca/cert.pem</key>
@@ -4963,11 +4990,11 @@
 		<dict>
 			<key>hash</key>
 			<data>
-			a+IiOk6mxnwknLmIU+yoYpRAGc4=
+			tFbkj0lo34mNdRiL9O2IPMGWo2c=
 			</data>
 			<key>hash2</key>
 			<data>
-			TfbuVw+yI9sKIBlZzfyh2DhWdw8sGxson9w7Ne7QqDA=
+			jnm5kFlpcEkdfrLkLm1+q+L0B51NBO5wKj2hqPvoS2Y=
 			</data>
 		</dict>
 		<key>Resources/static/console-oak.png</key>
@@ -4990,6 +5017,61 @@
 			<key>hash2</key>
 			<data>
 			UO9HEe+AhuvRJZMWITIhXJg+T/Qwym1+8r6g40Lg5qI=
+			</data>
+		</dict>
+		<key>Resources/static/css/components.css</key>
+		<dict>
+			<key>hash</key>
+			<data>
+			veDBdgQUbn/aCy7x64fn0XQPS14=
+			</data>
+			<key>hash2</key>
+			<data>
+			gAuFU/cx6xxyP6odJWA84VOZTscqU3ng3LRPlm6/q10=
+			</data>
+		</dict>
+		<key>Resources/static/css/results.css</key>
+		<dict>
+			<key>hash</key>
+			<data>
+			xD3rHcpF6BGH0eYc00+LjECSEM4=
+			</data>
+			<key>hash2</key>
+			<data>
+			ENDgDV6N6hMOgktF8MuSxLvReVWbBM/AZ5oTR6sQMZw=
+			</data>
+		</dict>
+		<key>Resources/static/css/sidebar.css</key>
+		<dict>
+			<key>hash</key>
+			<data>
+			FSzf4VzKrfk/DnlJ+x7CCindM/0=
+			</data>
+			<key>hash2</key>
+			<data>
+			aPeg9841KeALmGBnT1DXEnTfgb/b5pS7WMfivLHVPxw=
+			</data>
+		</dict>
+		<key>Resources/static/css/tools.css</key>
+		<dict>
+			<key>hash</key>
+			<data>
+			l1470H+UdSVbwg+HQXZ6NYZ4SPw=
+			</data>
+			<key>hash2</key>
+			<data>
+			nhsE9Rca4wIk0D1pfoGdscWZiStL7ggK3TfVXJZc3zU=
+			</data>
+		</dict>
+		<key>Resources/static/css/vars.css</key>
+		<dict>
+			<key>hash</key>
+			<data>
+			jeu0gA09/++fgL5U5EcOt1ud7mM=
+			</data>
+			<key>hash2</key>
+			<data>
+			/cCa3Mhh8ZyRrusgdJ8VEg+P6Rg0Sn5RCS0w8AHzDWw=
 			</data>
 		</dict>
 		<key>Resources/static/discogs-logo.svg</key>
@@ -5018,22 +5100,22 @@
 		<dict>
 			<key>hash</key>
 			<data>
-			6CXj0Q2oHO7Lo7aDVmAgKN7FQIQ=
+			5lNW5SVDzBJYe709zFn4tGi5Tok=
 			</data>
 			<key>hash2</key>
 			<data>
-			8iTofMIFlbCsaax8QedHmmwaufck72BjTs1CNrpPpPo=
+			VLPdYt/4SYPhm1SCfMbQuO8GUurfbwoeACh0c2P2z2c=
 			</data>
 		</dict>
 		<key>Resources/static/js/pricechecker.js</key>
 		<dict>
 			<key>hash</key>
 			<data>
-			wtg6hOgW0MxcP3svjp8HIzE4uCY=
+			+vxAAzNmonsVXbFfLacoSrjwOHE=
 			</data>
 			<key>hash2</key>
 			<data>
-			oXyvArqxGiFBN1yM2MozEvJW4WDeX48VDzBluWl5gRU=
+			xVNJXgzFcVK14Qk85/OsoFknLyuThny0vW9X+skOq/0=
 			</data>
 		</dict>
 		<key>Resources/static/js/records.js</key>
@@ -5056,17 +5138,6 @@
 			<key>hash2</key>
 			<data>
 			lbofsnydNu9Em8NMr5eNhYKvHAK2Mnahy4hyWOqYCLc=
-			</data>
-		</dict>
-		<key>Resources/static/open-closed.jpg</key>
-		<dict>
-			<key>hash</key>
-			<data>
-			R574xs7zhEs9s6WWORdxleqVAtw=
-			</data>
-			<key>hash2</key>
-			<data>
-			vs+sdIwMy0ld2VVfPRYrLD+t/BEP20PdkF8JaqPm0iU=
 			</data>
 		</dict>
 		<key>Resources/static/platter.png</key>
@@ -5102,26 +5173,15 @@
 			zt3vL3styUDzgZ1bL33k4U+eUCvSjUFMRRwIXKZhHXE=
 			</data>
 		</dict>
-		<key>Resources/static/style.css</key>
-		<dict>
-			<key>hash</key>
-			<data>
-			oXlR8PS5ZptJj7CCaGyEb6LDx+Q=
-			</data>
-			<key>hash2</key>
-			<data>
-			VDCNvlAM4WUudvox6qgiGWT3a3ZPHkiXGUVik2UNwYo=
-			</data>
-		</dict>
 		<key>Resources/templates/base.html</key>
 		<dict>
 			<key>hash</key>
 			<data>
-			4IKc0Q7aCuXWR6GBQOPiQBwz+M4=
+			5wRE+KLwCf1QOhFcHjgP2h66iqw=
 			</data>
 			<key>hash2</key>
 			<data>
-			ZkaQ2Qvxh2hqkXyqISxUMz/jwCekSbEH3AMmvq0tU2o=
+			MFD414oNNeC0dzedBimddkLlRwgdNf4tBWH0jqu5+uw=
 			</data>
 		</dict>
 		<key>Resources/templates/landing.html</key>

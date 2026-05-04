@@ -22,18 +22,78 @@
     submitBtn.className = "reprice-action-btn reprice-submit-btn";
     submitBtn.textContent = "SUBMIT";
     submitBtn.style.display = "none";
+    var confirmBtn = document.createElement("button");
+    confirmBtn.className = "reprice-action-btn reprice-confirm-btn";
+    confirmBtn.textContent = "CONFIRM";
+    confirmBtn.style.display = "none";
+    var spreadWrap = document.createElement("span");
+    spreadWrap.className = "reprice-spread-wrap";
+    spreadWrap.style.display = "none";
+    var spreadPre = document.createElement("span");
+    spreadPre.className = "reprice-spread-label";
+    spreadPre.textContent = "SPREAD";
+    var spreadInput = document.createElement("input");
+    spreadInput.type = "number";
+    spreadInput.className = "reprice-spread-input";
+    spreadInput.value = "10";
+    spreadInput.min = "0.1";
+    spreadInput.step = "0.5";
+    var spreadPct = document.createElement("span");
+    spreadPct.className = "reprice-spread-pct";
+    spreadPct.textContent = "%";
+    spreadWrap.appendChild(spreadPre);
+    spreadWrap.appendChild(spreadInput);
+    spreadWrap.appendChild(spreadPct);
     var statusEl = document.createElement("span");
     statusEl.className = "reprice-status";
     statusEl.style.display = "none";
     repriceControls.appendChild(repriceBtn);
     repriceControls.appendChild(addAllBtn);
     repriceControls.appendChild(reviewBtn);
+    repriceControls.appendChild(spreadWrap);
     repriceControls.appendChild(submitBtn);
+    repriceControls.appendChild(confirmBtn);
     repriceControls.appendChild(statusEl);
     badgeCount.appendChild(repriceControls);
     var repriceMode = false, reviewMode = false, addAllState = false, overlay = null;
     var selectedCards = new Set();
     var hiddenByReview = new Set();
+    function getSpread() {
+        var v = parseFloat(spreadInput.value);
+        return (!isNaN(v) && v > 0) ? v : 10;
+    }
+    spreadInput.addEventListener("input", function() {
+        selectedCards.forEach(function(card) {
+            var rd = [];
+            try { rd = JSON.parse(card.getAttribute("data-reprice") || "[]"); } catch(e) {}
+            var entryMap = {};
+            rd.forEach(function(e) { entryMap[e.id] = e; });
+            card.querySelectorAll("input.reprice-price-input").forEach(function(inp) {
+                var entry = entryMap[inp.getAttribute("data-lid")];
+                if (!entry) return;
+                inp.value = computeNewPrice(entry).toFixed(2);
+                inp.dispatchEvent(new Event("input"));
+            });
+        });
+    });
+    function updateBadgeCounts() {
+        var counts = {
+            recent: 0, old: 0, lowest: 0, low: 0, high: 0, highest: 0, cheapest: 0, overpriced: 0
+        };
+        document.querySelectorAll(".result-card").forEach(function(card) {
+            var badges = (card.getAttribute("data-badges") || "").split(" ");
+            badges.forEach(function(b) { if (counts.hasOwnProperty(b)) counts[b]++; });
+        });
+        Object.keys(counts).forEach(function(key) {
+            var badge = badgeCount.querySelector(".inv-count-badge[data-filter='" + key + "']");
+            if (badge) {
+                var textNode = badge.nextSibling;
+                if (textNode && textNode.nodeType === Node.TEXT_NODE) {
+                    textNode.textContent = " " + counts[key];
+                }
+            }
+        });
+    }
     function updateOverlay() {
         var needs = (repriceMode && selectedCards.size > 0) || reviewMode;
         if (needs && !overlay) {
@@ -81,7 +141,9 @@
         pillsSpan.style.display = "none";
         addAllBtn.style.display = "";
         reviewBtn.style.display = "";
+        spreadWrap.style.display = "";
         statusEl.style.display = "none";
+        confirmBtn.style.display = "none";
         document.querySelectorAll(".result-card").forEach(function(card) {
             card.classList.add("reprice-selectable");
             card.addEventListener("click", onCardClick);
@@ -94,7 +156,9 @@
         pillsSpan.style.display = "";
         addAllBtn.style.display = "none";
         reviewBtn.style.display = "none";
+        spreadWrap.style.display = "none";
         submitBtn.style.display = "none";
+        confirmBtn.style.display = "none";
         statusEl.style.display = "none";
         addAllBtn.textContent = "ADD ALL";
         addAllState = false;
@@ -108,6 +172,7 @@
     }
     function onCardClick(e) {
         if (reviewMode) return;
+        if (e.target.tagName === "INPUT") return;
         if (e.target.tagName === "A" || e.target.closest("a")) return;
         var card = this;
         if (card.classList.contains("reprice-selected")) {
@@ -118,8 +183,9 @@
         updateOverlay();
     }
     function computeNewPrice(entry) {
+        var spread = getSpread();
         var pct = (entry.seller_price - entry.cheapest_price) / entry.cheapest_price * 100;
-        var np = pct > 10 ? entry.seller_price * 0.9 : entry.cheapest_price - 0.5;
+        var np = pct > spread ? entry.seller_price * (1 - spread / 100) : entry.cheapest_price - 0.5;
         return Math.round(np * 100) / 100;
     }
     function selectCard(card) {
@@ -139,21 +205,51 @@
             if (!entry) return;
             var newP = computeNewPrice(entry);
             mark.setAttribute("data-orig-html", mark.innerHTML);
+
             var del = document.createElement("del");
             del.className = "reprice-old";
             del.textContent = "$" + entry.seller_price.toFixed(2);
+
             var arrow = document.createElement("span");
             arrow.className = "reprice-arrow";
             arrow.textContent = " → ";
+
+            var input = document.createElement("input");
+            input.type = "number";
+            input.className = "reprice-price-input";
+            input.value = newP.toFixed(2);
+            input.min = "0.01";
+            input.step = "0.01";
+            input.setAttribute("data-lid", mt[1]);
+            input.setAttribute("data-seller-price", entry.seller_price.toFixed(2));
+
             var link = document.createElement("a");
             link.href = href;
             link.target = "_blank";
             link.className = "reprice-new";
-            link.textContent = "$" + newP.toFixed(2) + " " + entry.condition + " (You)";
+            link.textContent = " " + entry.condition + " (You)";
+
             mark.innerHTML = "";
             mark.appendChild(del);
             mark.appendChild(arrow);
+            mark.appendChild(document.createTextNode("$"));
+            mark.appendChild(input);
             mark.appendChild(link);
+
+            var pctSpan = document.createElement("span");
+            pctSpan.className = "reprice-pct";
+            function makePctUpdater(inp, sellerPrice, span) {
+                return function() {
+                    var val = parseFloat(inp.value);
+                    if (isNaN(val) || val <= 0) { span.textContent = ""; return; }
+                    var pct = (val - sellerPrice) / sellerPrice * 100;
+                    span.textContent = "(" + (pct >= 0 ? "+" : "") + pct.toFixed(0) + "%)";
+                };
+            }
+            var updatePct = makePctUpdater(input, entry.seller_price, pctSpan);
+            updatePct();
+            input.addEventListener("input", updatePct);
+            mark.parentNode.insertBefore(pctSpan, mark.nextSibling);
         });
     }
     function deselectCard(card) {
@@ -162,6 +258,7 @@
             mark.innerHTML = mark.getAttribute("data-orig-html");
             mark.removeAttribute("data-orig-html");
         });
+        card.querySelectorAll(".reprice-pct").forEach(function(el) { el.remove(); });
     }
     addAllBtn.addEventListener("click", function() {
         if (!addAllState) {
@@ -186,9 +283,12 @@
     function enterReviewMode() {
         reviewMode = true;
         reviewBtn.classList.add("active");
+        addAllBtn.style.display = "none";
+        spreadWrap.style.display = "none";
         submitBtn.style.display = "";
         submitBtn.disabled = false;
         submitBtn.textContent = "SUBMIT";
+        confirmBtn.style.display = "none";
         statusEl.style.display = "none";
         document.querySelectorAll(".result-card, .sort-group-header").forEach(function(el) {
             if (!el.classList.contains("reprice-selected") && el.style.display !== "none") {
@@ -201,7 +301,10 @@
     function exitReviewMode() {
         reviewMode = false;
         reviewBtn.classList.remove("active");
+        addAllBtn.style.display = "";
+        spreadWrap.style.display = "";
         submitBtn.style.display = "none";
+        confirmBtn.style.display = "none";
         hiddenByReview.forEach(function(el) { el.style.display = ""; });
         hiddenByReview.clear();
         updateOverlay();
@@ -213,7 +316,13 @@
             var rd2 = [];
             try { rd2 = JSON.parse(card.getAttribute("data-reprice") || "[]"); } catch(e) {}
             rd2.forEach(function(entry) {
-                listings.push({id: entry.id, seller_price: entry.seller_price, cheapest_price: entry.cheapest_price});
+                var item = {id: entry.id, seller_price: entry.seller_price, cheapest_price: entry.cheapest_price};
+                var inp = card.querySelector('input.reprice-price-input[data-lid="' + entry.id + '"]');
+                if (inp) {
+                    var v = parseFloat(inp.value);
+                    if (!isNaN(v) && v > 0) item.custom_price = v;
+                }
+                listings.push(item);
             });
         });
         if (!listings.length) return;
@@ -235,7 +344,10 @@
             var seller = new URLSearchParams(window.location.search).get("seller") || "";
             var ri = 0;
             function refreshNext() {
-                if (ri >= cardsToRefresh.length) return;
+                if (ri >= cardsToRefresh.length) {
+                    updateBadgeCounts();
+                    return;
+                }
                 var card = cardsToRefresh[ri++];
                 var releaseId = card.id.replace("card-", "");
                 var listingIds = [];
@@ -278,10 +390,12 @@
                 submitBtn.textContent = (done - errCount) + " updated" + (errCount ? ", " + errCount + " failed" : "");
                 if (errMsgs.length) { statusEl.textContent = errMsgs.join(" | "); statusEl.style.display = ""; }
                 var cardsToRefresh = Array.from(successCards);
-                setTimeout(function() {
+                confirmBtn.style.display = "";
+                confirmBtn.onclick = function() {
+                    confirmBtn.style.display = "none";
                     exitRepriceMode();
                     refreshCards(cardsToRefresh);
-                }, 1000);
+                };
                 return;
             }
             submitBtn.textContent = "Updating " + (i + 1) + " of " + total + "…";
