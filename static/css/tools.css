@@ -61,13 +61,11 @@ html:has(.tool-grid-wrap) {
 
 .tool-card {
     display: block;
-    background: var(--card);
-    border: 1px solid var(--rule);
+    border-color: var(--rule);
     border-radius: 10px;
     padding: 22px 22px 26px;
     color: var(--ink) !important;
     text-decoration: none !important;
-    transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
     position: relative;
     overflow: hidden;
     align-self: start;

@@ -22,7 +22,6 @@
         color: var(--ink-soft);
         font-weight: 500;
         border-left: 3px solid transparent;
-        transition: background 0.12s ease, color 0.12s ease;
 
         &:hover {
             background: color-mix(in srgb, var(--rust) 6%, transparent);
@@ -73,7 +72,6 @@
     border-left: 2px solid transparent;
     color: var(--ink-soft);
     text-decoration: none;
-    transition: color 0.15s, background 0.15s;
 }
 
 .sidebar-login-link {
