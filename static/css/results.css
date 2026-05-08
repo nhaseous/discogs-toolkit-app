@@ -39,12 +39,27 @@
     }
 }
 
+.lookup-mosaic-wrap {
+    position: relative;
+    overflow: hidden;
+}
+
+.lookup-mosaic--inactive {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    visibility: hidden;
+    pointer-events: none;
+}
+
 .mosaic {
     display: flex;
     flex-wrap: wrap;
     width: 100%;
     margin-bottom: 5px;
     overflow: hidden;
+    contain: layout style;
 }
 
 .mosaic-item {
@@ -439,6 +454,8 @@
     gap: 10px;
     padding-bottom: 8px;
 }
+
+.pag-select { position: relative; }
 
 .pag-select-btn {
     font: inherit;

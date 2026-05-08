@@ -1,3 +1,41 @@
+function _withLookupScroll(action) {
+    var tabsRow = document.querySelector(".lookup-tabs-row");
+    var contentMain = document.getElementById("content-main");
+    var mosaicWrap = document.querySelector(".lookup-mosaic-wrap");
+    var currentY = window.pageYOffset;
+
+    if (contentMain) {
+        // Guard total page height to prevent scrollbar jumping.
+        contentMain.style.minHeight = (currentY + window.innerHeight) + "px";
+    }
+    
+    if (action) action();
+
+    if (tabsRow) {
+        // Measure target position in the final layout state.
+        var oldPos = tabsRow.style.position;
+        tabsRow.style.position = "static";
+        
+        // Remove any temporary height guards from switchMosaics to measure the true final offset.
+        // We do NOT restore this, so the viewport target and the actual elements stay aligned.
+        if (mosaicWrap) mosaicWrap.style.minHeight = "";
+        
+        var targetY = 0;
+        var curr = tabsRow;
+        while (curr && curr !== document.body) {
+            targetY += curr.offsetTop;
+            curr = curr.offsetParent;
+        }
+        
+        tabsRow.style.position = oldPos;
+        window.scrollTo({ top: targetY, behavior: "smooth" });
+    }
+
+    setTimeout(function() {
+        if (contentMain) contentMain.style.minHeight = "";
+    }, 600);
+}
+
 document.querySelectorAll(".sidebar a").forEach(function(link) {
     link.addEventListener("click", function(e) {
         if (this.pathname === window.location.pathname) {
@@ -263,6 +301,7 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
 
 (function() {
     function layoutMatchGrid(grid) {
+        if (!grid.offsetParent) return;
         var allCards = Array.from(grid.querySelectorAll(".match-card"));
         if (!allCards.length) return;
         var gap = 14, minWidth = 158;
@@ -294,65 +333,77 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
     var tabs = document.querySelectorAll(".lookup-tab");
     if (!tabs.length) return;
     var EASE = "transform 0.35s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease";
-    function animateOut(el, w, onDone) {
-        el.style.transition = EASE;
-        el.style.transform = "translateX(-" + w + "px)";
-        el.style.opacity = "0";
-        el.addEventListener("transitionend", function cleanup(e) {
-            if (e.propertyName !== "transform") return;
-            el.removeEventListener("transitionend", cleanup);
-            el.style.display = "none";
-            el.style.transition = ""; el.style.transform = ""; el.style.opacity = "";
-            if (onDone) onDone();
-        });
-    }
-    function animateIn(el, w, wrap) {
-        el.style.transition = "none";
-        el.style.transform = "translateX(-" + w + "px)";
-        el.style.opacity = "0";
-        el.style.display = "";
-        requestAnimationFrame(function() {
-            requestAnimationFrame(function() {
-                el.style.transition = EASE;
-                el.style.transform = "translateX(0)";
-                el.style.opacity = "1";
-                el.addEventListener("transitionend", function done(e) {
-                    if (e.propertyName !== "transform") return;
-                    el.removeEventListener("transitionend", done);
-                    el.style.transition = ""; el.style.transform = ""; el.style.opacity = "";
-                    if (wrap) wrap.style.minHeight = "";
-                });
-            });
-        });
-    }
     function switchMosaics(target) {
         var all = Array.from(document.querySelectorAll(".lookup-mosaic"));
         var incoming = document.getElementById("lookup-mosaic-" + target);
-        var outgoing = all.find(function(m) { return m !== incoming && m.style.display !== "none"; });
-        if (!incoming && !outgoing) return;
-        var wrap = (outgoing || incoming).parentNode;
+        var outgoing = all.find(function(m) { return m !== incoming && !m.classList.contains("lookup-mosaic--inactive"); });
+        
+        var wrap = document.querySelector(".lookup-mosaic-wrap");
+        if (!wrap) return;
         var w = wrap.offsetWidth;
+
         if (outgoing) {
-            wrap.style.minHeight = outgoing.offsetHeight + "px";
-            animateOut(outgoing, w, incoming ? function() { animateIn(incoming, w, wrap); } : function() { wrap.style.minHeight = ""; });
-        } else {
-            animateIn(incoming, w, wrap);
+            // Set min-height guard only if we have an incoming mosaic to show.
+            // For the Lists tab (no mosaic), we collapse immediately to prevent ghost space.
+            if (incoming) wrap.style.minHeight = outgoing.offsetHeight + "px";
+            else wrap.style.minHeight = "";
+
+            outgoing.classList.add("lookup-mosaic--inactive");
+            outgoing.style.visibility = "visible";
+            outgoing.style.transition = EASE;
+            outgoing.style.transform = "translateX(-" + w + "px)";
+            outgoing.style.opacity = "0";
+            outgoing.addEventListener("transitionend", function cleanup(e) {
+                if (e.propertyName !== "transform") return;
+                outgoing.removeEventListener("transitionend", cleanup);
+                outgoing.style.visibility = "";
+                outgoing.style.transition = "";
+                outgoing.style.transform = "";
+                outgoing.style.opacity = "";
+                if (!incoming) wrap.style.minHeight = "";
+            }, { once: true });
+        }
+
+        if (incoming) {
+            incoming.classList.remove("lookup-mosaic--inactive");
+            incoming.style.transition = "none";
+            incoming.style.transform = "translateX(-" + w + "px)";
+            incoming.style.opacity = "0";
+            requestAnimationFrame(function() {
+                requestAnimationFrame(function() {
+                    incoming.style.transition = EASE;
+                    incoming.style.transform = "translateX(0)";
+                    incoming.style.opacity = "1";
+                    incoming.addEventListener("transitionend", function done(e) {
+                        if (e.propertyName !== "transform") return;
+                        incoming.removeEventListener("transitionend", done);
+                        incoming.style.transition = "";
+                        incoming.style.transform = "";
+                        incoming.style.opacity = "";
+                        wrap.style.minHeight = "";
+                    }, { once: true });
+                });
+            });
+        } else if (!outgoing) {
+            wrap.style.minHeight = "";
         }
     }
     var countEl = document.getElementById("lookup-count");
     tabs.forEach(function(tab) {
         tab.addEventListener("click", function() {
-            tabs.forEach(function(t) { t.classList.remove("active"); });
-            this.classList.add("active");
             var target = this.getAttribute("data-tab");
-            document.querySelectorAll(".lookup-panel").forEach(function(panel) {
-                panel.style.display = panel.id === "lookup-panel-" + target ? "" : "none";
+            var countText = this.getAttribute("data-count-text");
+            _withLookupScroll(function() {
+                tabs.forEach(function(t) { t.classList.toggle("active", t.getAttribute("data-tab") === target); });
+                document.querySelectorAll(".lookup-panel").forEach(function(panel) {
+                    panel.style.display = panel.id === "lookup-panel-" + target ? "" : "none";
+                });
+                switchMosaics(target);
+                if (countEl && countText) countEl.textContent = countText;
+                if (window._resetMatchCardHover) window._resetMatchCardHover();
+                if (window._applyTabPage) window._applyTabPage(target);
+                if (window._layoutMatchGrids) window._layoutMatchGrids();
             });
-            switchMosaics(target);
-            if (countEl) { var ct = this.getAttribute("data-count-text"); if (ct) countEl.textContent = ct; }
-            if (window._resetMatchCardHover) window._resetMatchCardHover();
-            if (window._applyTabPage) window._applyTabPage(target);
-            if (window._layoutMatchGrids) window._layoutMatchGrids();
         });
     });
 })();
@@ -369,6 +420,28 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
     var sizeMenu = document.getElementById("pag-size-menu");
     var sizeValEl = document.getElementById("pag-size-val");
     var sizeOpts = sizeMenu ? Array.from(sizeMenu.querySelectorAll(".pag-select-opt")) : [];
+
+    var VINYL_SVG = '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="46" fill="currentColor"/><circle cx="50" cy="50" r="20" fill="var(--rule)"/><circle cx="50" cy="50" r="4" fill="currentColor"/></svg>';
+    function _esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+    function renderLookupCard(m, showStats) {
+        var imgSrc = m.cover_image || m.thumb;
+        var art = imgSrc
+            ? '<img src="' + _esc(imgSrc) + '" alt="" loading="lazy" class="match-card-img">'
+            : '<div class="match-card-placeholder">' + VINYL_SVG + '</div>';
+        var body = '<div class="match-card-title">' + _esc(m.title) + '</div>'
+            + '<div class="match-card-artist">' + _esc(m.artist) + '</div>'
+            + (m.format ? '<div class="match-card-format">' + _esc(m.format) + '</div>' : '')
+            + (m.format_descriptions ? '<div class="match-card-format-desc">' + _esc(m.format_descriptions) + '</div>' : '')
+            + (m.format_text ? '<div class="match-card-format-text">' + _esc(m.format_text) + '</div>' : '')
+            + (m.for_sale && m.for_sale_url ? '<div class="match-card-forsale" data-href="' + _esc(m.for_sale_url) + '" onclick="event.stopPropagation();event.preventDefault();window.open(this.dataset.href,\'_blank\',\'noopener,noreferrer\')">' + _esc(m.for_sale) + '</div>' : '')
+            + (m.comment ? '<div class="match-card-comment">' + _esc(m.comment) + '</div>' : '')
+            + (showStats && m.stats ? '<div class="match-card-stats">' + _esc(m.stats) + '</div>' : '');
+        return '<a href="' + _esc(m.url || '#') + '" class="match-card" target="_blank" rel="noopener noreferrer">'
+            + '<div class="match-card-art">' + art + '</div>'
+            + '<div class="match-card-body">' + body + '</div>'
+            + '</a>';
+    }
+
     var state = {};
     function getGrid(tabName) {
         var panel = document.getElementById("lookup-panel-" + tabName);
@@ -378,9 +451,17 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
         var name = tab.getAttribute("data-tab");
         var grid = getGrid(name);
         var backCard = grid ? grid.querySelector(".match-card--back") : null;
-        var cards = grid ? Array.from(grid.querySelectorAll(".match-card:not(.match-card--back)")) : [];
-        var total = Math.max(1, Math.ceil(cards.length / PAGE_SIZE));
-        state[name] = { page: 1, total: total, cards: cards, backCard: backCard, ready: false };
+        var dataEl = document.querySelector('.lookup-data[data-tab="' + name + '"]');
+        var items = null, cards = null, showStats = false;
+        if (dataEl) {
+            items = JSON.parse(dataEl.textContent);
+            showStats = dataEl.getAttribute("data-show-stats") === "1";
+        } else {
+            cards = grid ? Array.from(grid.querySelectorAll(".match-card:not(.match-card--back)")) : [];
+        }
+        var count = items ? items.length : (cards ? cards.length : 0);
+        var total = Math.max(1, Math.ceil(count / PAGE_SIZE));
+        state[name] = { page: 1, total: total, items: items, cards: cards, showStats: showStats, backCard: backCard, ready: false };
     });
     function syncControls(tabName) {
         if (!pagEl || !labelEl) return;
@@ -399,10 +480,18 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
         var grid = getGrid(tabName);
         if (!grid) return;
         var start = (page - 1) * PAGE_SIZE;
-        var pageCards = s.cards.slice(start, start + PAGE_SIZE);
-        grid.innerHTML = "";
-        if (s.backCard) grid.appendChild(s.backCard);
-        pageCards.forEach(function(c) { grid.appendChild(c); });
+        if (s.items) {
+            var pageItems = s.items.slice(start, start + PAGE_SIZE);
+            var html = '';
+            pageItems.forEach(function(m) { html += renderLookupCard(m, s.showStats); });
+            grid.innerHTML = html;
+            if (s.backCard) grid.insertBefore(s.backCard, grid.firstChild);
+        } else {
+            var pageCards = s.cards.slice(start, start + PAGE_SIZE);
+            grid.innerHTML = '';
+            if (s.backCard) grid.appendChild(s.backCard);
+            pageCards.forEach(function(c) { grid.appendChild(c); });
+        }
     }
     window._applyTabPage = function(tabName) {
         var s = state[tabName];
@@ -410,10 +499,12 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
         if (!s.ready) applyPage(tabName, 1);
         syncControls(tabName);
     };
+    pagTabs.forEach(function(tab) {
+        applyPage(tab.getAttribute("data-tab"), 1);
+    });
     var initTab = document.querySelector(".lookup-tab.active");
     if (initTab) {
         var initName = initTab.getAttribute("data-tab");
-        applyPage(initName, 1);
         syncControls(initName);
         if (window._layoutMatchGrids) window._layoutMatchGrids();
     }
@@ -425,18 +516,22 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
         var name = getActiveTab();
         var s = state[name];
         if (s && s.page > 1) {
-            applyPage(name, s.page - 1);
-            syncControls(name);
-            if (window._layoutMatchGrids) window._layoutMatchGrids();
+            _withLookupScroll(function() {
+                applyPage(name, s.page - 1);
+                syncControls(name);
+                if (window._layoutMatchGrids) window._layoutMatchGrids();
+            });
         }
     });
     if (nextBtn) nextBtn.addEventListener("click", function() {
         var name = getActiveTab();
         var s = state[name];
         if (s && s.page < s.total) {
-            applyPage(name, s.page + 1);
-            syncControls(name);
-            if (window._layoutMatchGrids) window._layoutMatchGrids();
+            _withLookupScroll(function() {
+                applyPage(name, s.page + 1);
+                syncControls(name);
+                if (window._layoutMatchGrids) window._layoutMatchGrids();
+            });
         }
     });
     function applySize(value) {
@@ -448,14 +543,17 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
         if (sizeMenu) sizeMenu.style.display = "none";
         var activeName = getActiveTab();
         for (var n in state) {
-            state[n].total = Math.max(1, Math.ceil(state[n].cards.length / PAGE_SIZE));
+            var s = state[n], count = s.items ? s.items.length : (s.cards ? s.cards.length : 0);
+            s.total = Math.max(1, Math.ceil(count / PAGE_SIZE));
             state[n].page = 1;
             if (n !== activeName) state[n].ready = false;
         }
         if (activeName) {
-            applyPage(activeName, 1);
-            syncControls(activeName);
-            if (window._layoutMatchGrids) window._layoutMatchGrids();
+            _withLookupScroll(function() {
+                applyPage(activeName, 1);
+                syncControls(activeName);
+                if (window._layoutMatchGrids) window._layoutMatchGrids();
+            });
         }
     }
     if (sizeBtn) sizeBtn.addEventListener("click", function(e) {
@@ -480,8 +578,10 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
     if (!btn) return;
     btn.addEventListener("click", function() {
         var on = this.classList.toggle("active");
-        document.querySelectorAll(".match-grid").forEach(function(g) {
-            g.classList.toggle("match-grid--expanded", on);
+        _withLookupScroll(function() {
+            document.querySelectorAll(".match-grid").forEach(function(g) {
+                g.classList.toggle("match-grid--expanded", on);
+            });
         });
     });
 })();

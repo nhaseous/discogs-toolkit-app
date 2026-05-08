@@ -4,7 +4,7 @@ load_dotenv()
 from flask import Flask, request, render_template, session, redirect
 from helper import pricechecker, matcher, lookup as lookup_helper, records as records_helper, firestore_db as _firestore_db
 from concurrent.futures import ThreadPoolExecutor, as_completed
-import cloudscraper, time, html as _html, os, requests as _requests
+import cloudscraper, time, html as _html, os, requests as _requests, json as _json
 from datetime import datetime, timedelta
 from requests_oauthlib import OAuth1 as _OAuth1
 import discogs_client as _discogs_client
@@ -584,35 +584,36 @@ def lookuppage():
         wantlist_error = ""
         lists_error = ""
 
-        try:
-            try:
-                collection = lookup_helper.get_collection(username, scraper, auth=auth)
-            except lookup_helper.UserNotFoundError:
-                user_not_found = True
-            except lookup_helper.CollectionPrivateError:
-                collection_error = "This user's collection is not public."
-
-            if not user_not_found:
+        _fetch_tasks = {
+            'collection': lambda: lookup_helper.get_collection(username, scraper, auth=auth),
+            'wantlist':   lambda: lookup_helper.get_wantlist(username, scraper, auth=auth),
+            'lists':      lambda: lookup_helper.get_lists(username, scraper, auth=auth),
+        }
+        with ThreadPoolExecutor(max_workers=3) as _ex:
+            _futures = {_ex.submit(fn): name for name, fn in _fetch_tasks.items()}
+            for _future in as_completed(_futures):
+                _name = _futures[_future]
                 try:
-                    wantlist = lookup_helper.get_wantlist(username, scraper, auth=auth)
+                    _result = _future.result()
+                    if _name == 'collection': collection = _result
+                    elif _name == 'wantlist':   wantlist   = _result
+                    elif _name == 'lists':      lists      = _result
                 except lookup_helper.UserNotFoundError:
                     user_not_found = True
+                except lookup_helper.CollectionPrivateError:
+                    collection_error = "This user's collection is not public."
                 except lookup_helper.WantlistPrivateError:
                     wantlist_error = "This user's wantlist is not public."
-
-            if not user_not_found:
-                try:
-                    lists = lookup_helper.get_lists(username, scraper, auth=auth)
-                except lookup_helper.UserNotFoundError:
-                    user_not_found = True
                 except lookup_helper.ListPrivateError:
                     lists_error = "This user's lists are not public."
+                except lookup_helper.RateLimitError:
+                    rate_limited = True
 
-            if list_id and not user_not_found:
+        if list_id and not user_not_found and not rate_limited:
+            try:
                 list_releases = lookup_helper.get_list_releases(list_id, scraper)
-
-        except lookup_helper.RateLimitError:
-            rate_limited = True
+            except lookup_helper.RateLimitError:
+                rate_limited = True
 
         end_time = time.time()
         loadtime = "Lookup time: {0} seconds".format(round(end_time - start_time, 2))
@@ -687,17 +688,26 @@ def lookuppage():
                 _html.escape(lists_count_text),
             )
 
+            def _items_json(tab, items, show_stats=False):
+                return (
+                    '<div class="match-grid"></div>'
+                    '<script type="application/json" class="lookup-data"'
+                    ' data-tab="' + tab + '" data-show-stats="' + ('1' if show_stats else '0') + '">'
+                    + _json.dumps(items, separators=(',', ':')).replace('</', r'<\/')
+                    + '</script>'
+                )
+
             if collection_error:
                 col_content = '<div class="lookup-notice">' + _html.escape(collection_error) + '</div>'
             elif collection:
-                col_content = lookup_helper.render_lookup_grid(collection, show_stats=False)
+                col_content = _items_json('collection', collection)
             else:
                 col_content = '<p class="match-empty">This collection is empty.</p>'
 
             if wantlist_error:
                 want_content = '<div class="lookup-notice">' + _html.escape(wantlist_error) + '</div>'
             elif wantlist:
-                want_content = lookup_helper.render_lookup_grid(wantlist, show_stats=True)
+                want_content = _items_json('wantlist', wantlist, show_stats=True)
             else:
                 want_content = '<p class="match-empty">This wantlist is empty.</p>'
 
@@ -710,35 +720,42 @@ def lookuppage():
                     '</div>'
                     '</a>'
                 )
-                if list_releases:
-                    lists_content = lookup_helper.render_lookup_grid(list_releases, prepend_card=back_card_html)
-                else:
-                    lists_content = lookup_helper.render_lookup_grid([], prepend_card=back_card_html) + '<p class="match-empty">This list is empty.</p>'
+                lists_content = (
+                    '<div class="match-grid">' + back_card_html + '</div>'
+                    + ('<script type="application/json" class="lookup-data" data-tab="lists" data-show-stats="0">'
+                       + _json.dumps(list_releases or [], separators=(',', ':')).replace('</', r'<\/')
+                       + '</script>')
+                    + ('' if list_releases else '<p class="match-empty">This list is empty.</p>')
+                )
             elif lists_error:
                 lists_content = '<div class="lookup-notice">' + _html.escape(lists_error) + '</div>'
             else:
                 lists_content = lookup_helper.render_list_index(lists or [], username)
 
             col_mosaic_items = "".join(
-                '<a class="mosaic-item" href="{1}" target="_blank" rel="noopener noreferrer"><img src="{0}" alt="" class="mosaic-thumb"></a>'.format(m["thumb"], m.get("url", "#"))
+                '<a class="mosaic-item" href="{1}" target="_blank" rel="noopener noreferrer"><img src="{0}" alt="" loading="lazy" class="mosaic-thumb"></a>'.format(m["thumb"], m.get("url", "#"))
                 for m in (collection or []) if m.get("thumb")
             )
             want_mosaic_items = "".join(
-                '<a class="mosaic-item" href="{1}" target="_blank" rel="noopener noreferrer"><img src="{0}" alt="" class="mosaic-thumb"></a>'.format(m["thumb"], m.get("url", "#"))
+                '<a class="mosaic-item" href="{1}" target="_blank" rel="noopener noreferrer"><img src="{0}" alt="" loading="lazy" class="mosaic-thumb"></a>'.format(m["thumb"], m.get("url", "#"))
                 for m in (wantlist or []) if m.get("thumb")
             )
             lists_mosaic_items = "".join(
-                '<span class="mosaic-item"><img src="{0}" alt="" class="mosaic-thumb"></span>'.format(m["thumb"])
+                '<span class="mosaic-item"><img src="{0}" alt="" loading="lazy" class="mosaic-thumb"></span>'.format(m["thumb"])
                 for m in (list_releases or []) if m.get("thumb")
             ) if list_id else ""
 
-            col_hidden = ' style="display:none"' if active_tab != 'collection' else ''
-            want_hidden = ' style="display:none"'
+            col_cls   = ' lookup-mosaic--inactive' if active_tab != 'collection' else ''
+            want_cls  = ' lookup-mosaic--inactive'
+            lists_cls = ' lookup-mosaic--inactive' if active_tab != 'lists' else ''
+
+            col_hidden   = ' style="display:none"' if active_tab != 'collection' else ''
+            want_hidden  = ' style="display:none"'
             lists_hidden = ' style="display:none"' if active_tab != 'lists' else ''
 
-            col_mosaic = '<div id="lookup-mosaic-collection" class="lookup-mosaic mosaic"{1}>{0}</div>'.format(col_mosaic_items, col_hidden) if col_mosaic_items else ""
-            want_mosaic = '<div id="lookup-mosaic-wantlist" class="lookup-mosaic mosaic"{1}>{0}</div>'.format(want_mosaic_items, want_hidden) if want_mosaic_items else ""
-            lists_mosaic = '<div id="lookup-mosaic-lists" class="lookup-mosaic mosaic"{1}>{0}</div>'.format(lists_mosaic_items, lists_hidden) if lists_mosaic_items else ""
+            col_mosaic   = '<div id="lookup-mosaic-collection" class="lookup-mosaic mosaic{1}">{0}</div>'.format(col_mosaic_items, col_cls) if col_mosaic_items else ""
+            want_mosaic  = '<div id="lookup-mosaic-wantlist" class="lookup-mosaic mosaic{1}">{0}</div>'.format(want_mosaic_items, want_cls) if want_mosaic_items else ""
+            lists_mosaic = '<div id="lookup-mosaic-lists" class="lookup-mosaic mosaic{1}">{0}</div>'.format(lists_mosaic_items, lists_cls) if lists_mosaic_items else ""
             mosaics_html = '<div class="lookup-mosaic-wrap">' + col_mosaic + want_mosaic + lists_mosaic + '</div>' if (col_mosaic or want_mosaic or lists_mosaic) else ""
 
             output = (

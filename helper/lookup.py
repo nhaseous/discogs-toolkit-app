@@ -50,7 +50,7 @@ def get_collection(username, scraper, auth=None):
         title = info.get("title", "")
         fmt_info = info["formats"][0] if info.get("formats") else {}
         fmt = fmt_info.get("name", "")
-        fmt_descriptions = ", ".join(fmt_info.get("descriptions", []))
+        fmt_descriptions = ", ".join(fmt_info.get("descriptions") or [])
         fmt_text = fmt_info.get("text", "")
         release_id = info.get("id", "")
         result.append({
@@ -92,7 +92,7 @@ def get_wantlist(username, scraper, auth=None):
         title = info.get("title", "")
         fmt_info = info["formats"][0] if info.get("formats") else {}
         fmt = fmt_info.get("name", "")
-        fmt_descriptions = ", ".join(fmt_info.get("descriptions", []))
+        fmt_descriptions = ", ".join(fmt_info.get("descriptions") or [])
         fmt_text = fmt_info.get("text", "")
         release_id = info.get("id", "")
         result.append({
