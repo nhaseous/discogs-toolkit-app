@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from flask import Flask, request, render_template, session, redirect
-from helper import pricechecker, matcher, lookup as lookup_helper, records as records_helper
+from helper import pricechecker, matcher, lookup as lookup_helper, records as records_helper, firestore_db as _firestore_db
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import cloudscraper, time, html as _html, os, requests as _requests
 from datetime import datetime, timedelta
@@ -25,6 +25,8 @@ app.config['SESSION_COOKIE_HTTPONLY'] = True
 app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE']   = os.environ.get('GAE_ENV', '').startswith('standard')
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=90)
+
+_STATIC_V = str(int(os.path.getmtime(os.path.abspath(__file__))))
 
 try:
     _records_data = records_helper.load_all()
@@ -69,6 +71,7 @@ def _inject_globals():
         'session_avatar': session.get('discogs_avatar', ''),
         'price_checker_enabled': _is_price_checker_enabled(),
         'is_frozen': getattr(sys, 'frozen', False),
+        'static_v': _STATIC_V,
     }
 
 # Routes
@@ -123,17 +126,6 @@ def logout():
 @app.route("/")
 def landingpage():
     pc_enabled = _is_price_checker_enabled()
-    if not session.get('discogs_username'):
-        login_card = (
-            '<a href="/login" class="tool-card tool-card--login">'
-            '<div class="tool-card-label">Account</div>'
-            '<h3 class="tool-card-title">Login with Discogs</h3>'
-            '<p class="tool-card-desc">Connect your Discogs account to unlock the Reprice feature and authenticated API access.</p>'
-            '</a>'
-        )
-    else:
-        login_card = ''
-    
     pc_card = (
         '<a href="/pricechecker" class="tool-card">'
         '<div class="tool-card-label">01 &middot; Marketplace</div>'
@@ -168,7 +160,6 @@ def landingpage():
         '<h3 class="tool-card-title">User Lookup</h3>'
         '<p class="tool-card-desc">Browse any user\'s full collection and wantlist as well as any lists they have made.</p>'
         '</a>'
-        + login_card +
         '<div class="tool-slot"></div>'
         '<div class="tool-slot"></div>'
         '<div class="tool-slot"></div>'
@@ -395,6 +386,36 @@ def refresh_card():
         "data_badges": pricechecker._entry_badges(entry),
         "reprice_data": reprice_data,
     }
+
+
+## Watchlist ##
+
+@app.route("/watchlist", methods=["GET"])
+def get_watchlist():
+    user = session.get('discogs_username', '')
+    seller = request.args.get('seller', '')
+    if not user or user.lower() != seller.lower():
+        return {"watchlist": []}
+    try:
+        return {"watchlist": _firestore_db.get_watchlist(user)}
+    except Exception as e:
+        return {"watchlist": [], "error": str(e)}
+
+@app.route("/watchlist", methods=["POST"])
+def save_watchlist():
+    user = session.get('discogs_username', '')
+    if not user:
+        return {"status": "error", "message": "Not authenticated"}, 401
+    data = request.get_json(silent=True) or {}
+    seller = data.get('seller', '')
+    if user.lower() != seller.lower():
+        return {"status": "error", "message": "Forbidden"}, 403
+    release_ids = [str(rid) for rid in (data.get('watchlist') or [])]
+    try:
+        _firestore_db.save_watchlist(user, release_ids)
+        return {"status": "ok"}
+    except Exception as e:
+        return {"status": "error", "message": str(e)}, 500
 
 
 ## Matcher Module ##

@@ -43,7 +43,7 @@
     display: flex;
     flex-wrap: wrap;
     width: 100%;
-    margin-bottom: 10px;
+    margin-bottom: 5px;
     overflow: hidden;
 }
 
@@ -252,7 +252,7 @@
 }
 
 .match-grid--expanded .match-card-body,
-.match-card:hover .match-card-body {
+.match-card--active .match-card-body {
     max-height: 220px;
     padding: 10px 12px 12px;
 }
@@ -270,6 +270,7 @@
     flex-direction: column;
     overflow: hidden;
     width: 100%;
+    padding: 0;
 
     &:hover {
         transform: translateY(-3px);
@@ -327,7 +328,7 @@
     flex: 1;
     max-height: 0;
     overflow: hidden;
-    padding: 0 12px;
+    padding: 0;
     transition: max-height 0.28s cubic-bezier(0.4,0,0.2,1), padding 0.28s cubic-bezier(0.4,0,0.2,1);
 }
 
@@ -603,6 +604,7 @@
 .rec-sf-count { color: var(--ink-muted); font-size: 12px; width: 10%; text-align: right; padding-right: 12px !important; }
 .rec-sf-money { color: var(--ink); font-variant-numeric: tabular-nums; text-align: right; padding-right: 6px !important; }
 .rec-sf-label { color: var(--ink-muted); font-size: 11px; }
+.rec-sf-header { background: var(--paper-alt); }
 
 .rec-pie-wrap { flex: 1; display: flex; align-items: center; gap: 14px; }
 .rec-pie-svg  { width: 110px; height: 110px; flex-shrink: 0; }
@@ -729,7 +731,7 @@
     display: inline-flex;
     align-items: center;
     padding: 3px 10px;
-    border-radius: 999px;
+    border-radius: 4px;
     border: 1.5px solid;
     cursor: pointer;
     font-family: inherit;
@@ -862,3 +864,27 @@ input.reprice-price-input {
 .reprice-pct { font-size: 0.82em; color: var(--ink-muted); margin-left: 3px; }
 
 mark.mark--done { background: #d4f0cc; outline: 1.5px solid #5aac44; }
+
+/* =========================================================
+   Watchlist
+   ========================================================= */
+
+/* Inline WATCH indicator on the card number — shown via CSS when data-badges contains "watch" */
+.result-card[data-badges~="watch"] .card-number > span::after {
+    content: "WATCH";
+    display: inline-block;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: #7a5c00;
+    background: #fde047;
+    border-radius: 999px;
+    padding: 1px 6px;
+    margin-left: 7px;
+    vertical-align: middle;
+}
+
+/* Pointer cursor on cards when viewing own store (outside reprice mode) */
+body.is-own-store .result-card:not(.reprice-selectable) {
+    cursor: pointer;
+}

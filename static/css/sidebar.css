@@ -109,6 +109,9 @@
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+    text-decoration: none;
+
+    &:hover { text-decoration: underline; text-underline-offset: 3px; }
 }
 
 .sidebar-art {
@@ -126,6 +129,10 @@
 }
 
 .sidebar-art-img:hover { opacity: 1; }
+
+@media (max-width: 900px) {
+    .sidebar { display: none; }
+}
 
 .sidebar-platter {
     position: absolute;

@@ -208,24 +208,54 @@
    Inv-count filter badges
    ========================================================= */
 
+.badge-unit {
+    display: inline-flex;
+    align-items: center;
+    margin-left: 10px;
+}
+
+.badge-unit:first-child { margin-left: 0; }
+
 .inv-count-badge {
     cursor: pointer;
     user-select: none;
 }
 
-.inv-count-badge.filter-active {
-    color: #fff;
-    &::after { content: " \00D7"; }
+.badge-ct {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 2px 7px 2px 5px;
+    border-radius: 0 4px 4px 0;
+    color: var(--ink-soft);
+    background: transparent;
+    transition: background 0.18s ease, color 0.18s ease;
 }
 
-.inv-count-badge[data-filter="recent"].filter-active   { background: #b07010; }
-.inv-count-badge[data-filter="old"].filter-active      { background: #a07030; }
-.inv-count-badge[data-filter="low"].filter-active      { background: #5a6e28; }
-.inv-count-badge[data-filter="lowest"].filter-active,
-.inv-count-badge[data-filter="cheapest"].filter-active { background: var(--green); }
-.inv-count-badge[data-filter="high"].filter-active     { background: #a02020; }
-.inv-count-badge[data-filter="highest"].filter-active,
+.inv-count-badge.filter-active {
+    color: #fff;
+    border-radius: 4px 0 0 4px;
+}
+
+.inv-count-badge[data-filter="recent"].filter-active    { background: #b07010; }
+.inv-count-badge[data-filter="old"].filter-active       { background: #a07030; }
+.inv-count-badge[data-filter="low"].filter-active       { background: #5a6e28; }
+.inv-count-badge[data-filter="lowest"].filter-active    { background: var(--green); }
+.inv-count-badge[data-filter="cheapest"].filter-active  { background: var(--green-text); }
+.inv-count-badge[data-filter="high"].filter-active      { background: #c04800; }
+.inv-count-badge[data-filter="highest"].filter-active   { background: #a02020; }
 .inv-count-badge[data-filter="overpriced"].filter-active { background: var(--red-deep); }
+.inv-count-badge[data-filter="watch"].filter-active     { background: #b8920a; }
+
+.inv-count-badge[data-filter="recent"].filter-active + .badge-ct    { background: #b07010; color: #fff; }
+.inv-count-badge[data-filter="old"].filter-active + .badge-ct       { background: #a07030; color: #fff; }
+.inv-count-badge[data-filter="low"].filter-active + .badge-ct       { background: #5a6e28; color: #fff; }
+.inv-count-badge[data-filter="lowest"].filter-active + .badge-ct    { background: var(--green); color: #fff; }
+.inv-count-badge[data-filter="cheapest"].filter-active + .badge-ct  { background: var(--green-text); color: #fff; }
+.inv-count-badge[data-filter="high"].filter-active + .badge-ct      { background: #c04800; color: #fff; }
+.inv-count-badge[data-filter="highest"].filter-active + .badge-ct   { background: #a02020; color: #fff; }
+.inv-count-badge[data-filter="overpriced"].filter-active + .badge-ct { background: var(--red-deep); color: #fff; }
+.inv-count-badge[data-filter="watch"].filter-active + .badge-ct     { background: #b8920a; color: #fff; }
 
 /* =========================================================
    Pill badges (shared base + per-type colors)
@@ -237,28 +267,33 @@
 .card-old-badge,
 .card-high-badge,
 .card-cheapest-badge,
-.card-overpriced-badge {
+.card-overpriced-badge,
+.card-watch-badge {
     display: inline-block;
     font-size: 10.5px;
     letter-spacing: 0.06em;
     padding: 2px 8px;
-    border-radius: 999px;
+    border-radius: 4px;
 }
 
 .isrecent-badge,
-.card-recency-badge    { background: var(--amber-soft); color: var(--amber); }
+.card-recency-badge         { background: var(--amber-soft);  color: var(--amber); }
 
-.card-low-badge        { background: var(--olive-soft); color: var(--olive); }
+.card-old-badge              { background: #e8d0a8;            color: #7a5220; }
 
-.card-low-badge.card-low-badge--lowest,
-.card-cheapest-badge   { background: var(--green-soft); color: var(--green-text); }
+.card-low-badge.card-low-badge--lowest { background: var(--green-soft); color: var(--green-text); }
 
-.card-old-badge        { background: #e8d0a8; color: #7a5220; }
+.card-low-badge              { background: var(--olive-soft);  color: var(--olive); }
 
-.card-high-badge       { background: #fdd8d8; color: var(--red); }
+.card-high-badge             { background: #ffe4d0;            color: #c04800; }
 
-.card-high-badge.card-high-badge--highest,
-.card-overpriced-badge { background: var(--red); color: #fff; }
+.card-high-badge.card-high-badge--highest { background: #fdd8d8; color: var(--red); }
+
+.card-cheapest-badge         { background: var(--green);       color: #fff; }
+
+.card-overpriced-badge       { background: var(--red);         color: #fff; }
+
+.card-watch-badge            { background: #fde047;            color: #7a5c00; }
 
 
 .card-overpriced-pct {

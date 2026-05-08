@@ -54,7 +54,7 @@
 .rec-breakdown-section {
     background: var(--card);
     border: 1px solid var(--rule);
-    border-radius: 8px;
+    border-radius: 5px;
     padding: 16px 20px;
 }
 
@@ -78,7 +78,8 @@
 .card-old-badge,
 .card-high-badge,
 .card-cheapest-badge,
-.card-overpriced-badge {
+.card-overpriced-badge,
+.card-watch-badge {
     font-size: 11px;
     font-weight: 700;
     text-transform: uppercase;
@@ -180,7 +181,6 @@ em { font-style: normal; }
 }
 
 /* Responsive[cite: 3] */
-@media (max-width: 768px) {
-    .sidebar { display: none; }
+@media (max-width: 900px) {
     .content { margin-left: 0; padding: 24px 20px 48px; }
 }

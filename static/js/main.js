@@ -350,6 +350,7 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
             });
             switchMosaics(target);
             if (countEl) { var ct = this.getAttribute("data-count-text"); if (ct) countEl.textContent = ct; }
+            if (window._resetMatchCardHover) window._resetMatchCardHover();
             if (window._applyTabPage) window._applyTabPage(target);
             if (window._layoutMatchGrids) window._layoutMatchGrids();
         });
@@ -537,6 +538,66 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
             });
         });
     }, artAnimating ? 600 : 200);
+})();
+
+// Match-card hover sequencing: queue next card open until closing animation finishes
+(function() {
+    if (!document.querySelector(".match-grid")) return;
+    var activeCard = null;
+    var pendingCard = null;
+    var closeTimer = null;
+    var DURATION = 290; // matches 0.28s CSS transition + small buffer
+
+    function activate(card) {
+        clearTimeout(closeTimer);
+        closeTimer = null;
+        pendingCard = null;
+        if (activeCard && activeCard !== card) activeCard.classList.remove("match-card--active");
+        activeCard = card;
+        card.classList.add("match-card--active");
+    }
+
+    function deactivate(card) {
+        card.classList.remove("match-card--active");
+        if (activeCard === card) activeCard = null;
+        clearTimeout(closeTimer);
+        closeTimer = setTimeout(function() {
+            closeTimer = null;
+            if (pendingCard) { var next = pendingCard; pendingCard = null; activate(next); }
+        }, DURATION);
+    }
+
+    document.addEventListener("mouseover", function(e) {
+        var card = e.target.closest(".match-card:not(.match-card--back)");
+        if (!card) return;
+        var grid = card.closest(".match-grid");
+        if (grid && grid.classList.contains("match-grid--expanded")) return;
+        if (card === activeCard) return;
+        if (closeTimer) {
+            pendingCard = card;
+        } else if (activeCard) {
+            deactivate(activeCard);
+            pendingCard = card;
+        } else {
+            activate(card);
+        }
+    });
+
+    document.addEventListener("mouseout", function(e) {
+        var card = e.target.closest(".match-card:not(.match-card--back)");
+        if (!card || card.contains(e.relatedTarget)) return;
+        var grid = card.closest(".match-grid");
+        if (grid && grid.classList.contains("match-grid--expanded")) return;
+        if (pendingCard === card) { pendingCard = null; return; }
+        if (activeCard === card) deactivate(card);
+    });
+
+    window._resetMatchCardHover = function() {
+        clearTimeout(closeTimer);
+        closeTimer = null;
+        pendingCard = null;
+        if (activeCard) { activeCard.classList.remove("match-card--active"); activeCard = null; }
+    };
 })();
 
 // External link handling for pywebview (MacOS App)

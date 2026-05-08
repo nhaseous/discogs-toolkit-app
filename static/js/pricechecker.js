@@ -1,8 +1,105 @@
 (function() {
     var badgeCount = document.querySelector(".badge-count");
     if (!badgeCount) return;
+
+    // Hoisted so both watchlist and reprice blocks can read these flags
+    var repriceMode = false, reviewMode = false;
+
+    function updateBadgeCounts() {
+        var counts = {
+            recent: 0, old: 0, lowest: 0, low: 0, high: 0, highest: 0,
+            cheapest: 0, overpriced: 0, watch: 0
+        };
+        document.querySelectorAll(".result-card").forEach(function(card) {
+            var badges = (card.getAttribute("data-badges") || "").split(" ");
+            badges.forEach(function(b) { if (counts.hasOwnProperty(b)) counts[b]++; });
+        });
+        Object.keys(counts).forEach(function(key) {
+            var badge = badgeCount.querySelector(".inv-count-badge[data-filter='" + key + "']");
+            if (badge) {
+                var ct = badge.nextElementSibling;
+                if (ct && ct.classList.contains("badge-ct")) {
+                    ct.textContent = counts[key];
+                }
+            }
+        });
+    }
+
+    // --- Watchlist (own store only) ---
+    (function() {
+        var seller = new URLSearchParams(window.location.search).get("seller") || "";
+        var user = window.TOOLKIT_CONFIG ? window.TOOLKIT_CONFIG.session_user : null;
+        if (!user || !seller || user.toLowerCase() !== seller.toLowerCase()) return;
+
+        var watchBadge = badgeCount.querySelector(".inv-count-badge[data-filter='watch']");
+        if (!watchBadge) return;
+
+        document.body.classList.add("is-own-store");
+
+        var saveTimer = null;
+
+        function getWatchedIds() {
+            var ids = [];
+            document.querySelectorAll(".result-card").forEach(function(card) {
+                if ((card.getAttribute("data-badges") || "").split(" ").indexOf("watch") !== -1) {
+                    ids.push(card.id.replace("card-", ""));
+                }
+            });
+            return ids;
+        }
+
+        function scheduleSave() {
+            clearTimeout(saveTimer);
+            saveTimer = setTimeout(function() {
+                fetch("/watchlist", {
+                    method: "POST",
+                    headers: {"Content-Type": "application/json"},
+                    body: JSON.stringify({seller: seller, watchlist: getWatchedIds()})
+                });
+            }, 600);
+        }
+
+        function toggleWatch(card) {
+            var badges = (card.getAttribute("data-badges") || "").split(" ").filter(Boolean);
+            var idx = badges.indexOf("watch");
+            if (idx === -1) badges.push("watch");
+            else badges.splice(idx, 1);
+            card.setAttribute("data-badges", badges.join(" "));
+            updateBadgeCounts();
+            scheduleSave();
+        }
+
+        // Load watchlist from Firestore and apply to cards
+        fetch("/watchlist?seller=" + encodeURIComponent(seller))
+            .then(function(r) { return r.json(); })
+            .then(function(data) {
+                (data.watchlist || []).forEach(function(id) {
+                    var card = document.getElementById("card-" + id);
+                    if (!card) return;
+                    var badges = (card.getAttribute("data-badges") || "").split(" ").filter(Boolean);
+                    if (badges.indexOf("watch") === -1) {
+                        badges.push("watch");
+                        card.setAttribute("data-badges", badges.join(" "));
+                    }
+                });
+                updateBadgeCounts();
+            });
+
+        // Click any card (outside reprice/review mode) to toggle watch
+        document.querySelectorAll(".result-card").forEach(function(card) {
+            card.addEventListener("click", function(e) {
+                if (repriceMode || reviewMode) return;
+                if (e.target.tagName === "INPUT") return;
+                if (e.target.tagName === "A" || e.target.closest("a")) return;
+                toggleWatch(card);
+            });
+        });
+    })();
+
+    // --- Reprice ---
     var overpricedBadge = badgeCount.querySelector(".inv-count-badge[data-filter='overpriced']");
     if (!overpricedBadge) return;
+
     var pillsSpan = badgeCount.querySelector("span");
     var repriceControls = document.createElement("div");
     repriceControls.className = "reprice-controls";
@@ -55,9 +152,10 @@
     repriceControls.appendChild(confirmBtn);
     repriceControls.appendChild(statusEl);
     badgeCount.appendChild(repriceControls);
-    var repriceMode = false, reviewMode = false, addAllState = false, overlay = null;
     var selectedCards = new Set();
     var hiddenByReview = new Set();
+    var addAllState = false;
+    var overlay = null;
     function getSpread() {
         var v = parseFloat(spreadInput.value);
         return (!isNaN(v) && v > 0) ? v : 10;
@@ -76,24 +174,6 @@
             });
         });
     });
-    function updateBadgeCounts() {
-        var counts = {
-            recent: 0, old: 0, lowest: 0, low: 0, high: 0, highest: 0, cheapest: 0, overpriced: 0
-        };
-        document.querySelectorAll(".result-card").forEach(function(card) {
-            var badges = (card.getAttribute("data-badges") || "").split(" ");
-            badges.forEach(function(b) { if (counts.hasOwnProperty(b)) counts[b]++; });
-        });
-        Object.keys(counts).forEach(function(key) {
-            var badge = badgeCount.querySelector(".inv-count-badge[data-filter='" + key + "']");
-            if (badge) {
-                var textNode = badge.nextSibling;
-                if (textNode && textNode.nodeType === Node.TEXT_NODE) {
-                    textNode.textContent = " " + counts[key];
-                }
-            }
-        });
-    }
     function updateOverlay() {
         var needs = (repriceMode && selectedCards.size > 0) || reviewMode;
         if (needs && !overlay) {
@@ -371,7 +451,13 @@
                         var tmp = document.createElement("div");
                         tmp.innerHTML = d.inner_html;
                         while (tmp.firstChild) card.appendChild(tmp.firstChild);
-                        card.setAttribute("data-badges", d.data_badges);
+                        // Preserve watch badge through card refresh
+                        var currentBadges = (card.getAttribute("data-badges") || "").split(" ").filter(Boolean);
+                        var newBadges = d.data_badges.split(" ").filter(Boolean);
+                        if (currentBadges.indexOf("watch") !== -1 && newBadges.indexOf("watch") === -1) {
+                            newBadges.push("watch");
+                        }
+                        card.setAttribute("data-badges", newBadges.join(" "));
                         if (d.reprice_data && d.reprice_data.length) {
                             card.setAttribute("data-reprice", JSON.stringify(d.reprice_data));
                         } else {

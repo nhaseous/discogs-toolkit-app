@@ -113,14 +113,3 @@ html:has(.tool-grid-wrap) {
     max-width: 280px;
 }
 
-.tool-card--login {
-    border-color: color-mix(in srgb, var(--rust) 30%, var(--rule));
-    background: color-mix(in srgb, var(--rust) 4%, var(--card));
-
-    .tool-card-label { color: var(--rust); }
-
-    &:hover {
-        border-color: var(--rust);
-        background: color-mix(in srgb, var(--rust) 7%, var(--card));
-    }
-}
