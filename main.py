@@ -140,7 +140,7 @@ def landingpage():
         '<div class="hero-eyebrow">Discogs Toolkit</div>'
         '<h1 class="hero-title">Tools for <em>crate diggers</em>, collectors, and sellers.</h1>'
         '<p class="hero-subtitle">A small set of utilities for marketplace research '
-        'and collection matching for the Discogs platform. Dig through the shelves below.</p>'
+        'and collection matching for the Discogs platform.</p>'
         '<br><p class="hero-subtitle">\ Dev Notes \<br>'
         '01 &middot; Price Checker doesn\'t work when running on the cloud/web because webscraping gets blocked by Cloudflare. Works locally.<br>'
         '02 &middot; All good.<br>'
@@ -212,6 +212,8 @@ def pricecheckerpage():
             output = '<div id="results-area"><div id="results-main">' + results + '</div></div>'
             show_platter = True
 
+        except pricechecker.CloudflareBlockedError:
+            output = assets.CLOUDFLARE_NOTICE
         except AttributeError:
             output = "No user found."
 
@@ -580,6 +582,7 @@ def lookuppage():
         list_releases = None
         user_not_found = False
         rate_limited = False
+        cf_blocked_list = False
         collection_error = ""
         wantlist_error = ""
         lists_error = ""
@@ -614,6 +617,8 @@ def lookuppage():
                 list_releases = lookup_helper.get_list_releases(list_id, scraper)
             except lookup_helper.RateLimitError:
                 rate_limited = True
+            except lookup_helper.CloudflareBlockedError:
+                cf_blocked_list = True
 
         end_time = time.time()
         loadtime = "Lookup time: {0} seconds".format(round(end_time - start_time, 2))
@@ -720,13 +725,16 @@ def lookuppage():
                     '</div>'
                     '</a>'
                 )
-                lists_content = (
-                    '<div class="match-grid">' + back_card_html + '</div>'
-                    + ('<script type="application/json" class="lookup-data" data-tab="lists" data-show-stats="0">'
-                       + _json.dumps(list_releases or [], separators=(',', ':')).replace('</', r'<\/')
-                       + '</script>')
-                    + ('' if list_releases else '<p class="match-empty">This list is empty.</p>')
-                )
+                if cf_blocked_list:
+                    lists_content = '<div class="match-grid">' + back_card_html + '</div>' + assets.CLOUDFLARE_NOTICE
+                else:
+                    lists_content = (
+                        '<div class="match-grid">' + back_card_html + '</div>'
+                        + ('<script type="application/json" class="lookup-data" data-tab="lists" data-show-stats="0">'
+                           + _json.dumps(list_releases or [], separators=(',', ':')).replace('</', r'<\/')
+                           + '</script>')
+                        + ('' if list_releases else '<p class="match-empty">This list is empty.</p>')
+                    )
             elif lists_error:
                 lists_content = '<div class="lookup-notice">' + _html.escape(lists_error) + '</div>'
             else:

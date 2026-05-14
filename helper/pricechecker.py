@@ -15,6 +15,17 @@ from helper.common import API_HEADERS as _HEADERS
 
 ## Classes ##
 
+class CloudflareBlockedError(Exception):
+    pass
+
+def _is_cf_blocked(resp):
+    if resp.status_code in (403, 503):
+        return 'cloudflare' in resp.text.lower()
+    if resp.status_code == 200:
+        text = resp.text.lower()
+        return 'cloudflare' in text and any(m in text for m in ('cf-browser-verification', 'just a moment', 'sorry, you have been blocked'))
+    return False
+
 class FormattedEntry: # Formatted marketplace entry for a single release and its listings
 
     def __init__(self,title,url,imgUrl,listings,place,total,lastSold,daysAgo,yearsAgo=None,index=0,price_badges="",listing_ids=None,reprice_data=None):
@@ -72,17 +83,19 @@ class FormattedEntry: # Formatted marketplace entry for a single release and its
             low_badge = ' &middot; <span class="card-high-badge">HIGH</span>'
         else:
             low_badge = ''
+        release_id = self.url.split('/sell/release/')[1].split('?')[0]
+        sell_history_url = 'https://www.discogs.com/sell/history/{0}'.format(release_id)
         return (
             '<div class="card-inner">'
             '<div class="card-title"><a href="{0}">{1}</a></div>'
             '<div class="card-listings">{2}</div>'
             '<div class="card-total">'
             '<span>Total listings: {3}{6}</span>'
-            '<span class="card-last-sold">{5}</span>'
+            '<a href="{7}" class="card-last-sold" target="_blank" rel="noopener noreferrer">{5}</a>'
             '</div>'
             '</div>'
             '{4}'
-        ).format(self.url, self.title, self.listings, self.total, img_html, last_sold_html, low_badge)
+        ).format(self.url, self.title, self.listings, self.total, img_html, last_sold_html, low_badge, sell_history_url)
 
 ## Get ##
 
@@ -143,7 +156,10 @@ def get_listings(scraper, inventory_list, sorted_inventory_list, username, relea
     listings = []
 
     URL = "https://www.discogs.com/sell/release/{0}?ships_from=United+States&sort=price%2Casc".format(item_id)
-    html = scraper.get(URL).content
+    _resp = scraper.get(URL)
+    if _is_cf_blocked(_resp):
+        raise CloudflareBlockedError()
+    html = _resp.content
     soup = BeautifulSoup(html, 'html.parser')
 
     last_sold, days_ago, years_ago = "", None, None

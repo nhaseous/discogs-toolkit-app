@@ -24,6 +24,17 @@ class ListPrivateError(Exception):
 class RateLimitError(Exception):
     pass
 
+class CloudflareBlockedError(Exception):
+    pass
+
+def _is_cf_blocked(resp):
+    if resp.status_code in (403, 503):
+        return 'cloudflare' in resp.text.lower()
+    if resp.status_code == 200:
+        text = resp.text.lower()
+        return 'cloudflare' in text and any(m in text for m in ('cf-browser-verification', 'just a moment', 'sorry, you have been blocked'))
+    return False
+
 
 def get_collection(username, scraper, auth=None):
     url = "https://api.discogs.com/users/{0}/collection/folders/0/releases".format(username)
@@ -156,6 +167,8 @@ def get_list_releases(list_id, scraper):
             for future in as_completed(futures):
                 try:
                     page_cache, _ = future.result()
+                except CloudflareBlockedError:
+                    raise
                 except Exception:
                     continue
                 if page_cache:
@@ -172,6 +185,8 @@ def _scrape_list_page(base_url, scraper, page):
         return None, 1
     if resp.status_code == 429:
         raise RateLimitError()
+    if _is_cf_blocked(resp):
+        raise CloudflareBlockedError()
     if resp.status_code != 200:
         return None, 1
 

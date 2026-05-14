@@ -25,6 +25,13 @@ RATE_LIMIT_NOTICE = (
     '</div>'
 )
 
+CLOUDFLARE_NOTICE = (
+    '<div class="lookup-notice lookup-notice--error">'
+    'Cloudflare blocked the request. This can happen after repeated scraping. '
+    'Wait a moment and try again, or use the desktop app for more reliable access.'
+    '</div>'
+)
+
 BACK_ARROW_SVG = (
     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" '
     'stroke-width="2" stroke-linecap="round" stroke-linejoin="round">'
