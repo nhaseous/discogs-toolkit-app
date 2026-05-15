@@ -81,6 +81,9 @@ def get_collection_insights(items, total_value=None):
         'top_genres': top_genres,
         'top_subgenres': top_styles,
         'top_artists': top_artists,
+        'genre_total': sum(genre_counts.values()),
+        'style_total': sum(style_counts.values()),
+        'artist_total': sum(artist_counts.values()),
         'decades': decades_sorted,
         'genre_pie': genre_pie,
         'genre_values': genre_values,
@@ -118,10 +121,19 @@ def render_insights_dashboard(insights):
     pie_html = _pie_section("Genre Breakdown", insights['genre_pie'])
 
     # Top 5 Tables
-    def top_table(title, data, value_suffix="", is_currency=False):
+    def top_table(title, data, value_suffix="", is_currency=False, total=None):
         rows = ""
         for name, val in data:
-            val_str = f"${val:,.2f}" if is_currency else f"{val}{value_suffix}"
+            if is_currency:
+                val_str = f"${val:,.2f}"
+            elif total:
+                pct = val / total * 100
+                val_str = (
+                    f'{val}{value_suffix}'
+                    f'<span style="color:var(--ink-muted);margin-left:6px">{pct:.0f}%</span>'
+                )
+            else:
+                val_str = f"{val}{value_suffix}"
             rows += (
                 f'<tr>'
                 f'<td class="rec-sf-name">{_html.escape(name)}</td>'
@@ -147,9 +159,9 @@ def render_insights_dashboard(insights):
 
     breakdown_html = (
         '<div class="rec-breakdown">' +
-        top_table("Top Genres", insights['top_genres'], " items") +
-        top_table("Top Sub-genres", insights['top_subgenres'], " items") +
-        top_table("Top Artists", insights['top_artists'], " items") +
+        top_table("Top Genres", insights['top_genres'], " items", total=insights['genre_total']) +
+        top_table("Top Sub-genres", insights['top_subgenres'], " items", total=insights['style_total']) +
+        top_table("Top Artists", insights['top_artists'], " items", total=insights['artist_total']) +
         '</div>' + 
         value_genre_html
     )

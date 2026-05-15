@@ -23,6 +23,12 @@
             <h3 class="tool-card-title">Price Checker</h3>
             <p class="tool-card-desc">See where a seller's listings rank against the rest of the marketplace.</p>
         </a>
+        {% else %}
+        <div class="tool-card tool-card--disabled" data-tooltip="Not available on web — works locally and in the macOS app only">
+            <div class="tool-card-label">01 &middot; Marketplace</div>
+            <h3 class="tool-card-title">Price Checker</h3>
+            <p class="tool-card-desc">See where a seller's listings rank against the rest of the marketplace.</p>
+        </div>
         {% endif %}
         
         <a href="/matcher" class="tool-card">

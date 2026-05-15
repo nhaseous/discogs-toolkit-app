@@ -632,9 +632,9 @@
     td { padding: 5px 8px 5px 0; vertical-align: middle; }
 }
 
-.rec-sf-name  { color: var(--ink); font-weight: 500; width: 40%; }
+.rec-sf-name  { color: var(--ink); font-weight: 500; width: 60%; }
 .rec-sf-count { color: var(--ink-muted); font-size: 12px; width: 10%; text-align: right; padding-right: 12px !important; }
-.rec-sf-money { color: var(--ink); font-variant-numeric: tabular-nums; text-align: right; padding-right: 6px !important; }
+.rec-sf-money { color: var(--ink); font-variant-numeric: tabular-nums; width: 40%; text-align: right; padding-right: 6px !important; }
 .rec-sf-label { color: var(--ink-muted); font-size: 11px; }
 .rec-sf-header { background: var(--paper-alt); }
 

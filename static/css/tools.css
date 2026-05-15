@@ -113,3 +113,35 @@ html:has(.tool-grid-wrap) {
     max-width: 280px;
 }
 
+.tool-card--disabled {
+    opacity: 0.5;
+    cursor: default;
+
+    &::after { content: none; }
+
+    &::before {
+        content: attr(data-tooltip);
+        position: absolute;
+        inset: 0;
+        background: color-mix(in srgb, var(--paper) 88%, transparent);
+        display: grid;
+        place-items: center;
+        text-align: center;
+        font-size: 13px;
+        line-height: 1.4;
+        color: var(--ink-soft);
+        padding: 20px;
+        opacity: 0;
+        transition: opacity 0.15s ease;
+    }
+
+    &:hover {
+        opacity: 1;
+        transform: none;
+        box-shadow: none;
+        border-color: var(--rule);
+
+        &::before { opacity: 1; }
+    }
+}
+
