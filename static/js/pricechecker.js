@@ -14,14 +14,16 @@
             var badges = (card.getAttribute("data-badges") || "").split(" ");
             badges.forEach(function(b) { if (counts.hasOwnProperty(b)) counts[b]++; });
         });
-        Object.keys(counts).forEach(function(key) {
-            var badge = badgeCount.querySelector(".inv-count-badge[data-filter='" + key + "']");
-            if (badge) {
-                var ct = badge.nextElementSibling;
-                if (ct && ct.classList.contains("badge-ct")) {
-                    ct.textContent = counts[key];
+        document.querySelectorAll(".badge-count").forEach(function(bc) {
+            Object.keys(counts).forEach(function(key) {
+                var badge = bc.querySelector(".inv-count-badge[data-filter='" + key + "']");
+                if (badge) {
+                    var ct = badge.nextElementSibling;
+                    if (ct && ct.classList.contains("badge-ct")) {
+                        ct.textContent = counts[key];
+                    }
                 }
-            }
+            });
         });
     }
 
@@ -59,17 +61,52 @@
             }, 600);
         }
 
+        function makeEyeBtn() {
+            var btn = document.createElement("button");
+            btn.className = "card-watch-toggle";
+            btn.title = "Add to watchlist";
+            btn.innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"/><circle cx="12" cy="12" r="3"/></svg>';
+            return btn;
+        }
+
+        function makeWatchBadge() {
+            var span = document.createElement("span");
+            span.className = "card-watch-badge-inline";
+            span.innerHTML = 'WATCH<span class="card-watch-x">&times;</span>';
+            return span;
+        }
+
+        function setCardWatched(card, watched) {
+            var numSpan = card.querySelector(".card-number > span");
+            if (!numSpan) return;
+            var existing = numSpan.querySelector(".card-watch-toggle, .card-watch-badge-inline");
+            if (existing) existing.remove();
+            var el = watched ? makeWatchBadge() : makeEyeBtn();
+            el.addEventListener("click", function(e) {
+                e.stopPropagation();
+                toggleWatch(card);
+            });
+            numSpan.appendChild(el);
+        }
+
         function toggleWatch(card) {
             var badges = (card.getAttribute("data-badges") || "").split(" ").filter(Boolean);
             var idx = badges.indexOf("watch");
-            if (idx === -1) badges.push("watch");
+            var willWatch = idx === -1;
+            if (willWatch) badges.push("watch");
             else badges.splice(idx, 1);
             card.setAttribute("data-badges", badges.join(" "));
+            setCardWatched(card, willWatch);
             updateBadgeCounts();
             scheduleSave();
         }
 
-        // Load watchlist from Firestore and apply to cards
+        // Insert eye icons into all cards
+        document.querySelectorAll(".result-card").forEach(function(card) {
+            setCardWatched(card, false);
+        });
+
+        // Load watchlist from Firestore and apply watched state
         fetch("/watchlist?seller=" + encodeURIComponent(seller))
             .then(function(r) { return r.json(); })
             .then(function(data) {
@@ -81,19 +118,10 @@
                         badges.push("watch");
                         card.setAttribute("data-badges", badges.join(" "));
                     }
+                    setCardWatched(card, true);
                 });
                 updateBadgeCounts();
             });
-
-        // Click any card (outside reprice/review mode) to toggle watch
-        document.querySelectorAll(".result-card").forEach(function(card) {
-            card.addEventListener("click", function(e) {
-                if (repriceMode || reviewMode) return;
-                if (e.target.tagName === "INPUT") return;
-                if (e.target.tagName === "A" || e.target.closest("a")) return;
-                toggleWatch(card);
-            });
-        });
     })();
 
     // --- Reprice ---

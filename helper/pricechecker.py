@@ -472,6 +472,7 @@ def print_mosaic(inventory_list):
     overpriced_count = sum(1 for e in inventory_list if e and 'card-overpriced-badge' in getattr(e, 'price_badges', ''))
 
     badge_summary = (
+        '<span class="badge-unit"><span class="card-watch-badge inv-count-badge" data-filter="watch" data-tooltip="In your watchlist">WATCH</span><span class="badge-ct">0</span></span>'
         '<span class="badge-unit"><span class="isrecent-badge inv-count-badge" data-filter="recent" data-tooltip="Last sold within the past 10 days">RECENT</span><span class="badge-ct">{0}</span></span>'
         '<span class="badge-unit"><span class="card-old-badge inv-count-badge" data-filter="old" data-tooltip="Last sold over a year ago">OLD</span><span class="badge-ct">{1}</span></span>'
         '<span class="badge-unit"><span class="card-low-badge card-low-badge--lowest inv-count-badge" data-filter="lowest" data-tooltip="Only listing on the market">LOWEST</span><span class="badge-ct">{3}</span></span>'
@@ -480,7 +481,6 @@ def print_mosaic(inventory_list):
         '<span class="badge-unit"><span class="card-high-badge card-high-badge--highest inv-count-badge" data-filter="highest" data-tooltip="10 marketplace listings or more">HIGHEST</span><span class="badge-ct">{5}</span></span>'
         '<span class="badge-unit"><span class="card-cheapest-badge inv-count-badge" data-filter="cheapest" data-tooltip="Cheapest listing for its condition">CHEAPEST</span><span class="badge-ct">{6}</span></span>'
         '<span class="badge-unit"><span class="card-overpriced-badge inv-count-badge" data-filter="overpriced" data-tooltip="More than 10% above cheapest for its condition">OVERPRICED</span><span class="badge-ct">{7}</span></span>'
-        '<span class="badge-unit"><span class="card-watch-badge inv-count-badge" data-filter="watch" data-tooltip="In your watchlist">WATCH</span><span class="badge-ct">0</span></span>'
     ).format(recent_count, old_count, low_count, lowest_count, high_count, highest_count, cheapest_count, overpriced_count)
 
     count_div = (

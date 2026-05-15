@@ -211,10 +211,9 @@
 .badge-unit {
     display: inline-flex;
     align-items: center;
-    margin-left: 10px;
 }
 
-.badge-unit:first-child { margin-left: 0; }
+.badge-unit:has(.filter-active) { margin-right: 10px; }
 
 .inv-count-badge {
     cursor: pointer;
