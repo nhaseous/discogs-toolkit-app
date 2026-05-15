@@ -5,12 +5,20 @@
     // Hoisted so both watchlist and reprice blocks can read these flags
     var repriceMode = false, reviewMode = false;
 
+    function getActiveContainer() {
+        var sorted = document.getElementById('pc-list-sorted');
+        if (sorted && sorted.style.display !== 'none') return sorted;
+        var unsorted = document.getElementById('pc-list-unsorted');
+        if (unsorted) return unsorted;
+        return document;
+    }
+
     function updateBadgeCounts() {
         var counts = {
             recent: 0, old: 0, lowest: 0, low: 0, high: 0, highest: 0,
             cheapest: 0, overpriced: 0, watch: 0
         };
-        document.querySelectorAll(".result-card").forEach(function(card) {
+        getActiveContainer().querySelectorAll(".result-card").forEach(function(card) {
             var badges = (card.getAttribute("data-badges") || "").split(" ");
             badges.forEach(function(b) { if (counts.hasOwnProperty(b)) counts[b]++; });
         });
@@ -42,7 +50,7 @@
 
         function getWatchedIds() {
             var ids = [];
-            document.querySelectorAll(".result-card").forEach(function(card) {
+            getActiveContainer().querySelectorAll(".result-card").forEach(function(card) {
                 if ((card.getAttribute("data-badges") || "").split(" ").indexOf("watch") !== -1) {
                     ids.push(card.id.replace("card-", ""));
                 }
@@ -97,6 +105,16 @@
             else badges.splice(idx, 1);
             card.setAttribute("data-badges", badges.join(" "));
             setCardWatched(card, willWatch);
+            // Sync to same release in the other container
+            document.querySelectorAll('[id="' + card.id + '"]').forEach(function(c) {
+                if (c === card) return;
+                var cb = (c.getAttribute("data-badges") || "").split(" ").filter(Boolean);
+                var ci = cb.indexOf("watch");
+                if (willWatch && ci === -1) cb.push("watch");
+                else if (!willWatch && ci !== -1) cb.splice(ci, 1);
+                c.setAttribute("data-badges", cb.join(" "));
+                setCardWatched(c, willWatch);
+            });
             updateBadgeCounts();
             scheduleSave();
         }
@@ -106,22 +124,37 @@
             setCardWatched(card, false);
         });
 
-        // Load watchlist from Firestore and apply watched state
+        // Load watchlist from Firestore and apply watched state to both containers
         fetch("/watchlist?seller=" + encodeURIComponent(seller))
             .then(function(r) { return r.json(); })
             .then(function(data) {
                 (data.watchlist || []).forEach(function(id) {
-                    var card = document.getElementById("card-" + id);
-                    if (!card) return;
-                    var badges = (card.getAttribute("data-badges") || "").split(" ").filter(Boolean);
-                    if (badges.indexOf("watch") === -1) {
-                        badges.push("watch");
-                        card.setAttribute("data-badges", badges.join(" "));
-                    }
-                    setCardWatched(card, true);
+                    document.querySelectorAll('[id="card-' + id + '"]').forEach(function(card) {
+                        var badges = (card.getAttribute("data-badges") || "").split(" ").filter(Boolean);
+                        if (badges.indexOf("watch") === -1) {
+                            badges.push("watch");
+                            card.setAttribute("data-badges", badges.join(" "));
+                        }
+                        setCardWatched(card, true);
+                    });
                 });
                 updateBadgeCounts();
             });
+    })();
+
+    // --- Sort toggle ---
+    (function() {
+        var sortToggle = document.getElementById('sort');
+        var unsortedDiv = document.getElementById('pc-list-unsorted');
+        var sortedDiv = document.getElementById('pc-list-sorted');
+        if (!sortToggle || !unsortedDiv || !sortedDiv) return;
+        sortToggle.addEventListener('change', function() {
+            if (repriceMode || reviewMode) { this.checked = !this.checked; return; }
+            var showSorted = this.checked;
+            unsortedDiv.style.display = showSorted ? 'none' : '';
+            sortedDiv.style.display = showSorted ? '' : 'none';
+            updateBadgeCounts();
+        });
     })();
 
     // --- Reprice ---
@@ -370,7 +403,7 @@
     }
     addAllBtn.addEventListener("click", function() {
         if (!addAllState) {
-            document.querySelectorAll(".result-card").forEach(function(card) {
+            getActiveContainer().querySelectorAll(".result-card").forEach(function(card) {
                 if (card.style.display !== "none" && !card.classList.contains("reprice-selected")) {
                     selectCard(card); selectedCards.add(card);
                 }

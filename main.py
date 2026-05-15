@@ -205,10 +205,14 @@ def pricecheckerpage():
                     f.result()
 
             mosaic = pricechecker.print_mosaic(inventory_list)
-            if request.args.get("sort","") == "yes":
-                results = mosaic + pricechecker.print_sorted_list(sorted_inventory_list)
-            else:
-                results = mosaic + pricechecker.print_list(inventory_list)
+            sort_active = request.args.get("sort", "") == "yes"
+            unsorted_html = pricechecker.print_list(inventory_list)
+            sorted_html = pricechecker.print_sorted_list(sorted_inventory_list)
+            results = (
+                mosaic
+                + '<div id="pc-list-unsorted"' + (' style="display:none"' if sort_active else '') + '>' + unsorted_html + '</div>'
+                + '<div id="pc-list-sorted"' + ('' if sort_active else ' style="display:none"') + '>' + sorted_html + '</div>'
+            )
             output = '<div id="results-area"><div id="results-main">' + results + '</div></div>'
             show_platter = True
 
