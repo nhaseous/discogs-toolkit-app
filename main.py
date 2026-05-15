@@ -2,7 +2,7 @@ from dotenv import load_dotenv
 load_dotenv()
 
 from flask import Flask, request, render_template, session, redirect
-from helper import pricechecker, matcher, lookup as lookup_helper, records as records_helper, firestore_db as _firestore_db
+from helper import pricechecker, matcher, lookup as lookup_helper, records as records_helper, firestore_db as _firestore_db, insights as insights_helper, api as api_helper
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import cloudscraper, time, html as _html, os, requests as _requests, json as _json
 from datetime import datetime, timedelta
@@ -451,6 +451,7 @@ def lookuppage():
     collection_error, wantlist_error, lists_error = "", "", ""
     loadtime, searched_at = "", ""
     has_results = bool(username)
+    insights_html = ""
 
     if username:
         start_time = time.time()
@@ -462,7 +463,13 @@ def lookuppage():
             'wantlist':   lambda: lookup_helper.get_wantlist(username, scraper, auth=auth),
             'lists':      lambda: lookup_helper.get_lists(username, scraper, auth=auth),
         }
-        with ThreadPoolExecutor(max_workers=3) as _ex:
+        
+        # New: If looking at self, fetch collection value (1 extra call)
+        total_value = None
+        if session.get('discogs_username') and session['discogs_username'].lower() == username.lower():
+            _fetch_tasks['value'] = lambda: api_helper.get_collection_value(username, scraper, auth=auth)
+
+        with ThreadPoolExecutor(max_workers=4) as _ex:
             _futures = {_ex.submit(fn): name for name, fn in _fetch_tasks.items()}
             for _future in as_completed(_futures):
                 _name = _futures[_future]
@@ -471,6 +478,7 @@ def lookuppage():
                     if _name == 'collection': collection = _result
                     elif _name == 'wantlist':   wantlist   = _result
                     elif _name == 'lists':      lists      = _result
+                    elif _name == 'value':      total_value = _result
                 except lookup_helper.UserNotFoundError:
                     user_not_found = True
                 except lookup_helper.CollectionPrivateError:
@@ -481,6 +489,10 @@ def lookuppage():
                     lists_error = "This user's lists are not public."
                 except lookup_helper.RateLimitError:
                     rate_limited = True
+
+        if collection and not user_not_found:
+            insights = insights_helper.get_collection_insights(collection, total_value=total_value)
+            insights_html = insights_helper.render_insights_dashboard(insights)
 
         if list_id and not user_not_found and not rate_limited:
             try:
@@ -510,6 +522,7 @@ def lookuppage():
         loadtime=loadtime,
         searched_at=searched_at,
         has_results=has_results,
+        insights_html=insights_html,
         content_class='has-results' if has_results else '',
         show_platter=has_results,
         title='User Lookup'

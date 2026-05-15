@@ -109,6 +109,17 @@ def fetch_all_pages(url, items_key, scraper, params=None, auth=None):
                     
     return results
 
+def get_collection_value(username, scraper, auth=None):
+    """
+    Fetches the minimum, median, and maximum value of a user's collection.
+    Requires authentication as the owner.
+    """
+    url = "https://api.discogs.com/users/{0}/collection/value".format(username)
+    resp = request_with_retry(scraper, "GET", url, headers=_API_HEADERS, auth=auth)
+    if resp and resp.status_code == 200:
+        return _safe_json(resp)
+    return None
+
 def clean_artist(artist_info):
     name = artist_info.get("anv") or artist_info.get("name", "")
     return re.sub(r'\s*\(\d+\)$', '', name).strip()

@@ -602,6 +602,24 @@
 
 .rec-stat-sub { font-size: 11px; color: var(--ink-muted); margin-top: 3px; }
 
+/* Collection Insights Dashboard Overrides */
+#collection-insights-dash {
+    margin-top: 20px;
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+#collection-insights-dash .rec-stat-grid {
+    margin-bottom: 0; /* Let the container gap handle it */
+}
+
+#collection-insights-dash .rec-breakdown {
+    grid-template-columns: repeat(3, 1fr);
+    margin-bottom: 0;
+}
+
 .rec-breakdown-section--wide { grid-column: 1 / -1; }
 
 .rec-breakdown-title { margin-bottom: 10px; }

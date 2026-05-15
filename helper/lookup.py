@@ -30,6 +30,9 @@ def get_collection(username, scraper, auth=None):
         fmt_descriptions = ", ".join(fmt_info.get("descriptions") or [])
         fmt_text = fmt_info.get("text", "")
         release_id = info.get("id", "")
+        
+        # New: include community stats and metadata for aggregation
+        community = r.get("community", {})
         results.append({
             "artist": artist,
             "title": title,
@@ -40,6 +43,11 @@ def get_collection(username, scraper, auth=None):
             "cover_image": info.get("cover_image", ""),
             "url": "https://www.discogs.com/release/{0}".format(release_id) if release_id else "",
             "stats": "",
+            "genres": info.get("genres") or [],
+            "styles": info.get("styles") or [],
+            "year": info.get("year", 0),
+            "have": community.get("have", 0),
+            "want": community.get("want", 0),
         })
     return results
 

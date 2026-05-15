@@ -45,6 +45,8 @@
             User <b>{{ username }}</b> was not found on Discogs. Check the username and try again.
         </div>
     {% else %}
+        {{ insights_html | safe }}
+
         <div class="lookup-mosaic-wrap">
             <div id="lookup-mosaic-collection" class="lookup-mosaic mosaic">
                 {% for m in collection %}{% if m.thumb %}
