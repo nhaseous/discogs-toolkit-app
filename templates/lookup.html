@@ -1,1 +1,141 @@
 {% extends "base.html" %}
+{% from "macros.html" import lookup_grid, list_index with context %}
+
+{% block extra_js %}
+<script src="/static/js/records.js"></script>
+{% endblock %}
+
+{% block content %}
+<form id="lookup-form" class="search-bar" action="" method="get" role="search">
+    <span class="search-bar-icon" aria-hidden="true">
+        {% if search_icon_svg %}
+            {{ search_icon_svg | safe }}
+        {% else %}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        {% endif %}
+    </span>
+    <div class="search-bar-segment">
+        <label class="search-bar-label" for="username">Username</label>
+        <input type="text" id="username" name="username" placeholder="Discogs username" autocomplete="off" value="{{ username or '' }}">
+    </div>
+    <button type="submit" class="search-bar-submit">Search</button>
+</form>
+<div id="spinner"><span id="spinner-icon"></span>Looking up user&hellip;</div>
+
+<div class="page-header">
+    <div class="page-eyebrow">Collections</div>
+    <h2>User <em>Lookup</em></h2>
+</div>
+
+{% if has_results %}
+    <div class="meta">
+        <span>
+            <b>User: {{ username }}</b>
+            {% if loadtime %} &nbsp;&#183;&nbsp; <span id="lookup-count"></span>{% endif %}
+        </span>
+        {% if loadtime %}
+            <span>Lookup time: {{ loadtime }} seconds &nbsp;&#124;&nbsp; {{ searched_at }}</span>
+        {% endif %}
+    </div>
+
+    {% if rate_limited %}
+        {{ rate_limit_notice | safe }}
+    {% elif user_not_found %}
+        <div class="lookup-notice lookup-notice--error">
+            User <b>{{ username }}</b> was not found on Discogs. Check the username and try again.
+        </div>
+    {% else %}
+        <div class="lookup-mosaic-wrap">
+            <div id="lookup-mosaic-collection" class="lookup-mosaic mosaic">
+                {% for m in collection %}{% if m.thumb %}
+                    <a class="mosaic-item" href="{{ m.url or '#' }}" target="_blank" rel="noopener noreferrer"><img src="{{ m.thumb }}" alt="" loading="lazy" class="mosaic-thumb"></a>
+                {% endif %}{% endfor %}
+            </div>
+            <div id="lookup-mosaic-wantlist" class="lookup-mosaic mosaic lookup-mosaic--inactive">
+                {% for m in wantlist %}{% if m.thumb %}
+                    <a class="mosaic-item" href="{{ m.url or '#' }}" target="_blank" rel="noopener noreferrer"><img src="{{ m.thumb }}" alt="" loading="lazy" class="mosaic-thumb"></a>
+                {% endif %}{% endfor %}
+            </div>
+            <div id="lookup-mosaic-lists" class="lookup-mosaic mosaic lookup-mosaic--inactive">
+                {% for m in list_releases %}{% if m.thumb %}
+                    <span class="mosaic-item"><img src="{{ m.thumb }}" alt="" loading="lazy" class="mosaic-thumb"></span>
+                {% endif %}{% endfor %}
+            </div>
+        </div>
+
+        <div class="lookup-tabs-row">
+            <div class="lookup-tabs">
+                <button class="lookup-tab active" data-tab="collection" data-count-text="{{ collection | length }} item{{ 's' if collection|length != 1 else '' }}">Collection ({{ collection | length }})</button>
+                <button class="lookup-tab" data-tab="wantlist" data-count-text="{{ wantlist | length }} item{{ 's' if wantlist|length != 1 else '' }}">Wantlist ({{ wantlist | length }})</button>
+                <button class="lookup-tab{{ ' active' if list_id else '' }}" data-tab="lists" data-count-text="{{ list_releases | length if list_id else lists | length }} {{ 'release' if list_id else 'list' }}{{ 's' if (list_releases if list_id else lists)|length != 1 else '' }}">Lists ({{ lists | length }})</button>
+            </div>
+            <div class="lookup-pagination" id="lookup-pagination">
+                <button class="pag-expand-btn" id="pag-expand-btn" type="button" title="Expand all cards">
+                    <span class="pag-eye pag-eye--closed">{{ eye_closed_svg | safe }}</span>
+                    <span class="pag-eye pag-eye--open">{{ eye_open_svg | safe }}</span>
+                </button>
+                <div class="pag-select" id="pag-size-wrap">
+                    <button class="pag-select-btn" id="pag-size-btn" type="button">
+                        <span id="pag-size-val">50</span>
+                        <span class="pag-select-caret">&#9662;</span>
+                    </button>
+                    <div class="pag-select-menu" id="pag-size-menu">
+                        <button class="pag-select-opt" type="button" data-value="10">10</button>
+                        <button class="pag-select-opt" type="button" data-value="25">25</button>
+                        <button class="pag-select-opt pag-select-opt--active" type="button" data-value="50">50</button>
+                        <button class="pag-select-opt" type="button" data-value="100">100</button>
+                    </div>
+                </div>
+                <div class="pag-divider"></div>
+                <button class="pag-btn" id="pag-prev">&#8249;</button>
+                <span class="pag-label" id="pag-label">1 / 1</span>
+                <button class="pag-btn" id="pag-next">&#8250;</button>
+            </div>
+        </div>
+
+        <div id="lookup-panel-collection" class="lookup-panel">
+            {% if collection_error %}
+                <div class="lookup-notice">{{ collection_error }}</div>
+            {% elif collection %}
+                <div class="match-grid"></div>
+                <script type="application/json" class="lookup-data" data-tab="collection" data-show-stats="0">{{ collection | tojson | safe }}</script>
+            {% else %}
+                <p class="match-empty">This collection is empty.</p>
+            {% endif %}
+        </div>
+
+        <div id="lookup-panel-wantlist" class="lookup-panel" style="display:none">
+            {% if wantlist_error %}
+                <div class="lookup-notice">{{ wantlist_error }}</div>
+            {% elif wantlist %}
+                <div class="match-grid"></div>
+                <script type="application/json" class="lookup-data" data-tab="wantlist" data-show-stats="1">{{ wantlist | tojson | safe }}</script>
+            {% else %}
+                <p class="match-empty">This wantlist is empty.</p>
+            {% endif %}
+        </div>
+
+        <div id="lookup-panel-lists" class="lookup-panel" {{ 'style="display:none"' if not list_id else '' }}>
+            {% if list_id %}
+                <div class="match-grid">
+                    <a href="/lookup?username={{ username }}" class="match-card match-card--back">
+                        <div class="match-card-art">
+                            <div class="match-card-placeholder">{{ back_arrow_svg | safe }}</div>
+                        </div>
+                    </a>
+                </div>
+                {% if cf_blocked_list %}
+                    {{ cloudflare_notice | safe }}
+                {% else %}
+                    <script type="application/json" class="lookup-data" data-tab="lists" data-show-stats="0">{{ list_releases | tojson | safe }}</script>
+                    {% if not list_releases %}<p class="match-empty">This list is empty.</p>{% endif %}
+                {% endif %}
+            {% elif lists_error %}
+                <div class="lookup-notice">{{ lists_error }}</div>
+            {% else %}
+                {{ list_index(lists, username) }}
+            {% endif %}
+        </div>
+    {% endif %}
+{% endif %}
+{% endblock %}

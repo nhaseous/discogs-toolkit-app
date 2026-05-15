@@ -1,0 +1,109 @@
+{% from "macros.html" import pricechecker_card with context %}
+
+<div id="results-area">
+    <div id="results-main">
+        {% if inventory_list %}
+            <div id="results-mosaic" class="mosaic">
+                {% for entry in inventory_list %}
+                    {% if entry and entry.imgUrl %}
+                        <a href="#card-{{ entry.url.split('/sell/release/')[1].split('?')[0] }}" class="mosaic-item">
+                            <img src="{{ entry.imgUrl }}" alt="" class="mosaic-thumb">
+                        </a>
+                    {% endif %}
+                {% endfor %}
+            </div>
+
+            <div class="badge-count">
+                <span>
+                    {% set stats = get_inventory_stats(inventory_list) %}
+                    <span class="badge-unit"><span class="card-watch-badge inv-count-badge" data-filter="watch" data-tooltip="In your watchlist">WATCH</span><span class="badge-ct">0</span></span>
+                    <span class="badge-unit"><span class="isrecent-badge inv-count-badge" data-filter="recent" data-tooltip="Last sold within the past 10 days">RECENT</span><span class="badge-ct">{{ stats.recent }}</span></span>
+                    <span class="badge-unit"><span class="card-old-badge inv-count-badge" data-filter="old" data-tooltip="Last sold over a year ago">OLD</span><span class="badge-ct">{{ stats.old }}</span></span>
+                    <span class="badge-unit"><span class="card-low-badge card-low-badge--lowest inv-count-badge" data-filter="lowest" data-tooltip="Only listing on the market">LOWEST</span><span class="badge-ct">{{ stats.lowest }}</span></span>
+                    <span class="badge-unit"><span class="card-low-badge inv-count-badge" data-filter="low" data-tooltip="3 marketplace listings or less">LOW</span><span class="badge-ct">{{ stats.low }}</span></span>
+                    <span class="badge-unit"><span class="card-high-badge inv-count-badge" data-filter="high" data-tooltip="5 marketplace listings or more">HIGH</span><span class="badge-ct">{{ stats.high }}</span></span>
+                    <span class="badge-unit"><span class="card-high-badge card-high-badge--highest inv-count-badge" data-filter="highest" data-tooltip="10 marketplace listings or more">HIGHEST</span><span class="badge-ct">{{ stats.highest }}</span></span>
+                    <span class="badge-unit"><span class="card-cheapest-badge inv-count-badge" data-filter="cheapest" data-tooltip="Cheapest listing for its condition">CHEAPEST</span><span class="badge-ct">{{ stats.cheapest }}</span></span>
+                    <span class="badge-unit"><span class="card-overpriced-badge inv-count-badge" data-filter="overpriced" data-tooltip="More than 10% above cheapest for its condition">OVERPRICED</span><span class="badge-ct">{{ stats.overpriced }}</span></span>
+                </span>
+            </div>
+
+            <div id="pc-list-unsorted" {% if sort_active %}style="display:none"{% endif %}>
+                {% for entry in inventory_list %}
+                    {{ pricechecker_card(entry, loop.index) }}
+                {% endfor %}
+            </div>
+
+            <div id="pc-list-sorted" {% if not sort_active %}style="display:none"{% endif %}>
+                <div class="sorted-results">
+                    <div class="place-summary">
+                        <div class="place-summary-title">Place Summary</div>
+                        {% for group in sorted_inventory_list %}
+                            {% if group %}
+                                <a href="#place-{{ loop.index }}" class="place-summary-link">{{ loop.index | ordinal }}</a>: {{ group | length }}<br>
+                            {% endif %}
+                        {% endfor %}
+                    </div>
+
+                    {% set active_groups = [] %}
+                    {% for group in sorted_inventory_list %}
+                        {% if group %}{% set _ = active_groups.append(loop.index0) %}{% endif %}
+                    {% endfor %}
+
+                    {% set item_count = 0 %}
+                    {% for group_idx in active_groups %}
+                        {% set group = sorted_inventory_list[group_idx] %}
+                        {% set place_num = group_idx + 1 %}
+                        
+                        <div class="sort-group-header" id="place-{{ place_num }}">
+                            <span>{{ place_num | ordinal }} Place &mdash; {{ group | length }} listing{{ 's' if group | length != 1 else '' }}</span>
+                            <span class="place-nav-buttons">
+                                {% if not loop.first %}
+                                    <a href="#place-{{ active_groups[loop.index0 - 1] + 1 }}" class="place-nav-btn">&#8592; Prev</a>
+                                {% endif %}
+                                {% if not loop.last %}
+                                    <a href="#place-{{ active_groups[loop.index0 + 1] + 1 }}" class="place-nav-btn">Next &#8594;</a>
+                                {% endif %}
+                            </span>
+                        </div>
+
+                        {% for entry in group | sort(attribute='index') %}
+                            {% set item_count = item_count + 1 %}
+                            {{ pricechecker_card(entry, item_count) }}
+                        {% endfor %}
+                    {% endfor %}
+                </div>
+            </div>
+        {% endif %}
+    </div>
+</div>
+
+<script>
+document.querySelectorAll(".place-nav-btn, .place-summary-link").forEach(function(link) {
+    link.addEventListener("click", function(e) {
+        e.preventDefault();
+        var id = this.getAttribute("href").slice(1);
+        var el = document.getElementById(id);
+        if (!el) return;
+        el.style.position = "static";
+        var top = el.getBoundingClientRect().top + window.scrollY;
+        el.style.position = "";
+        window.scrollTo({ top: top, behavior: "smooth" });
+    });
+});
+document.addEventListener("click", function(e) {
+    var item = e.target.closest("a.mosaic-item");
+    if (!item) return;
+    e.preventDefault();
+    var id = item.getAttribute("href").slice(1);
+    var el = document.getElementById(id);
+    if (!el) return;
+    var top = el.getBoundingClientRect().top + window.scrollY;
+    var hdr = document.querySelector(".sort-group-header");
+    var hdrOffset = hdr ? hdr.getBoundingClientRect().height : 0;
+    var mosaicEl = document.getElementById("results-mosaic");
+    var mosaicOffset = (mosaicEl && getComputedStyle(mosaicEl).display !== "none")
+        ? mosaicEl.getBoundingClientRect().height + 26 : 10;
+    window.scrollTo({ top: top - hdrOffset - mosaicOffset, behavior: "smooth" });
+});
+</script>

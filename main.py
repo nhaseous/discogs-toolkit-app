@@ -64,15 +64,44 @@ def _is_price_checker_enabled():
 
 @app.context_processor
 def _inject_globals():
+    def _total_int(e):
+        try: return int(str(e.total).replace(',', '').strip())
+        except (ValueError, TypeError): return None
+
+    def get_inventory_stats(inventory_list):
+        return {
+            'recent': sum(1 for e in inventory_list if e and e.daysAgo is not None),
+            'old': sum(1 for e in inventory_list if e and getattr(e, 'yearsAgo', None) is not None),
+            'low': sum(1 for e in inventory_list if e and _total_int(e) is not None and (_total_int(e) or 0) < 4),
+            'lowest': sum(1 for e in inventory_list if e and _total_int(e) == 1),
+            'high': sum(1 for e in inventory_list if e and _total_int(e) is not None and (_total_int(e) or 0) > 4),
+            'highest': sum(1 for e in inventory_list if e and _total_int(e) is not None and (_total_int(e) or 0) > 9),
+            'cheapest': sum(1 for e in inventory_list if e and 'card-cheapest-badge' in getattr(e, 'price_badges', '')),
+            'overpriced': sum(1 for e in inventory_list if e and 'card-overpriced-badge' in getattr(e, 'price_badges', '')),
+        }
+
     return {
         'logo_svg': assets.LOGO_SVG,
         'discogs_logo_svg': assets.DISCOGS_LOGO_SVG,
+        'vinyl_placeholder_svg': assets.VINYL_PLACEHOLDER_SVG,
+        'search_icon_svg': assets.SEARCH_ICON_SVG,
+        'back_arrow_svg': assets.BACK_ARROW_SVG,
+        'eye_closed_svg': assets.EYE_CLOSED_SVG,
+        'eye_open_svg': assets.EYE_OPEN_SVG,
+        'rate_limit_notice': assets.RATE_LIMIT_NOTICE,
+        'cloudflare_notice': assets.CLOUDFLARE_NOTICE,
         'session_user': session.get('discogs_username'),
         'session_avatar': session.get('discogs_avatar', ''),
         'price_checker_enabled': _is_price_checker_enabled(),
         'is_frozen': getattr(sys, 'frozen', False),
         'static_v': _STATIC_V,
+        'entry_badges': pricechecker._entry_badges,
+        'get_inventory_stats': get_inventory_stats,
     }
+
+@app.template_filter('ordinal')
+def ordinal_filter(n):
+    return pricechecker.ordinal(n)
 
 # Routes
 
@@ -125,51 +154,8 @@ def logout():
 
 @app.route("/")
 def landingpage():
-    pc_enabled = _is_price_checker_enabled()
-    pc_card = (
-        '<a href="/pricechecker" class="tool-card">'
-        '<div class="tool-card-label">01 &middot; Marketplace</div>'
-        '<h3 class="tool-card-title">Price Checker</h3>'
-        '<p class="tool-card-desc">See where a seller\'s listings rank against the rest of the marketplace.</p>'
-        '</a>'
-    ) if pc_enabled else ''
-
-    return render_template('landing.html',
-        content=(
-        '<section class="hero">'
-        '<div class="hero-eyebrow">Discogs Toolkit</div>'
-        '<h1 class="hero-title">Tools for <em>crate diggers</em>, collectors, and sellers.</h1>'
-        '<p class="hero-subtitle">A small set of utilities for marketplace research '
-        'and collection matching for the Discogs platform.</p>'
-        '<br><p class="hero-subtitle">\ Dev Notes \<br>'
-        '01 &middot; Price Checker doesn\'t work when running on the cloud/web because webscraping gets blocked by Cloudflare. Works locally.<br>'
-        '02 &middot; All good.<br>'
-        '03 &middot; Displaying user lists doesn\'t work for the same issue with webscraping and Cloudflare.<br>'
-        '( Report bugs to @curefortheitch on Instagram, Discogs, etc. )</p>'
-        '</section>'
-        '<div class="tool-grid-wrap">'
-        '<div class="tool-grid">'
-        + pc_card +
-        '<a href="/matcher" class="tool-card">'
-        '<div class="tool-card-label">02 &middot; Collections</div>'
-        '<h3 class="tool-card-title">Collection Matcher</h3>'
-        '<p class="tool-card-desc">Find overlap between one user\'s collection and another user\'s wantlist.</p>'
-        '</a>'
-        '<a href="/lookup" class="tool-card">'
-        '<div class="tool-card-label">03 &middot; Collections</div>'
-        '<h3 class="tool-card-title">User Lookup</h3>'
-        '<p class="tool-card-desc">Browse any user\'s full collection and wantlist as well as any lists they have made.</p>'
-        '</a>'
-        '<div class="tool-slot"></div>'
-        '<div class="tool-slot"></div>'
-        '<div class="tool-slot"></div>'
-        '<div class="tool-slot"></div>'
-        '<div class="tool-slot"></div>'
-        '<div class="tool-slot"></div>'
-        '</div>'
-        '</div>'
-        ),
-    )
+    return render_template('landing.html', 
+                           price_checker_enabled=_is_price_checker_enabled())
 
 ## Price Checker Module ##
 
@@ -179,23 +165,23 @@ def pricecheckerpage():
         return "Price Checker doesn't work when running on the cloud/web because webscraping gets blocked by Cloudflare. Contact curefortheitch if interested in a local solution."
 
     seller = request.args.get("seller", "")
-    output,loadtime = "",""
+    loadtime, searched_at = "", ""
     show_platter = False
     inventory_count = 0
+    inventory_list = []
+    sorted_inventory_list = [[] for _ in range(10)]
+    sort_active = request.args.get("sort", "") == "yes"
+    error_output = ""
 
     if seller != "":
         start_time = time.time()
         try:
-            sorted_inventory_list = [ [] for _ in range(10) ]
-
-            print("Loading inventory...")
-
             scraper = cloudscraper.create_scraper(browser={'browser':'chrome','platform':'android','desktop':False})
             release_titles_ids = pricechecker.get_inventory_ids(seller, scraper, auth=_oauth_auth())
             inventory_count = len(release_titles_ids)
             inventory_list = [None] * inventory_count
 
-            with ThreadPoolExecutor(max_workers=10) as executor:
+            with ThreadPoolExecutor(max_workers=5) as executor:
                 futures = [
                     executor.submit(pricechecker.get_listings, scraper, inventory_list,
                                     sorted_inventory_list, seller, release[0], release[1], release[2], release[3], i)
@@ -204,59 +190,26 @@ def pricecheckerpage():
                 for f in as_completed(futures):
                     f.result()
 
-            mosaic = pricechecker.print_mosaic(inventory_list)
-            sort_active = request.args.get("sort", "") == "yes"
-            unsorted_html = pricechecker.print_list(inventory_list)
-            sorted_html = pricechecker.print_sorted_list(sorted_inventory_list)
-            results = (
-                mosaic
-                + '<div id="pc-list-unsorted"' + (' style="display:none"' if sort_active else '') + '>' + unsorted_html + '</div>'
-                + '<div id="pc-list-sorted"' + ('' if sort_active else ' style="display:none"') + '>' + sorted_html + '</div>'
-            )
-            output = '<div id="results-area"><div id="results-main">' + results + '</div></div>'
             show_platter = True
 
         except pricechecker.CloudflareBlockedError:
-            output = assets.CLOUDFLARE_NOTICE
+            error_output = assets.CLOUDFLARE_NOTICE
         except AttributeError:
-            output = "No user found."
+            error_output = "No user found."
 
         end_time = time.time()
-        seller_meta = "Seller: " + seller
-        loadtime = "Search time: {0} seconds".format(round(end_time-start_time,2))
+        loadtime = round(end_time - start_time, 2)
         searched_at = datetime.now().astimezone().strftime("%-I:%M %p %Z · %-d %b %y")
 
-    inv_noun = "release" if inventory_count == 1 else "releases"
-    meta = '<div class="meta"><span><b>{0}</b> &nbsp;&middot;&nbsp; {1} {2}</span><span>{3} &nbsp;&#124;&nbsp; {4}</span></div>'.format(seller_meta, inventory_count, inv_noun, loadtime, searched_at) if loadtime else ""
-
-    seller_val = seller.replace('"', '&quot;')
-    sort_checked = ' checked' if request.args.get("sort","") == "yes" else ''
-
-    pc_header = (
-        '<div class="page-header">'
-        '<div class="page-eyebrow">Marketplace</div>'
-        '<h2>Price <em>Checker</em></h2>'
-        '</div>'
-    )
-    pc_form = (
-        '<form id="pc-form" class="search-bar" action="" method="get" role="search">'
-        '<span class="search-bar-icon" aria-hidden="true">' + assets.SEARCH_ICON_SVG + '</span>'
-        '<div class="search-bar-segment">'
-        '<label class="search-bar-label" for="seller">Seller</label>'
-        '<input type="text" id="seller" name="seller" placeholder="Discogs username" '
-        'autocomplete="off" value="' + seller_val + '">'
-        '</div>'
-        '<div class="search-bar-divider"></div>'
-        '<label class="search-bar-toggle" for="sort">'
-        '<input type="checkbox" id="sort" name="sort" value="yes"' + sort_checked + '>'
-        '<span>Sort by place</span>'
-        '</label>'
-        '<button type="submit" class="search-bar-submit">Search</button>'
-        '</form>'
-        '<div id="spinner"><span id="spinner-icon"></span>Pulling listings&hellip;</div>'
-    )
     return render_template('pricechecker.html',
-        content=(pc_form + pc_header + meta + output) if seller else (pc_header + pc_form),
+        seller=seller,
+        inventory_count=inventory_count,
+        inventory_list=inventory_list,
+        sorted_inventory_list=sorted_inventory_list,
+        sort_active=sort_active,
+        loadtime=loadtime,
+        searched_at=searched_at,
+        error_output=error_output,
         content_class='has-results' if seller else '',
         show_platter=show_platter,
         title='Price Checker'
@@ -428,13 +381,18 @@ def save_watchlist():
 
 @app.route("/matcher")
 def matcherpage():
-
     collection_user = request.args.get("collection", "")
     wantlist_user = request.args.get("wantlist", "")
     exact = request.args.get("exact", "") == "yes"
-    output,loadtime = "",""
+    
+    matches = []
+    loadtime, searched_at = "", ""
+    collection_meta, wantlist_meta = "", ""
+    has_results = False
+    error_output = ""
+    counts = {"collection": 0, "wantlist": 0}
 
-    if collection_user != "" and wantlist_user != "" :
+    if collection_user and wantlist_user:
         start_time = time.time()
         try:
             scraper = cloudscraper.create_scraper(browser={'browser':'chrome','platform':'android','desktop':False})
@@ -442,6 +400,7 @@ def matcherpage():
 
             collection = matcher.get_collection(collection_user, scraper, auth=auth)
             wantlist = matcher.get_wantlist(wantlist_user, scraper, auth=auth)
+            counts = {"collection": len(collection), "wantlist": len(wantlist)}
 
             lookup_field = "key" if exact else "easy_key"
             wantlist_set = {w["strict"] if exact else w["easy"] for w in wantlist}
@@ -450,117 +409,32 @@ def matcherpage():
                 [collection_by_key[k] for k in collection_by_key if k in wantlist_set],
                 key=lambda x: x["artist"].lower()
             )
-
-            mosaic_items = ""
-            match_lines = ""
-            for m in matches:
-                fmt_parts = ", ".join(p for p in [m.get("format_descriptions", ""), m.get("format_text", "")] if p)
-                fmt_suffix = " ({0})".format(_html.escape(fmt_parts)) if fmt_parts else ""
-                match_lines += "<b>" + _html.escape(m["artist"]) + "</b>" + " - " + _html.escape(m["title"]) + " &nbsp;&middot" + "<i>" + fmt_suffix + "</i>" + "<br>"
-                if m.get("thumb"):
-                    mosaic_items += '<span class="mosaic-item"><img src="{0}" alt="" class="mosaic-thumb"></span>'.format(m["thumb"])
-            mosaic = '<div id="matcher-mosaic" class="mosaic">{0}</div>'.format(mosaic_items) if mosaic_items else ""
-
-            matches_count = len(matches)
-            matches_count_text = "Matches ({0})".format(matches_count)
-
-            summary = (
-                '<div class="result-card">'
-                '<div class="card-title card-title--label">Results</div>'
-                '<div class="card-listings">'
-                'Collection: <b>{1}</b> ({0} items)<br>'
-                'Wantlist: <b>{3}</b> ({2} items)<br>'
-                '<br><b>Matches: {4} items</b><br>'
-                + ('<br>' + match_lines if match_lines else '') +
-                '</div>'
-                '</div>'
-            ).format(len(collection), collection_user, len(wantlist), wantlist_user, matches_count)
-
-            tabs_html = (
-                '<div class="lookup-tabs-row">'
-                '<div class="lookup-tabs">'
-                '<button class="lookup-tab active" data-tab="matches" data-count-text="' + _html.escape(matches_count_text) + '">' + _html.escape(matches_count_text) + '</button>'
-                '</div>'
-                '<div class="lookup-pagination" id="lookup-pagination">'
-                '<button class="pag-expand-btn" id="pag-expand-btn" type="button" title="Expand all cards">'
-                '<span class="pag-eye pag-eye--closed">' + assets.EYE_CLOSED_SVG + '</span>'
-                '<span class="pag-eye pag-eye--open">' + assets.EYE_OPEN_SVG + '</span>'
-                '</button>'
-                '<div class="pag-select" id="pag-size-wrap">'
-                '<button class="pag-select-btn" id="pag-size-btn" type="button">'
-                '<span id="pag-size-val">50</span>'
-                '<span class="pag-select-caret">&#9662;</span>'
-                '</button>'
-                '<div class="pag-select-menu" id="pag-size-menu">'
-                '<button class="pag-select-opt" type="button" data-value="10">10</button>'
-                '<button class="pag-select-opt" type="button" data-value="25">25</button>'
-                '<button class="pag-select-opt pag-select-opt--active" type="button" data-value="50">50</button>'
-                '<button class="pag-select-opt" type="button" data-value="100">100</button>'
-                '</div>'
-                '</div>'
-                '<div class="pag-divider"></div>'
-                '<button class="pag-btn" id="pag-prev">&#8249;</button>'
-                '<span class="pag-label" id="pag-label">1 / 1</span>'
-                '<button class="pag-btn" id="pag-next">&#8250;</button>'
-                '</div>'
-                '</div>'
-            )
-
-            grid = lookup_helper.render_lookup_grid(matches) if matches else '<p class="match-empty">No matches found.</p>'
-            panel_html = '<div id="lookup-panel-matches" class="lookup-panel">' + grid + '</div>'
-
-            output = mosaic + summary + tabs_html + panel_html
+            has_results = True
 
         except matcher.RateLimitError:
-            output = assets.RATE_LIMIT_NOTICE
-        except AttributeError:
-            output = "Unable to find a match."
+            error_output = assets.RATE_LIMIT_NOTICE
+        except Exception:
+            error_output = "Unable to find a match."
 
         end_time = time.time()
-        loadtime = "Match time: {0} seconds".format(round(end_time-start_time,2))
+        loadtime = round(end_time - start_time, 2)
         searched_at = datetime.now().astimezone().strftime("%-I:%M %p %Z · %-d %b %y")
-        collection_meta = "Collection: " + collection_user
-        wantlist_meta = "Wantlist: " + wantlist_user
+        collection_meta = collection_user
+        wantlist_meta = wantlist_user
 
-    meta = '<div class="meta"><span><b>{0}</b> &nbsp;&middot;&nbsp; <b>{1}</b></span><span>{2} &nbsp;&#124;&nbsp; {3}</span></div>'.format(collection_meta, wantlist_meta, loadtime, searched_at) if loadtime else ""
-
-    collection_val = collection_user.replace('"', '&quot;')
-    wantlist_val = wantlist_user.replace('"', '&quot;')
-    exact_checked = ' checked' if exact else ''
-
-    has_results = collection_user != "" and wantlist_user != ""
-    matcher_header = (
-        '<div class="page-header">'
-        '<div class="page-eyebrow">Collections</div>'
-        '<h2>Collection <em>Matcher</em></h2>'
-        '</div>'
-    )
-    matcher_form = (
-        '<form id="matcher-form" class="search-bar" action="" method="get" role="search">'
-        '<span class="search-bar-icon" aria-hidden="true">' + assets.SEARCH_ICON_SVG + '</span>'
-        '<div class="search-bar-segment">'
-        '<label class="search-bar-label" for="collection">Collection</label>'
-        '<input type="text" id="collection" name="collection" placeholder="username" '
-        'autocomplete="off" value="' + collection_val + '">'
-        '</div>'
-        '<div class="search-bar-divider"></div>'
-        '<div class="search-bar-segment">'
-        '<label class="search-bar-label" for="wantlist">Wantlist</label>'
-        '<input type="text" id="wantlist" name="wantlist" placeholder="username" '
-        'autocomplete="off" value="' + wantlist_val + '">'
-        '</div>'
-        '<div class="search-bar-divider"></div>'
-        '<label class="search-bar-toggle" for="exact">'
-        '<input type="checkbox" id="exact" name="exact" value="yes"' + exact_checked + '>'
-        '<span>Exact match</span>'
-        '</label>'
-        '<button type="submit" class="search-bar-submit">Search</button>'
-        '</form>'
-        '<div id="spinner"><span id="spinner-icon"></span>Matching&hellip;</div>'
-    )
     return render_template('matcher.html',
-        content=(matcher_form + matcher_header + meta + output) if has_results else (matcher_header + matcher_form),
-        content_class='has-results' if has_results else '',
+        collection_user=collection_user,
+        wantlist_user=wantlist_user,
+        exact=exact,
+        matches=matches,
+        counts=counts,
+        loadtime=loadtime,
+        searched_at=searched_at,
+        collection_meta=collection_meta,
+        wantlist_meta=wantlist_meta,
+        has_results=has_results,
+        error_output=error_output,
+        content_class='has-results' if collection_user and wantlist_user else '',
         show_platter=has_results,
         title='Collection Matcher'
     )
@@ -569,27 +443,19 @@ def matcherpage():
 
 @app.route("/lookup")
 def lookuppage():
-
     username = request.args.get("username", "")
     list_id = request.args.get("list_id", "")
-    output, loadtime, searched_at, user_meta, active_count_text = "", "", "", "", ""
+    
+    collection, wantlist, lists, list_releases = [], [], [], []
+    user_not_found, rate_limited, cf_blocked_list = False, False, False
+    collection_error, wantlist_error, lists_error = "", "", ""
+    loadtime, searched_at = "", ""
     has_results = bool(username)
 
     if username:
         start_time = time.time()
         scraper = cloudscraper.create_scraper(browser={'browser':'chrome','platform':'android','desktop':False})
         auth = _oauth_auth()
-
-        collection = None
-        wantlist = None
-        lists = None
-        list_releases = None
-        user_not_found = False
-        rate_limited = False
-        cf_blocked_list = False
-        collection_error = ""
-        wantlist_error = ""
-        lists_error = ""
 
         _fetch_tasks = {
             'collection': lambda: lookup_helper.get_collection(username, scraper, auth=auth),
@@ -625,184 +491,25 @@ def lookuppage():
                 cf_blocked_list = True
 
         end_time = time.time()
-        loadtime = "Lookup time: {0} seconds".format(round(end_time - start_time, 2))
+        loadtime = round(end_time - start_time, 2)
         searched_at = datetime.now().astimezone().strftime("%-I:%M %p %Z · %-d %b %y")
-        user_meta = "User: " + username
 
-        if rate_limited:
-            output = assets.RATE_LIMIT_NOTICE
-        elif user_not_found:
-            output = (
-                '<div class="lookup-notice lookup-notice--error">'
-                'User <b>' + _html.escape(username) + '</b> was not found on Discogs. '
-                'Check the username and try again.'
-                '</div>'
-            )
-        else:
-            col_count = len(collection) if collection is not None else 0
-            want_count = len(wantlist) if wantlist is not None else 0
-            lists_count = len(lists) if lists is not None else 0
-            active_tab = "lists" if list_id else "collection"
-
-            def _count_text(n, noun):
-                return "{0} {1}{2}".format(n, noun, "" if n == 1 else "s")
-
-            col_count_text   = _count_text(col_count, "item")
-            want_count_text  = _count_text(want_count, "item")
-            if list_id:
-                list_rel_count = len(list_releases) if list_releases else 0
-                lists_count_text = _count_text(list_rel_count, "release")
-            else:
-                lists_count_text = _count_text(lists_count, "list")
-            active_count_text = {"collection": col_count_text, "wantlist": want_count_text, "lists": lists_count_text}[active_tab]
-
-            tabs_html = (
-                '<div class="lookup-tabs-row">'
-                '<div class="lookup-tabs">'
-                '<button class="lookup-tab{0}" data-tab="collection" data-count-text="{5}">Collection ({1})</button>'
-                '<button class="lookup-tab" data-tab="wantlist" data-count-text="{6}">Wantlist ({2})</button>'
-                '<button class="lookup-tab{3}" data-tab="lists" data-count-text="{7}">Lists ({4})</button>'
-                '</div>'
-                '<div class="lookup-pagination" id="lookup-pagination">'
-                '<button class="pag-expand-btn" id="pag-expand-btn" type="button" title="Expand all cards">'
-                '<span class="pag-eye pag-eye--closed">' + assets.EYE_CLOSED_SVG + '</span>'
-                '<span class="pag-eye pag-eye--open">' + assets.EYE_OPEN_SVG + '</span>'
-                '</button>'
-                '<div class="pag-select" id="pag-size-wrap">'
-                '<button class="pag-select-btn" id="pag-size-btn" type="button">'
-                '<span id="pag-size-val">50</span>'
-                '<span class="pag-select-caret">&#9662;</span>'
-                '</button>'
-                '<div class="pag-select-menu" id="pag-size-menu">'
-                '<button class="pag-select-opt" type="button" data-value="10">10</button>'
-                '<button class="pag-select-opt" type="button" data-value="25">25</button>'
-                '<button class="pag-select-opt pag-select-opt--active" type="button" data-value="50">50</button>'
-                '<button class="pag-select-opt" type="button" data-value="100">100</button>'
-                '</div>'
-                '</div>'
-                '<div class="pag-divider"></div>'
-                '<button class="pag-btn" id="pag-prev">&#8249;</button>'
-                '<span class="pag-label" id="pag-label">1 / 1</span>'
-                '<button class="pag-btn" id="pag-next">&#8250;</button>'
-                '</div>'
-                '</div>'
-            ).format(
-                ' active' if active_tab == 'collection' else '',
-                col_count,
-                want_count,
-                ' active' if active_tab == 'lists' else '',
-                lists_count,
-                _html.escape(col_count_text),
-                _html.escape(want_count_text),
-                _html.escape(lists_count_text),
-            )
-
-            def _items_json(tab, items, show_stats=False):
-                return (
-                    '<div class="match-grid"></div>'
-                    '<script type="application/json" class="lookup-data"'
-                    ' data-tab="' + tab + '" data-show-stats="' + ('1' if show_stats else '0') + '">'
-                    + _json.dumps(items, separators=(',', ':')).replace('</', r'<\/')
-                    + '</script>'
-                )
-
-            if collection_error:
-                col_content = '<div class="lookup-notice">' + _html.escape(collection_error) + '</div>'
-            elif collection:
-                col_content = _items_json('collection', collection)
-            else:
-                col_content = '<p class="match-empty">This collection is empty.</p>'
-
-            if wantlist_error:
-                want_content = '<div class="lookup-notice">' + _html.escape(wantlist_error) + '</div>'
-            elif wantlist:
-                want_content = _items_json('wantlist', wantlist, show_stats=True)
-            else:
-                want_content = '<p class="match-empty">This wantlist is empty.</p>'
-
-            if list_id:
-                back_url = '/lookup?username=' + _html.escape(username)
-                back_card_html = (
-                    '<a href="' + back_url + '" class="match-card match-card--back">'
-                    '<div class="match-card-art">'
-                    '<div class="match-card-placeholder">' + assets.BACK_ARROW_SVG + '</div>'
-                    '</div>'
-                    '</a>'
-                )
-                if cf_blocked_list:
-                    lists_content = '<div class="match-grid">' + back_card_html + '</div>' + assets.CLOUDFLARE_NOTICE
-                else:
-                    lists_content = (
-                        '<div class="match-grid">' + back_card_html + '</div>'
-                        + ('<script type="application/json" class="lookup-data" data-tab="lists" data-show-stats="0">'
-                           + _json.dumps(list_releases or [], separators=(',', ':')).replace('</', r'<\/')
-                           + '</script>')
-                        + ('' if list_releases else '<p class="match-empty">This list is empty.</p>')
-                    )
-            elif lists_error:
-                lists_content = '<div class="lookup-notice">' + _html.escape(lists_error) + '</div>'
-            else:
-                lists_content = lookup_helper.render_list_index(lists or [], username)
-
-            col_mosaic_items = "".join(
-                '<a class="mosaic-item" href="{1}" target="_blank" rel="noopener noreferrer"><img src="{0}" alt="" loading="lazy" class="mosaic-thumb"></a>'.format(m["thumb"], m.get("url", "#"))
-                for m in (collection or []) if m.get("thumb")
-            )
-            want_mosaic_items = "".join(
-                '<a class="mosaic-item" href="{1}" target="_blank" rel="noopener noreferrer"><img src="{0}" alt="" loading="lazy" class="mosaic-thumb"></a>'.format(m["thumb"], m.get("url", "#"))
-                for m in (wantlist or []) if m.get("thumb")
-            )
-            lists_mosaic_items = "".join(
-                '<span class="mosaic-item"><img src="{0}" alt="" loading="lazy" class="mosaic-thumb"></span>'.format(m["thumb"])
-                for m in (list_releases or []) if m.get("thumb")
-            ) if list_id else ""
-
-            col_cls   = ' lookup-mosaic--inactive' if active_tab != 'collection' else ''
-            want_cls  = ' lookup-mosaic--inactive'
-            lists_cls = ' lookup-mosaic--inactive' if active_tab != 'lists' else ''
-
-            col_hidden   = ' style="display:none"' if active_tab != 'collection' else ''
-            want_hidden  = ' style="display:none"'
-            lists_hidden = ' style="display:none"' if active_tab != 'lists' else ''
-
-            col_mosaic   = '<div id="lookup-mosaic-collection" class="lookup-mosaic mosaic{1}">{0}</div>'.format(col_mosaic_items, col_cls) if col_mosaic_items else ""
-            want_mosaic  = '<div id="lookup-mosaic-wantlist" class="lookup-mosaic mosaic{1}">{0}</div>'.format(want_mosaic_items, want_cls) if want_mosaic_items else ""
-            lists_mosaic = '<div id="lookup-mosaic-lists" class="lookup-mosaic mosaic{1}">{0}</div>'.format(lists_mosaic_items, lists_cls) if lists_mosaic_items else ""
-            mosaics_html = '<div class="lookup-mosaic-wrap">' + col_mosaic + want_mosaic + lists_mosaic + '</div>' if (col_mosaic or want_mosaic or lists_mosaic) else ""
-
-            output = (
-                mosaics_html +
-                tabs_html +
-                '<div id="lookup-panel-collection" class="lookup-panel"{0}>'.format(col_hidden) + col_content + '</div>' +
-                '<div id="lookup-panel-wantlist" class="lookup-panel"{0}>'.format(want_hidden) + want_content + '</div>' +
-                '<div id="lookup-panel-lists" class="lookup-panel"{0}>'.format(lists_hidden) + lists_content + '</div>'
-            )
-
-    count_span = ' &nbsp;&#183;&nbsp; <span id="lookup-count">{0}</span>'.format(_html.escape(active_count_text)) if active_count_text else ''
-    meta = '<div class="meta"><span><b>{0}</b>{1}</span><span>{2} &nbsp;&#124;&nbsp; {3}</span></div>'.format(user_meta, count_span, loadtime, searched_at) if loadtime else ""
-
-    username_val = username.replace('"', '&quot;')
-
-    lookup_header = (
-        '<div class="page-header">'
-        '<div class="page-eyebrow">Collections</div>'
-        '<h2>User <em>Lookup</em></h2>'
-        '</div>'
-    )
-    lookup_form = (
-        '<form id="lookup-form" class="search-bar" action="" method="get" role="search">'
-        '<span class="search-bar-icon" aria-hidden="true">' + assets.SEARCH_ICON_SVG + '</span>'
-        '<div class="search-bar-segment">'
-        '<label class="search-bar-label" for="username">Username</label>'
-        '<input type="text" id="username" name="username" placeholder="Discogs username" '
-        'autocomplete="off" value="' + username_val + '">'
-        '</div>'
-        '<button type="submit" class="search-bar-submit">Search</button>'
-        '</form>'
-        '<div id="spinner"><span id="spinner-icon"></span>Looking up user&hellip;</div>'
-    )
     return render_template('lookup.html',
-        content=(lookup_form + lookup_header + meta + output) if has_results else (lookup_header + lookup_form),
+        username=username,
+        list_id=list_id,
+        collection=collection,
+        wantlist=wantlist,
+        lists=lists,
+        list_releases=list_releases,
+        user_not_found=user_not_found,
+        rate_limited=rate_limited,
+        cf_blocked_list=cf_blocked_list,
+        collection_error=collection_error,
+        wantlist_error=wantlist_error,
+        lists_error=lists_error,
+        loadtime=loadtime,
+        searched_at=searched_at,
+        has_results=has_results,
         content_class='has-results' if has_results else '',
         show_platter=has_results,
         title='User Lookup'

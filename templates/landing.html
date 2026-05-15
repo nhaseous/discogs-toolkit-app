@@ -1,1 +1,48 @@
 {% extends "base.html" %}
+
+{% block content %}
+<section class="hero">
+    <div class="hero-eyebrow">Discogs Toolkit</div>
+    <h1 class="hero-title">Tools for <em>crate diggers</em>, collectors, and sellers.</h1>
+    <p class="hero-subtitle">A small set of utilities for marketplace research and collection matching for the Discogs platform.</p>
+    <br>
+    <p class="hero-subtitle">
+        \ Dev Notes \<br>
+        01 &middot; Price Checker doesn't work when running on the cloud/web because webscraping gets blocked by Cloudflare. Works locally.<br>
+        02 &middot; All good.<br>
+        03 &middot; Displaying user lists doesn't work for the same issue with webscraping and Cloudflare.<br>
+        ( Report bugs to @curefortheitch on Instagram, Discogs, etc. )
+    </p>
+</section>
+
+<div class="tool-grid-wrap">
+    <div class="tool-grid">
+        {% if price_checker_enabled %}
+        <a href="/pricechecker" class="tool-card">
+            <div class="tool-card-label">01 &middot; Marketplace</div>
+            <h3 class="tool-card-title">Price Checker</h3>
+            <p class="tool-card-desc">See where a seller's listings rank against the rest of the marketplace.</p>
+        </a>
+        {% endif %}
+        
+        <a href="/matcher" class="tool-card">
+            <div class="tool-card-label">02 &middot; Collections</div>
+            <h3 class="tool-card-title">Collection Matcher</h3>
+            <p class="tool-card-desc">Find overlap between one user's collection and another user's wantlist.</p>
+        </a>
+        
+        <a href="/lookup" class="tool-card">
+            <div class="tool-card-label">03 &middot; Collections</div>
+            <h3 class="tool-card-title">User Lookup</h3>
+            <p class="tool-card-desc">Browse any user's full collection and wantlist as well as any lists they have made.</p>
+        </a>
+        
+        <div class="tool-slot"></div>
+        <div class="tool-slot"></div>
+        <div class="tool-slot"></div>
+        <div class="tool-slot"></div>
+        <div class="tool-slot"></div>
+        <div class="tool-slot"></div>
+    </div>
+</div>
+{% endblock %}

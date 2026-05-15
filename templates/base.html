@@ -56,7 +56,9 @@
     </nav>
     <main class="content{% if content_class %} {{ content_class }}{% endif %}">
         <div id="content-main">
+            {% block content %}
             {{ content | safe }}
+            {% endblock %}
         </div>
     </main>
 </div>

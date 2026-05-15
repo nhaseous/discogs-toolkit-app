@@ -5,66 +5,32 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 from bs4 import BeautifulSoup
 import html as _html, json, math, re
 
-from helper.common import API_HEADERS as _API_HEADERS
-_MAX_WORKERS = 5
-
-
-class UserNotFoundError(Exception):
-    pass
-
-class CollectionPrivateError(Exception):
-    pass
-
-class WantlistPrivateError(Exception):
-    pass
-
-class ListPrivateError(Exception):
-    pass
-
-class RateLimitError(Exception):
-    pass
-
-class CloudflareBlockedError(Exception):
-    pass
-
-def _is_cf_blocked(resp):
-    if resp.status_code in (403, 503):
-        return 'cloudflare' in resp.text.lower()
-    if resp.status_code == 200:
-        text = resp.text.lower()
-        return 'cloudflare' in text and any(m in text for m in ('cf-browser-verification', 'just a moment', 'sorry, you have been blocked'))
-    return False
-
+from helper.api import (
+    fetch_all_pages, clean_artist, 
+    UserNotFoundError, CollectionPrivateError, WantlistPrivateError, ListPrivateError, 
+    RateLimitError, CloudflareBlockedError
+)
 
 def get_collection(username, scraper, auth=None):
     url = "https://api.discogs.com/users/{0}/collection/folders/0/releases".format(username)
-    params = {"sort": "artist", "sort_order": "asc", "per_page": 100}
+    params = {"sort": "artist", "sort_order": "asc"}
 
-    first_resp = scraper.get(url, params=dict(params, page=1), headers=_API_HEADERS, auth=auth)
-    if first_resp.status_code == 404:
-        raise UserNotFoundError(username)
-    if first_resp.status_code in (401, 403):
-        raise CollectionPrivateError(username)
-    if first_resp.status_code == 429:
-        raise RateLimitError()
-    if first_resp.status_code != 200:
-        return []
-
-    first_data = _safe_json(first_resp)
-    if first_data is None:
-        return []
-
-    result = []
-    for r in _fetch_all_pages(url, "releases", scraper, first_data, params, auth=auth):
+    results = []
+    try:
+        releases = fetch_all_pages(url, "releases", scraper, params=params, auth=auth)
+    except UserNotFoundError: raise UserNotFoundError(username)
+    except CollectionPrivateError: raise CollectionPrivateError(username)
+    
+    for r in releases:
         info = r["basic_information"]
-        artist = _clean_artist(info["artists"][0]) if info.get("artists") else ""
+        artist = clean_artist(info["artists"][0]) if info.get("artists") else ""
         title = info.get("title", "")
         fmt_info = info["formats"][0] if info.get("formats") else {}
         fmt = fmt_info.get("name", "")
         fmt_descriptions = ", ".join(fmt_info.get("descriptions") or [])
         fmt_text = fmt_info.get("text", "")
         release_id = info.get("id", "")
-        result.append({
+        results.append({
             "artist": artist,
             "title": title,
             "format": fmt,
@@ -75,38 +41,28 @@ def get_collection(username, scraper, auth=None):
             "url": "https://www.discogs.com/release/{0}".format(release_id) if release_id else "",
             "stats": "",
         })
-    return result
-
+    return results
 
 def get_wantlist(username, scraper, auth=None):
     url = "https://api.discogs.com/users/{0}/wants".format(username)
-    params = {"sort": "artist", "sort_order": "asc", "per_page": 100}
+    params = {"sort": "artist", "sort_order": "asc"}
 
-    first_resp = scraper.get(url, params=dict(params, page=1), headers=_API_HEADERS, auth=auth)
-    if first_resp.status_code == 404:
-        raise UserNotFoundError(username)
-    if first_resp.status_code in (401, 403):
-        raise WantlistPrivateError(username)
-    if first_resp.status_code == 429:
-        raise RateLimitError()
-    if first_resp.status_code != 200:
-        return []
+    results = []
+    try:
+        wants = fetch_all_pages(url, "wants", scraper, params=params, auth=auth)
+    except UserNotFoundError: raise UserNotFoundError(username)
+    except WantlistPrivateError: raise WantlistPrivateError(username)
 
-    first_data = _safe_json(first_resp)
-    if first_data is None:
-        return []
-
-    result = []
-    for w in _fetch_all_pages(url, "wants", scraper, first_data, params, auth=auth):
+    for w in wants:
         info = w["basic_information"]
-        artist = _clean_artist(info["artists"][0]) if info.get("artists") else ""
+        artist = clean_artist(info["artists"][0]) if info.get("artists") else ""
         title = info.get("title", "")
         fmt_info = info["formats"][0] if info.get("formats") else {}
         fmt = fmt_info.get("name", "")
         fmt_descriptions = ", ".join(fmt_info.get("descriptions") or [])
         fmt_text = fmt_info.get("text", "")
         release_id = info.get("id", "")
-        result.append({
+        results.append({
             "artist": artist,
             "title": title,
             "format": fmt,
@@ -117,41 +73,29 @@ def get_wantlist(username, scraper, auth=None):
             "url": "https://www.discogs.com/release/{0}".format(release_id) if release_id else "",
             "stats": "",
         })
-
-    return result
-
+    return results
 
 def get_lists(username, scraper, auth=None):
     url = "https://api.discogs.com/users/{0}/lists".format(username)
-    params = {"per_page": 100}
+    
+    results = []
+    try:
+        lists = fetch_all_pages(url, "lists", scraper, auth=auth)
+    except UserNotFoundError: raise UserNotFoundError(username)
+    except ListPrivateError: raise ListPrivateError(username)
 
-    first_resp = scraper.get(url, params=dict(params, page=1), headers=_API_HEADERS, auth=auth)
-    if first_resp.status_code == 404:
-        raise UserNotFoundError(username)
-    if first_resp.status_code in (401, 403):
-        raise ListPrivateError(username)
-    if first_resp.status_code == 429:
-        raise RateLimitError()
-    if first_resp.status_code != 200:
-        return []
-
-    first_data = _safe_json(first_resp)
-    if first_data is None:
-        return []
-
-    result = []
-    for lst in _fetch_all_pages(url, "lists", scraper, first_data, params, auth=auth):
+    for lst in lists:
         if not lst.get("public", True):
             continue
-        result.append({
+        results.append({
             "id": lst.get("id", ""),
             "name": lst.get("name", ""),
             "description": lst.get("description", ""),
         })
-    return result
-
+    return results
 
 def get_list_releases(list_id, scraper):
+    # This stays mostly as is because it's scraping-based
     base_url = "https://www.discogs.com/lists/{0}".format(list_id)
 
     cache, total_pages = _scrape_list_page(base_url, scraper, page=1)
@@ -159,7 +103,7 @@ def get_list_releases(list_id, scraper):
         return []
 
     if total_pages > 1:
-        with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
+        with ThreadPoolExecutor(max_workers=5) as executor:
             futures = {
                 executor.submit(_scrape_list_page, base_url, scraper, p): p
                 for p in range(2, total_pages + 1)
@@ -176,6 +120,13 @@ def get_list_releases(list_id, scraper):
 
     return _extract_list_items(cache)
 
+def _is_cf_blocked(resp):
+    if resp.status_code in (403, 503):
+        return 'cloudflare' in resp.text.lower()
+    if resp.status_code == 200:
+        text = resp.text.lower()
+        return 'cloudflare' in text and any(m in text for m in ('cf-browser-verification', 'just a moment', 'sorry, you have been blocked'))
+    return False
 
 def _scrape_list_page(base_url, scraper, page):
     url = "{0}?page={1}".format(base_url, page) if page > 1 else base_url
@@ -211,7 +162,6 @@ def _scrape_list_page(base_url, scraper, page):
             break
 
     return data, total_pages
-
 
 def _extract_list_items(cache):
     results = []
@@ -283,105 +233,4 @@ def _extract_list_items(cache):
     results.sort(key=lambda x: x.pop('_position'))
     return results
 
-
-def _fetch_all_pages(url, items_key, scraper, first_page_data, params, auth=None):
-    total_pages = first_page_data.get("pagination", {}).get("pages", 1)
-    pages_data = {1: first_page_data}
-
-    if total_pages > 1:
-        with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
-            futures = {
-                executor.submit(scraper.get, url, params=dict(params, page=p), headers=_API_HEADERS, auth=auth): p
-                for p in range(2, total_pages + 1)
-            }
-            for future in as_completed(futures):
-                page_num = futures[future]
-                try:
-                    resp = future.result()
-                except Exception:
-                    continue
-                if resp.status_code == 429:
-                    raise RateLimitError()
-                data = _safe_json(resp)
-                if data is not None:
-                    pages_data[page_num] = data
-
-    items = []
-    for p in range(1, total_pages + 1):
-        items.extend(pages_data.get(p, {}).get(items_key, []))
-    return items
-
-
-def _safe_json(resp):
-    try:
-        return resp.json()
-    except Exception:
-        return None
-
-def _clean_artist(artist_info):
-    name = artist_info.get("anv") or artist_info.get("name", "")
-    return re.sub(r'\s*\(\d+\)$', '', name).strip()
-
-
-# ── Render helpers ────────────────────────────────────────────────────────────
-
-import assets as _assets
-
-def render_lookup_grid(items, show_stats=False, prepend_card=""):
-    cards = prepend_card
-    for m in items:
-        img_src = m.get("cover_image") or m.get("thumb")
-        if img_src:
-            art = '<img src="{0}" alt="" class="match-card-img">'.format(img_src)
-        else:
-            art = '<div class="match-card-placeholder">' + _assets.VINYL_PLACEHOLDER_SVG + '</div>'
-        fmt_desc_html = ('<div class="match-card-format-desc">' + _html.escape(m.get("format_descriptions", "")) + '</div>') if m.get("format_descriptions") else ""
-        fmt_text_html = ('<div class="match-card-format-text">' + _html.escape(m.get("format_text", "")) + '</div>') if m.get("format_text") else ""
-        comment_html = ('<div class="match-card-comment">' + _html.escape(m.get("comment", "")) + '</div>') if m.get("comment") else ""
-        stats_html = ('<div class="match-card-stats">' + _html.escape(m.get("stats", "")) + '</div>') if show_stats and m.get("stats") else ""
-        for_sale_text = m.get("for_sale", "")
-        for_sale_url = m.get("for_sale_url", "")
-        for_sale_html = (
-            '<div class="match-card-forsale" data-href="' + _html.escape(for_sale_url) + '"'
-            ' onclick="event.stopPropagation();event.preventDefault();window.open(this.dataset.href,\'_blank\',\'noopener,noreferrer\')">'
-            + _html.escape(for_sale_text) + '</div>'
-        ) if for_sale_text and for_sale_url else ""
-        href = m.get("url") or "#"
-        cards += (
-            '<a href="' + href + '" class="match-card" target="_blank" rel="noopener noreferrer">'
-            '<div class="match-card-art">' + art + '</div>'
-            '<div class="match-card-body">'
-            '<div class="match-card-title">' + _html.escape(m.get("title", "")) + '</div>'
-            '<div class="match-card-artist">' + _html.escape(m.get("artist", "")) + '</div>'
-            + ('<div class="match-card-format">' + _html.escape(m.get("format", "")) + '</div>' if m.get("format") else "")
-            + fmt_desc_html
-            + fmt_text_html
-            + for_sale_html
-            + comment_html
-            + stats_html +
-            '</div>'
-            '</a>'
-        )
-    return '<div class="match-grid">' + cards + '</div>'
-
-
-def render_list_index(lists, username):
-    if not lists:
-        return '<p class="match-empty">This user has no public lists.</p>'
-    cards = ""
-    for lst in lists:
-        href = '/lookup?username=' + _html.escape(username) + '&list_id=' + _html.escape(str(lst["id"]))
-        description_html = ('<div class="match-card-comment">' + _html.escape(lst["description"]) + '</div>') if lst.get("description") else ""
-        cards += (
-            '<a href="' + href + '" class="match-card">'
-            '<div class="match-card-art">'
-            '<div class="match-card-placeholder">' + _assets.VINYL_PLACEHOLDER_SVG + '</div>'
-            '<div class="match-card-art-label">' + _html.escape(lst["name"]) + '</div>'
-            '</div>'
-            '<div class="match-card-body">'
-            '<div class="match-card-title">' + _html.escape(lst["name"]) + '</div>'
-            + description_html +
-            '</div>'
-            '</a>'
-        )
-    return '<div class="match-grid">' + cards + '</div>'
+# Render helpers are now handled by Jinja2 templates and macros in templates/macros.html

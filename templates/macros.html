@@ -1,0 +1,121 @@
+{% macro pricechecker_card(entry, count) %}
+{% set badges = entry_badges(entry) %}
+{% set reprice_data = entry.reprice_data | tojson | forceescape %}
+{% set listing_ids = entry.listing_ids | tojson | forceescape %}
+<div class="result-card" id="card-{{ entry.url.split('/sell/release/')[1].split('?')[0] }}" 
+     data-badges="{{ badges }}"
+     {% if entry.reprice_data %} data-reprice="{{ reprice_data }}"{% endif %}
+     {% if entry.listing_ids %} data-listing-ids="{{ listing_ids }}"{% endif %}
+     data-title="{{ entry.title | forceescape }}"
+     data-thumb="{{ entry.imgUrl | forceescape }}">
+    <div class="card-number">
+        <span>#{{ count }}</span>
+        <div class="card-number-right">
+            {{ entry.price_badges | safe }}
+            {% if entry.place %}<span>({{ entry.place }})</span>{% endif %}
+        </div>
+    </div>
+    <div class="card-inner">
+        <div class="card-title"><a href="{{ entry.url }}">{{ entry.title }}</a></div>
+        <div class="card-listings">{{ entry.listings | safe }}</div>
+        <div class="card-total">
+            <span>Total listings: {{ entry.total }}{{ low_badge(entry) | safe }}</span>
+            <a href="https://www.discogs.com/sell/history/{{ entry.url.split('/sell/release/')[1].split('?')[0] }}" 
+               class="card-last-sold" target="_blank" rel="noopener noreferrer">
+                {{ last_sold_html(entry) | safe }}
+            </a>
+        </div>
+    </div>
+    {% if entry.imgUrl %}
+    <a href="{{ entry.url }}" class="card-thumb-link">
+        <img class="card-thumb" src="{{ entry.imgUrl }}" alt="">
+    </a>
+    {% else %}
+    <a href="{{ entry.url }}" class="card-thumb-link card-thumb-link--placeholder" aria-label="No cover image">
+        <svg class="card-thumb-placeholder-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.2">
+            <circle cx="12" cy="12" r="10"/>
+            <circle cx="12" cy="12" r="3.5"/>
+            <circle cx="12" cy="12" r="0.8" fill="currentColor" stroke="none"/>
+        </svg>
+    </a>
+    {% endif %}
+</div>
+{% endmacro %}
+
+{% macro low_badge(entry) %}
+{% set badges = entry_badges(entry).split() %}
+{% if 'lowest' in badges %}
+ &middot; <span class="card-low-badge card-low-badge--lowest">LOWEST</span>
+{% elif 'low' in badges %}
+ &middot; <span class="card-low-badge">LOW</span>
+{% elif 'highest' in badges %}
+ &middot; <span class="card-high-badge card-high-badge--highest">HIGHEST</span>
+{% elif 'high' in badges %}
+ &middot; <span class="card-high-badge">HIGH</span>
+{% endif %}
+{% endmacro %}
+
+{% macro last_sold_html(entry) %}
+{% if entry.daysAgo is not none %}
+    {% set label = entry.daysAgo ~ " day ago" if entry.daysAgo == 1 else entry.daysAgo ~ " days ago" %}
+    <span class="isrecent-badge">RECENT</span> <span class="card-recency-badge">{{ label }}</span> &middot; 
+{% elif entry.yearsAgo is not none %}
+    {% set label = entry.yearsAgo ~ " year ago" if entry.yearsAgo == 1 else entry.yearsAgo ~ " years ago" %}
+    <span class="card-old-badge">OLD</span> <span class="card-recency-badge">{{ label }}</span> &middot; 
+{% endif %}
+{{ 'Last sold: ' ~ entry.lastSold if entry.lastSold else 'Last sold: ---' }}
+{% endmacro %}
+
+
+{% macro lookup_grid(items, show_stats=False, prepend_card="") %}
+<div class="match-grid">
+    {{ prepend_card | safe }}
+    {% for m in items %}
+        <a href="{{ m.url or '#' }}" class="match-card" target="_blank" rel="noopener noreferrer">
+            <div class="match-card-art">
+                {% if m.cover_image or m.thumb %}
+                    <img src="{{ m.cover_image or m.thumb }}" alt="" class="match-card-img">
+                {% else %}
+                    <div class="match-card-placeholder">{{ vinyl_placeholder_svg | safe }}</div>
+                {% endif %}
+            </div>
+            <div class="match-card-body">
+                <div class="match-card-title">{{ m.title }}</div>
+                <div class="match-card-artist">{{ m.artist }}</div>
+                {% if m.format %}<div class="match-card-format">{{ m.format }}</div>{% endif %}
+                {% if m.format_descriptions %}<div class="match-card-format-desc">{{ m.format_descriptions }}</div>{% endif %}
+                {% if m.format_text %}<div class="match-card-format-text">{{ m.format_text }}</div>{% endif %}
+                {% if m.for_sale and m.for_sale_url %}
+                    <div class="match-card-forsale" 
+                         onclick="event.stopPropagation();event.preventDefault();window.open('{{ m.for_sale_url }}','_blank','noopener,noreferrer')">
+                        {{ m.for_sale }}
+                    </div>
+                {% endif %}
+                {% if m.comment %}<div class="match-card-comment">{{ m.comment }}</div>{% endif %}
+                {% if show_stats and m.stats %}<div class="match-card-stats">{{ m.stats }}</div>{% endif %}
+            </div>
+        </a>
+    {% endfor %}
+</div>
+{% endmacro %}
+
+{% macro list_index(lists, username) %}
+{% if not lists %}
+    <p class="match-empty">This user has no public lists.</p>
+{% else %}
+    <div class="match-grid">
+        {% for lst in lists %}
+            <a href="/lookup?username={{ username | urlencode }}&list_id={{ lst.id | urlencode }}" class="match-card">
+                <div class="match-card-art">
+                    <div class="match-card-placeholder">{{ vinyl_placeholder_svg | safe }}</div>
+                    <div class="match-card-art-label">{{ lst.name }}</div>
+                </div>
+                <div class="match-card-body">
+                    <div class="match-card-title">{{ lst.name }}</div>
+                    {% if lst.description %}<div class="match-card-comment">{{ lst.description }}</div>{% endif %}
+                </div>
+            </a>
+        {% endfor %}
+    </div>
+{% endif %}
+{% endmacro %}

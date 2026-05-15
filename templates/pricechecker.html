@@ -1,5 +1,49 @@
 {% extends "base.html" %}
+
 {% block extra_js %}
 <script>window.TOOLKIT_CONFIG = { session_user: {{ session_user | tojson }} };</script>
 <script src="/static/js/pricechecker.js"></script>
+{% endblock %}
+
+{% block content %}
+<form id="pc-form" class="search-bar" action="" method="get" role="search">
+    <span class="search-bar-icon" aria-hidden="true">
+        {% if search_icon_svg %}
+            {{ search_icon_svg | safe }}
+        {% else %}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        {% endif %}
+    </span>
+    <div class="search-bar-segment">
+        <label class="search-bar-label" for="seller">Seller</label>
+        <input type="text" id="seller" name="seller" placeholder="Discogs username" autocomplete="off" value="{{ seller or '' }}">
+    </div>
+    <div class="search-bar-divider"></div>
+    <label class="search-bar-toggle" for="sort">
+        <input type="checkbox" id="sort" name="sort" value="yes" {{ 'checked' if sort_active else '' }}>
+        <span>Sort by place</span>
+    </label>
+    <button type="submit" class="search-bar-submit">Search</button>
+</form>
+<div id="spinner"><span id="spinner-icon"></span>Pulling listings&hellip;</div>
+
+<div class="page-header">
+    <div class="page-eyebrow">Marketplace</div>
+    <h2>Price <em>Checker</em></h2>
+</div>
+
+{% if seller %}
+    <div class="meta">
+        <span><b>Seller: {{ seller }}</b> &nbsp;&middot;&nbsp; {{ inventory_count }} release{{ 's' if inventory_count != 1 else '' }}</span>
+        {% if loadtime %}
+            <span>Search time: {{ loadtime }} seconds &nbsp;&#124;&nbsp; {{ searched_at }}</span>
+        {% endif %}
+    </div>
+
+    {% if error_output %}
+        {{ error_output | safe }}
+    {% else %}
+        {% include "pricechecker_results.html" %}
+    {% endif %}
+{% endif %}
 {% endblock %}

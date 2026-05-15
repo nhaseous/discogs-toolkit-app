@@ -1,1 +1,113 @@
 {% extends "base.html" %}
+{% from "macros.html" import lookup_grid with context %}
+
+{% block extra_js %}
+{% endblock %}
+
+{% block content %}
+<form id="matcher-form" class="search-bar" action="" method="get" role="search">
+    <span class="search-bar-icon" aria-hidden="true">
+        {% if search_icon_svg %}
+            {{ search_icon_svg | safe }}
+        {% else %}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        {% endif %}
+    </span>
+    <div class="search-bar-segment">
+        <label class="search-bar-label" for="collection">Collection</label>
+        <input type="text" id="collection" name="collection" placeholder="username" autocomplete="off" value="{{ collection_user or '' }}">
+    </div>
+    <div class="search-bar-divider"></div>
+    <div class="search-bar-segment">
+        <label class="search-bar-label" for="wantlist">Wantlist</label>
+        <input type="text" id="wantlist" name="wantlist" placeholder="username" autocomplete="off" value="{{ wantlist_user or '' }}">
+    </div>
+    <div class="search-bar-divider"></div>
+    <label class="search-bar-toggle" for="exact">
+        <input type="checkbox" id="exact" name="exact" value="yes" {{ 'checked' if exact else '' }}>
+        <span>Exact match</span>
+    </label>
+    <button type="submit" class="search-bar-submit">Search</button>
+</form>
+<div id="spinner"><span id="spinner-icon"></span>Matching&hellip;</div>
+
+<div class="page-header">
+    <div class="page-eyebrow">Collections</div>
+    <h2>Collection <em>Matcher</em></h2>
+</div>
+
+{% if has_results %}
+    <div class="meta">
+        <span><b>Collection: {{ collection_meta }}</b> &nbsp;&middot;&nbsp; <b>Wantlist: {{ wantlist_meta }}</b></span>
+        {% if loadtime %}
+            <span>Match time: {{ loadtime }} seconds &nbsp;&#124;&nbsp; {{ searched_at }}</span>
+        {% endif %}
+    </div>
+
+    {% if error_output %}
+        {{ error_output | safe }}
+    {% else %}
+        {% if matches %}
+            <div id="matcher-mosaic" class="mosaic">
+                {% for m in matches %}{% if m.thumb %}
+                    <span class="mosaic-item"><img src="{{ m.thumb }}" alt="" class="mosaic-thumb"></span>
+                {% endif %}{% endfor %}
+            </div>
+        {% endif %}
+
+        <div class="result-card">
+            <div class="card-title card-title--label">Results</div>
+            <div class="card-listings">
+                Collection: <b>{{ collection_user }}</b> ({{ counts.collection }} items)<br>
+                Wantlist: <b>{{ wantlist_user }}</b> ({{ counts.wantlist }} items)<br>
+                <br><b>Matches: {{ matches | length }} items</b><br>
+                {% if matches %}<br>{% endif %}
+                {% for m in matches %}
+                    <b>{{ m.artist }}</b> - {{ m.title }}
+                    {% set fmt_parts = [] %}
+                    {% if m.format_descriptions %}{% set _ = fmt_parts.append(m.format_descriptions) %}{% endif %}
+                    {% if m.format_text %}{% set _ = fmt_parts.append(m.format_text) %}{% endif %}
+                    {% if fmt_parts %} &nbsp;&middot; <i>({{ fmt_parts | join(', ') }})</i>{% endif %}
+                    <br>
+                {% endfor %}
+            </div>
+        </div>
+
+        <div class="lookup-tabs-row">
+            <div class="lookup-tabs">
+                <button class="lookup-tab active" data-tab="matches" data-count-text="Matches ({{ matches | length }})">Matches ({{ matches | length }})</button>
+            </div>
+            <div class="lookup-pagination" id="lookup-pagination">
+                <button class="pag-expand-btn" id="pag-expand-btn" type="button" title="Expand all cards">
+                    <span class="pag-eye pag-eye--closed">{{ eye_closed_svg | safe }}</span>
+                    <span class="pag-eye pag-eye--open">{{ eye_open_svg | safe }}</span>
+                </button>
+                <div class="pag-select" id="pag-size-wrap">
+                    <button class="pag-select-btn" id="pag-size-btn" type="button">
+                        <span id="pag-size-val">50</span>
+                        <span class="pag-select-caret">&#9662;</span>
+                    </button>
+                    <div class="pag-select-menu" id="pag-size-menu">
+                        <button class="pag-select-opt" type="button" data-value="10">10</button>
+                        <button class="pag-select-opt" type="button" data-value="25">25</button>
+                        <button class="pag-select-opt pag-select-opt--active" type="button" data-value="50">50</button>
+                        <button class="pag-select-opt" type="button" data-value="100">100</button>
+                    </div>
+                </div>
+                <div class="pag-divider"></div>
+                <button class="pag-btn" id="pag-prev">&#8249;</button>
+                <span class="pag-label" id="pag-label">1 / 1</span>
+                <button class="pag-btn" id="pag-next">&#8250;</button>
+            </div>
+        </div>
+
+        <div id="lookup-panel-matches" class="lookup-panel">
+            {% if matches %}
+                {{ lookup_grid(matches) }}
+            {% else %}
+                <p class="match-empty">No matches found.</p>
+            {% endif %}
+        </div>
+    {% endif %}
+{% endif %}
+{% endblock %}

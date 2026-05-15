@@ -50,9 +50,11 @@
 
         function getWatchedIds() {
             var ids = [];
-            getActiveContainer().querySelectorAll(".result-card").forEach(function(card) {
+            // Use querySelectorAll to find ALL cards (both sorted and unsorted) to ensure sync
+            document.querySelectorAll(".result-card").forEach(function(card) {
                 if ((card.getAttribute("data-badges") || "").split(" ").indexOf("watch") !== -1) {
-                    ids.push(card.id.replace("card-", ""));
+                    var id = card.id.replace("card-", "");
+                    if (ids.indexOf(id) === -1) ids.push(id);
                 }
             });
             return ids;
@@ -92,6 +94,7 @@
             var el = watched ? makeWatchBadge() : makeEyeBtn();
             el.addEventListener("click", function(e) {
                 e.stopPropagation();
+                e.preventDefault();
                 toggleWatch(card);
             });
             numSpan.appendChild(el);

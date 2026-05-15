@@ -1,3 +1,5 @@
+import time
+import random
 from bs4 import BeautifulSoup
 from datetime import date, datetime
 import threading
@@ -42,60 +44,6 @@ class FormattedEntry: # Formatted marketplace entry for a single release and its
         self.price_badges = price_badges
         self.listing_ids = listing_ids if listing_ids is not None else []
         self.reprice_data = reprice_data if reprice_data is not None else []
-
-    def __str__(self):
-        if self.imgUrl:
-            img_html = (
-                '<a href="{0}" class="card-thumb-link">'
-                '<img class="card-thumb" src="{1}" alt="">'
-                '</a>'
-            ).format(self.url, self.imgUrl)
-        else:
-            img_html = (
-                '<a href="{0}" class="card-thumb-link card-thumb-link--placeholder" '
-                'aria-label="No cover image">'
-                '<svg class="card-thumb-placeholder-icon" viewBox="0 0 24 24" fill="none" '
-                'stroke="currentColor" stroke-width="1.2">'
-                '<circle cx="12" cy="12" r="10"/>'
-                '<circle cx="12" cy="12" r="3.5"/>'
-                '<circle cx="12" cy="12" r="0.8" fill="currentColor" stroke="none"/>'
-                '</svg>'
-                '</a>'
-            ).format(self.url)
-        if self.daysAgo is not None:
-            label = "{0} day ago".format(self.daysAgo) if self.daysAgo == 1 else "{0} days ago".format(self.daysAgo)
-            recency = '<span class="isrecent-badge">RECENT</span> <span class="card-recency-badge">{0}</span> &middot; '.format(label)
-        elif self.yearsAgo is not None:
-            label = "{0} year ago".format(self.yearsAgo) if self.yearsAgo == 1 else "{0} years ago".format(self.yearsAgo)
-            recency = '<span class="card-old-badge">OLD</span> <span class="card-recency-badge">{0}</span> &middot; '.format(label)
-        else:
-            recency = ""
-        last_sold_text = 'Last sold: {0}'.format(self.lastSold) if self.lastSold else 'Last sold: ---'
-        last_sold_html = '{0}{1}'.format(recency, last_sold_text)
-        badges = set(_entry_badges(self).split())
-        if 'lowest' in badges:
-            low_badge = ' &middot; <span class="card-low-badge card-low-badge--lowest">LOWEST</span>'
-        elif 'low' in badges:
-            low_badge = ' &middot; <span class="card-low-badge">LOW</span>'
-        elif 'highest' in badges:
-            low_badge = ' &middot; <span class="card-high-badge card-high-badge--highest">HIGHEST</span>'
-        elif 'high' in badges:
-            low_badge = ' &middot; <span class="card-high-badge">HIGH</span>'
-        else:
-            low_badge = ''
-        release_id = self.url.split('/sell/release/')[1].split('?')[0]
-        sell_history_url = 'https://www.discogs.com/sell/history/{0}'.format(release_id)
-        return (
-            '<div class="card-inner">'
-            '<div class="card-title"><a href="{0}">{1}</a></div>'
-            '<div class="card-listings">{2}</div>'
-            '<div class="card-total">'
-            '<span>Total listings: {3}{6}</span>'
-            '<a href="{7}" class="card-last-sold" target="_blank" rel="noopener noreferrer">{5}</a>'
-            '</div>'
-            '</div>'
-            '{4}'
-        ).format(self.url, self.title, self.listings, self.total, img_html, last_sold_html, low_badge, sell_history_url)
 
 ## Get ##
 
@@ -271,10 +219,11 @@ def get_listings(scraper, inventory_list, sorted_inventory_list, username, relea
     entry = FormattedEntry(release_title,URL,thumbnail_url,formatted_listings,your_place,total,last_sold,days_ago,years_ago,index,price_badges_html,listing_ids,reprice_data)
     inventory_list[index] = entry
     with _list_lock:
-        if your_place < 10:
-            (sorted_inventory_list[your_place - 1]).append(entry)
-        else:
-            sorted_inventory_list[9].append(entry)
+        if your_place > 0:
+            if your_place < 10:
+                (sorted_inventory_list[your_place - 1]).append(entry)
+            else:
+                sorted_inventory_list[9].append(entry)
 
     return
 
@@ -294,10 +243,7 @@ def get_price(listing):
         return "n/a"
 
 
-## Print ##
-
-def _item_id(entry):
-    return entry.url.split('/sell/release/')[1].split('?')[0]
+## Helper ##
 
 def _entry_badges(entry):
     badges = []
@@ -328,171 +274,6 @@ def ordinal(n):
     if 11 <= (n % 100) <= 13:
         return '{0}th'.format(n)
     return '{0}{1}'.format(n, {1: 'st', 2: 'nd', 3: 'rd'}.get(n % 10, 'th'))
-
-# Prints unsorted inventory list.
-def print_list(unsorted_inventory_list):
-
-    output = ""
-    for count, entry in enumerate(unsorted_inventory_list, 1):
-        item_id = _item_id(entry)
-        place_html = '<span>({0})</span>'.format(entry.place) if entry.place else ''
-        price_badges = getattr(entry, 'price_badges', '')
-        reprice_data = getattr(entry, 'reprice_data', [])
-        reprice_attr = ' data-reprice="{0}"'.format(_html.escape(json.dumps(reprice_data))) if reprice_data else ''
-        listing_ids = getattr(entry, 'listing_ids', [])
-        listing_ids_attr = ' data-listing-ids="{0}"'.format(_html.escape(json.dumps(listing_ids))) if listing_ids else ''
-        title_attr = ' data-title="{0}"'.format(_html.escape(entry.title)) if entry.title else ''
-        thumb_attr = ' data-thumb="{0}"'.format(_html.escape(entry.imgUrl)) if entry.imgUrl else ''
-        output += (
-            '<div class="result-card" id="card-{0}" data-badges="{3}"{6}{7}{8}{9}>'
-            '<div class="card-number"><span>#{1}</span><div class="card-number-right">{4}{5}</div></div>'
-            '{2}'
-            '</div>'
-        ).format(item_id, count, entry, _entry_badges(entry), price_badges, place_html, reprice_attr, listing_ids_attr, title_attr, thumb_attr)
-    return output
-
-# Prints a sorted inventory list.
-def print_sorted_list(sorted_inventory_list):
-
-    active_indices = [i for i in range(len(sorted_inventory_list)) if sorted_inventory_list[i]]
-
-    summary_rows = ""
-    for index in active_indices:
-        count = len(sorted_inventory_list[index])
-        summary_rows += '<a href="#place-{0}" class="place-summary-link">{1}</a>: {2}<br>'.format(index + 1, ordinal(index + 1), count)
-    summary = (
-        '<div class="place-summary">'
-        '<div class="place-summary-title">Place Summary</div>'
-        '{0}'
-        '</div>'
-    ).format(summary_rows) if summary_rows else ""
-
-    cards = ""
-    item_count = 0
-    for pos, index in enumerate(active_indices):
-        place_num = index + 1
-        entry_count = len(sorted_inventory_list[index])
-
-        prev_btn = (
-            '<a href="#place-{0}" class="place-nav-btn">&#8592; Prev</a>'.format(active_indices[pos - 1] + 1)
-            if pos > 0 else ""
-        )
-        next_btn = (
-            '<a href="#place-{0}" class="place-nav-btn">Next &#8594;</a>'.format(active_indices[pos + 1] + 1)
-            if pos < len(active_indices) - 1 else ""
-        )
-
-        cards += (
-            '<div class="sort-group-header" id="place-{0}">'
-            '<span>{1} Place &mdash; {2} listing{3}</span>'
-            '<span class="place-nav-buttons">{4}{5}</span>'
-            '</div>'
-        ).format(place_num, ordinal(place_num), entry_count, "s" if entry_count != 1 else "", prev_btn, next_btn)
-
-        for entry in sorted(sorted_inventory_list[index], key=lambda e: e.index):
-            item_count += 1
-            item_id = _item_id(entry)
-            place_html = '<span>({0})</span>'.format(entry.place) if entry.place else ''
-            price_badges = getattr(entry, 'price_badges', '')
-            reprice_data = getattr(entry, 'reprice_data', [])
-            reprice_attr = ' data-reprice="{0}"'.format(_html.escape(json.dumps(reprice_data))) if reprice_data else ''
-            listing_ids = getattr(entry, 'listing_ids', [])
-            listing_ids_attr = ' data-listing-ids="{0}"'.format(_html.escape(json.dumps(listing_ids))) if listing_ids else ''
-            title_attr = ' data-title="{0}"'.format(_html.escape(entry.title)) if entry.title else ''
-            thumb_attr = ' data-thumb="{0}"'.format(_html.escape(entry.imgUrl)) if entry.imgUrl else ''
-            cards += (
-                '<div class="result-card" id="card-{0}" data-badges="{3}"{6}{7}{8}{9}>'
-                '<div class="card-number"><span>#{1}</span><div class="card-number-right">{4}{5}</div></div>'
-                '{2}'
-                '</div>'
-            ).format(item_id, item_count, entry, _entry_badges(entry), price_badges, place_html, reprice_attr, listing_ids_attr, title_attr, thumb_attr)
-
-    scroll_script = (
-        '<script>'
-        'document.querySelectorAll(".place-nav-btn, .place-summary-link").forEach(function(link) {'
-        '    link.addEventListener("click", function(e) {'
-        '        e.preventDefault();'
-        '        var id = this.getAttribute("href").slice(1);'
-        '        var el = document.getElementById(id);'
-        '        if (!el) return;'
-        '        el.style.position = "static";'
-        '        var top = el.getBoundingClientRect().top + window.scrollY;'
-        '        el.style.position = "";'
-        '        window.scrollTo({ top: top, behavior: "smooth" });'
-        '    });'
-        '});'
-        'document.addEventListener("click", function(e) {'
-        '    var item = e.target.closest("a.mosaic-item");'
-        '    if (!item) return;'
-        '    e.preventDefault();'
-        '    var id = item.getAttribute("href").slice(1);'
-        '    var el = document.getElementById(id);'
-        '    if (!el) return;'
-        '    var top = el.getBoundingClientRect().top + window.scrollY;'
-        '    var hdr = document.querySelector(".sort-group-header");'
-        '    var hdrOffset = hdr ? hdr.getBoundingClientRect().height : 0;'
-        '    var mosaicEl = document.getElementById("results-mosaic");'
-        '    var mosaicOffset = (mosaicEl && getComputedStyle(mosaicEl).display !== "none")'
-        '        ? mosaicEl.getBoundingClientRect().height + 26 : 10;'
-        '    window.scrollTo({ top: top - hdrOffset - mosaicOffset, behavior: "smooth" });'
-        '});'
-        '</script>'
-    )
-
-    return '<div class="sorted-results">' + summary + cards + '</div>' + scroll_script
-
-
-# Prints a mosaic of all scraped thumbnails above results.
-def print_mosaic(inventory_list):
-
-    items = ""
-    for entry in inventory_list:
-        if not entry or not entry.imgUrl:
-            continue
-        item_id = _item_id(entry)
-        items += (
-            '<a href="#card-{0}" class="mosaic-item">'
-            '<img src="{1}" alt="" class="mosaic-thumb">'
-            '</a>'
-        ).format(item_id, entry.imgUrl)
-
-    def _total_int(e):
-        try:
-            return int(str(e.total).replace(',', '').strip())
-        except (ValueError, TypeError):
-            return None
-
-    recent_count   = sum(1 for e in inventory_list if e and e.daysAgo is not None)
-    old_count      = sum(1 for e in inventory_list if e and getattr(e, 'yearsAgo', None) is not None)
-    low_count      = sum(1 for e in inventory_list if e and _total_int(e) is not None and (_total_int(e) or 0) < 4)
-    lowest_count   = sum(1 for e in inventory_list if e and _total_int(e) == 1)
-    high_count     = sum(1 for e in inventory_list if e and _total_int(e) is not None and (_total_int(e) or 0) > 4)
-    highest_count  = sum(1 for e in inventory_list if e and _total_int(e) is not None and (_total_int(e) or 0) > 9)
-    cheapest_count = sum(1 for e in inventory_list if e and 'card-cheapest-badge' in getattr(e, 'price_badges', ''))
-    overpriced_count = sum(1 for e in inventory_list if e and 'card-overpriced-badge' in getattr(e, 'price_badges', ''))
-
-    badge_summary = (
-        '<span class="badge-unit"><span class="card-watch-badge inv-count-badge" data-filter="watch" data-tooltip="In your watchlist">WATCH</span><span class="badge-ct">0</span></span>'
-        '<span class="badge-unit"><span class="isrecent-badge inv-count-badge" data-filter="recent" data-tooltip="Last sold within the past 10 days">RECENT</span><span class="badge-ct">{0}</span></span>'
-        '<span class="badge-unit"><span class="card-old-badge inv-count-badge" data-filter="old" data-tooltip="Last sold over a year ago">OLD</span><span class="badge-ct">{1}</span></span>'
-        '<span class="badge-unit"><span class="card-low-badge card-low-badge--lowest inv-count-badge" data-filter="lowest" data-tooltip="Only listing on the market">LOWEST</span><span class="badge-ct">{3}</span></span>'
-        '<span class="badge-unit"><span class="card-low-badge inv-count-badge" data-filter="low" data-tooltip="3 marketplace listings or less">LOW</span><span class="badge-ct">{2}</span></span>'
-        '<span class="badge-unit"><span class="card-high-badge inv-count-badge" data-filter="high" data-tooltip="5 marketplace listings or more">HIGH</span><span class="badge-ct">{4}</span></span>'
-        '<span class="badge-unit"><span class="card-high-badge card-high-badge--highest inv-count-badge" data-filter="highest" data-tooltip="10 marketplace listings or more">HIGHEST</span><span class="badge-ct">{5}</span></span>'
-        '<span class="badge-unit"><span class="card-cheapest-badge inv-count-badge" data-filter="cheapest" data-tooltip="Cheapest listing for its condition">CHEAPEST</span><span class="badge-ct">{6}</span></span>'
-        '<span class="badge-unit"><span class="card-overpriced-badge inv-count-badge" data-filter="overpriced" data-tooltip="More than 10% above cheapest for its condition">OVERPRICED</span><span class="badge-ct">{7}</span></span>'
-    ).format(recent_count, old_count, low_count, lowest_count, high_count, highest_count, cheapest_count, overpriced_count)
-
-    count_div = (
-        '<div class="badge-count">'
-        '<span>{0}</span>'
-        '</div>'
-    ).format(badge_summary)
-
-    if not items:
-        return count_div
-    return '<div id="results-mosaic" class="mosaic">{0}</div>{1}'.format(items, count_div)
-
 
 ## Helper Functions ##
 
@@ -546,22 +327,3 @@ def _parse_price_float(listing):
         return float(re.sub(r'[^\d.]', '', price_text))
     except (AttributeError, ValueError):
         return None
-
-
-## State ##
-
-# # Pickles an inventory list as a save state in a bin file.
-# def save_state(inventory_list):
-
-#     with open("state.bin", "wb") as f:
-#         pickle.dump(inventory_list, f)
-
-# # Loads a pickled inventory list from a bin file.
-# def load_state():
-
-#     with open("state.bin", "rb") as f:
-#         try:
-#             pickled_list = pickle.load(f)
-#             return pickled_list
-#         except pickle.UnpicklingError:
-#             return []
