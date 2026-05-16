@@ -16,7 +16,11 @@ def get_collection_insights(items, total_value=None):
     style_counts = collections.Counter()
     artist_counts = collections.Counter()
     label_counts = collections.Counter()
+    format_counts = collections.Counter()
+    release_type_counts = collections.Counter()
     decade_counts = collections.Counter()
+
+    _RELEASE_TYPES = {'EP', 'Album', 'Single'}
 
     demand_factors = []
     for item in items:
@@ -28,6 +32,11 @@ def get_collection_insights(items, total_value=None):
         for g in item.get('genres', []): genre_counts[g] += 1
         for s in item.get('styles', []): style_counts[s] += 1
         for l in item.get('labels', []): label_counts[l] += 1
+        if item.get('format'): format_counts[item['format']] += 1
+        for tag in item.get('format_tags', []):
+            if tag in _RELEASE_TYPES:
+                release_type_counts[tag] += 1
+                break
         if item.get('artist'): artist_counts[item['artist']] += 1
 
         year = item.get('year', 0)
@@ -65,16 +74,12 @@ def get_collection_insights(items, total_value=None):
 
     decades_sorted = sorted(decade_counts.items())
     
-    # Pie segments
-    total_genre_items = sum(genre_counts.values())
-    genre_pie = []
-    if total_genre_items > 0:
-        for i, (name, count) in enumerate(genre_counts.most_common(10)):
-            genre_pie.append({
-                'name': name,
-                'value': count,
-                'color': _PIE_COLORS[i % len(_PIE_COLORS)]
-            })
+    def _make_pie(counter, limit=10, offset=0):
+        return [
+            {'name': name, 'value': count, 'color': _PIE_COLORS[(i + offset) % len(_PIE_COLORS)]}
+            for i, (name, count) in enumerate(counter.most_common(limit))
+            if count > 0
+        ]
 
     return {
         'top_genres': top_genres,
@@ -86,7 +91,9 @@ def get_collection_insights(items, total_value=None):
         'artist_total': sum(artist_counts.values()),
         'label_total': sum(label_counts.values()),
         'decades': decades_sorted,
-        'genre_pie': genre_pie,
+        'genre_pie':        _make_pie(genre_counts,        offset=0),
+        'format_pie':       _make_pie(format_counts,       offset=4),
+        'release_type_pie': _make_pie(release_type_counts, offset=9),
         'genre_values': genre_values,
         'total_value': total_value,
     }
@@ -118,8 +125,13 @@ def render_insights_dashboard(insights):
             '</div>'
         )
 
-    # Pie Chart Section
-    pie_html = _pie_section("Genre Breakdown", insights['genre_pie'])
+    # Pie charts row — Genre Breakdown + Format Breakdown side by side
+    pies_html = (
+        '<div class="insights-pies-row">' +
+        _pie_section("Genre Breakdown", insights['genre_pie']) +
+        _format_breakdown_section(insights['format_pie'], insights['release_type_pie']) +
+        '</div>'
+    )
 
     def make_rows(data, total):
         rows = ""
@@ -212,40 +224,38 @@ def render_insights_dashboard(insights):
     return (
         '<div class="rec-dash-group" id="collection-insights-dash">' +
         banner_html +
-        pie_html +
+        pies_html +
         breakdown_html +
         '</div>' +
         toggle_script
     )
 
-# Private helpers copied/adapted from records.py for consistency
-
-def _pie_svg(segments, size=110):
+def _pie_svg(segments, size=110, extra_class=''):
     total = sum(s['value'] for s in segments)
     if total == 0: return ''
     cx, cy, r = size/2, size/2, size/2 - 2
     paths = []
-    angle = -90 
+    angle = -90
     for seg in segments:
         if seg['value'] == 0: continue
         sweep = (seg['value'] / total) * 360
         if sweep >= 360: sweep = 359.99
-        start_angle = angle
         end_angle = angle + sweep
-        x1 = cx + r * math.cos(math.radians(start_angle))
-        y1 = cy + r * math.sin(math.radians(start_angle))
+        x1 = cx + r * math.cos(math.radians(angle))
+        y1 = cy + r * math.sin(math.radians(angle))
         x2 = cx + r * math.cos(math.radians(end_angle))
         y2 = cy + r * math.sin(math.radians(end_angle))
         large_arc = 1 if sweep > 180 else 0
         d = f"M {cx} {cy} L {x1} {y1} A {r} {r} 0 {large_arc} 1 {x2} {y2} Z"
         paths.append(f'<path d="{d}" fill="{seg["color"]}" stroke="var(--paper)" stroke-width="2"/>')
         angle = end_angle
-    return f'<svg viewBox="0 0 {size} {size}" xmlns="http://www.w3.org/2000/svg" class="rec-pie-svg">{"".join(paths)}</svg>'
+    cls = f'rec-pie-svg{" " + extra_class if extra_class else ""}'
+    return f'<svg viewBox="0 0 {size} {size}" xmlns="http://www.w3.org/2000/svg" class="{cls}">{"".join(paths)}</svg>'
 
-def _pie_section(title, segments):
+def _pie_legend_html(segments):
     total = sum(s['value'] for s in segments)
-    if not segments or total == 0: return ''
-    legend_items = ''.join(
+    if total == 0: return ''
+    return ''.join(
         f'<div class="rec-pie-legend-item">'
         f'<span class="rec-pie-dot" style="background:{seg["color"]}"></span>'
         f'<span class="rec-pie-name">{_html.escape(seg["name"] or "—")}</span>'
@@ -253,12 +263,34 @@ def _pie_section(title, segments):
         f'</div>'
         for seg in segments if seg['value'] > 0
     )
+
+def _pie_section(title, segments):
+    if not segments or sum(s['value'] for s in segments) == 0: return ''
     return (
-        f'<div class="rec-breakdown-section rec-breakdown-section--wide">'
+        f'<div class="rec-breakdown-section">'
         f'<div class="rec-breakdown-title">{title}</div>'
         f'<div class="rec-pie-wrap">'
         f'{_pie_svg(segments)}'
-        f'<div class="rec-pie-legend">{legend_items}</div>'
+        f'<div class="rec-pie-legend">{_pie_legend_html(segments)}</div>'
         f'</div>'
+        f'</div>'
+    )
+
+def _format_breakdown_section(format_pie, release_type_pie):
+    if not format_pie and not release_type_pie: return ''
+
+    def pie_block(segments, reverse=False):
+        if not segments: return ''
+        svg = _pie_svg(segments, size=80, extra_class='rec-pie-svg--sm')
+        legend = f'<div class="rec-pie-legend">{_pie_legend_html(segments)}</div>'
+        cls = 'rec-pie-wrap rec-pie-wrap--reverse' if reverse else 'rec-pie-wrap'
+        return f'<div class="{cls}">{svg}{legend}</div>'
+
+    return (
+        f'<div class="rec-breakdown-section">'
+        f'<div class="rec-breakdown-title">Format Breakdown</div>'
+        f'{pie_block(format_pie, reverse=False)}'
+        f'<div class="insights-format-sub insights-format-sub--lower">Type</div>'
+        f'{pie_block(release_type_pie, reverse=True)}'
         f'</div>'
     )
