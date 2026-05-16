@@ -63,34 +63,36 @@ def request_with_retry(scraper, method, url, max_retries=3, **kwargs):
             retries += 1
     return None
 
-def fetch_all_pages(url, items_key, scraper, params=None, auth=None):
+def fetch_all_pages(url, items_key, scraper, params=None, auth=None, return_total=False):
     """
     Fetches all pages of a paginated Discogs API endpoint concurrently.
+    If return_total=True, returns (results, total_items) instead of just results.
     """
     if params is None:
         params = {}
     params = dict(params, per_page=100)
-    
+
     first_resp = request_with_retry(scraper, "GET", url, params=dict(params, page=1), headers=_API_HEADERS, auth=auth)
-    
+
     if first_resp and first_resp.status_code == 404:
         raise UserNotFoundError()
     if first_resp and first_resp.status_code in (401, 403):
         if "collection" in url: raise CollectionPrivateError()
         if "wants" in url: raise WantlistPrivateError()
         if "lists" in url: raise ListPrivateError()
-        
+
     if not first_resp or first_resp.status_code != 200:
-        return []
-        
+        return ([], 0) if return_total else []
+
     first_data = _safe_json(first_resp)
     if not first_data:
-        return []
-        
+        return ([], 0) if return_total else []
+
     results = first_data.get(items_key, [])
     pagination = first_data.get("pagination", {})
     total_pages = pagination.get("pages", 1)
-    
+    total_items = pagination.get("items", 0)
+
     if total_pages > 1:
         with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
             futures = {
@@ -106,8 +108,8 @@ def fetch_all_pages(url, items_key, scraper, params=None, auth=None):
                             results.extend(data.get(items_key, []))
                 except Exception:
                     continue
-                    
-    return results
+
+    return (results, total_items) if return_total else results
 
 def get_collection_value(username, scraper, auth=None):
     """

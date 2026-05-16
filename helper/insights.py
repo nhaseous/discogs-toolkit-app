@@ -32,12 +32,12 @@ def get_collection_insights(items, total_value=None):
         for g in item.get('genres', []): genre_counts[g] += 1
         for s in item.get('styles', []): style_counts[s] += 1
         for l in item.get('labels', []): label_counts[l] += 1
-        if item.get('format'): format_counts[item['format']] += 1
+        for f in item.get('format', []): format_counts[f] += 1
         for tag in item.get('format_tags', []):
             if tag in _RELEASE_TYPES:
                 release_type_counts[tag] += 1
                 break
-        if item.get('artist'): artist_counts[item['artist']] += 1
+        for a in item.get('artist', []): artist_counts[a] += 1
 
         year = item.get('year', 0)
         if year > 1900:
@@ -128,17 +128,20 @@ def render_insights_dashboard(insights):
     # Pie charts row — Genre Breakdown + Format Breakdown side by side
     pies_html = (
         '<div class="insights-pies-row">' +
-        _pie_section("Genre Breakdown", insights['genre_pie']) +
+        _pie_section("Genre Breakdown", insights['genre_pie'], filter_field='genres') +
         _format_breakdown_section(insights['format_pie'], insights['release_type_pie']) +
         '</div>'
     )
 
-    def make_rows(data, total):
+    def make_rows(data, total, filter_field=None):
         rows = ""
         for name, val in data:
             pct = val / total * 100 if total else 0
+            ff = (f' class="insights-filter-row"'
+                  f' data-filter-field="{_html.escape(filter_field)}"'
+                  f' data-filter-value="{_html.escape(str(name))}"') if filter_field else ''
             rows += (
-                f'<tr>'
+                f'<tr{ff}>'
                 f'<td class="rec-sf-name">{_html.escape(name)}</td>'
                 f'<td class="rec-sf-money">{val} items'
                 f'<span style="color:var(--ink-muted);margin-left:6px">{pct:.0f}%</span>'
@@ -147,7 +150,7 @@ def render_insights_dashboard(insights):
             )
         return rows
 
-    def top_table(title, data, value_suffix="", is_currency=False, total=None):
+    def top_table(title, data, value_suffix="", is_currency=False, total=None, filter_field=None):
         if is_currency:
             rows = ""
             for name, val in data:
@@ -158,7 +161,7 @@ def render_insights_dashboard(insights):
                     f'</tr>'
                 )
         else:
-            rows = make_rows(data, total)
+            rows = make_rows(data, total, filter_field=filter_field)
         return (
             f'<div class="rec-breakdown-section">'
             f'<div class="rec-breakdown-title">{title}</div>'
@@ -167,8 +170,8 @@ def render_insights_dashboard(insights):
         )
 
     def genre_toggle_section():
-        subgenre_rows = make_rows(insights['top_subgenres'], insights['style_total'])
-        genre_rows    = make_rows(insights['top_genres'],    insights['genre_total'])
+        subgenre_rows = make_rows(insights['top_subgenres'], insights['style_total'], filter_field='styles')
+        genre_rows    = make_rows(insights['top_genres'],    insights['genre_total'],  filter_field='genres')
         return (
             f'<div class="rec-breakdown-section insights-genre-toggle">'
             f'<div class="insights-panel insights-panel--active">'
@@ -199,8 +202,8 @@ def render_insights_dashboard(insights):
     breakdown_html = (
         '<div class="rec-breakdown">' +
         genre_toggle_section() +
-        top_table("Top Artists", insights['top_artists'], " items", total=insights['artist_total']) +
-        top_table("Top Labels",  insights['top_labels'],  " items", total=insights['label_total']) +
+        top_table("Top Artists", insights['top_artists'], " items", total=insights['artist_total'], filter_field='artist') +
+        top_table("Top Labels",  insights['top_labels'],  " items", total=insights['label_total'],  filter_field='labels') +
         '</div>' +
         value_genre_html
     )
@@ -252,26 +255,35 @@ def _pie_svg(segments, size=110, extra_class=''):
     cls = f'rec-pie-svg{" " + extra_class if extra_class else ""}'
     return f'<svg viewBox="0 0 {size} {size}" xmlns="http://www.w3.org/2000/svg" class="{cls}">{"".join(paths)}</svg>'
 
-def _pie_legend_html(segments):
+def _pie_legend_html(segments, filter_field=None):
     total = sum(s['value'] for s in segments)
     if total == 0: return ''
-    return ''.join(
-        f'<div class="rec-pie-legend-item">'
-        f'<span class="rec-pie-dot" style="background:{seg["color"]}"></span>'
-        f'<span class="rec-pie-name">{_html.escape(seg["name"] or "—")}</span>'
-        f'<span class="rec-pie-pct">{seg["value"] / total * 100:.0f}%</span>'
-        f'</div>'
-        for seg in segments if seg['value'] > 0
-    )
+    items = []
+    for seg in segments:
+        if seg['value'] <= 0: continue
+        cls = 'rec-pie-legend-item'
+        ff = ''
+        if filter_field:
+            cls += ' insights-filter-row'
+            ff = (f' data-filter-field="{_html.escape(filter_field)}"'
+                  f' data-filter-value="{_html.escape(str(seg["name"] or ""))}"')
+        items.append(
+            f'<div class="{cls}"{ff}>'
+            f'<span class="rec-pie-dot" style="background:{seg["color"]}"></span>'
+            f'<span class="rec-pie-name">{_html.escape(seg["name"] or "—")}</span>'
+            f'<span class="rec-pie-pct">{seg["value"] / total * 100:.0f}%</span>'
+            f'</div>'
+        )
+    return ''.join(items)
 
-def _pie_section(title, segments):
+def _pie_section(title, segments, filter_field=None):
     if not segments or sum(s['value'] for s in segments) == 0: return ''
     return (
         f'<div class="rec-breakdown-section">'
         f'<div class="rec-breakdown-title">{title}</div>'
         f'<div class="rec-pie-wrap">'
         f'{_pie_svg(segments)}'
-        f'<div class="rec-pie-legend">{_pie_legend_html(segments)}</div>'
+        f'<div class="rec-pie-legend">{_pie_legend_html(segments, filter_field)}</div>'
         f'</div>'
         f'</div>'
     )
@@ -279,18 +291,18 @@ def _pie_section(title, segments):
 def _format_breakdown_section(format_pie, release_type_pie):
     if not format_pie and not release_type_pie: return ''
 
-    def pie_block(segments, reverse=False):
+    def pie_block(segments, filter_field=None, reverse=False):
         if not segments: return ''
         svg = _pie_svg(segments, size=80, extra_class='rec-pie-svg--sm')
-        legend = f'<div class="rec-pie-legend">{_pie_legend_html(segments)}</div>'
+        legend = f'<div class="rec-pie-legend">{_pie_legend_html(segments, filter_field)}</div>'
         cls = 'rec-pie-wrap rec-pie-wrap--reverse' if reverse else 'rec-pie-wrap'
         return f'<div class="{cls}">{svg}{legend}</div>'
 
     return (
         f'<div class="rec-breakdown-section">'
         f'<div class="rec-breakdown-title">Format Breakdown</div>'
-        f'{pie_block(format_pie, reverse=False)}'
+        f'{pie_block(format_pie, filter_field="format", reverse=False)}'
         f'<div class="insights-format-sub insights-format-sub--lower">Type</div>'
-        f'{pie_block(release_type_pie, reverse=True)}'
+        f'{pie_block(release_type_pie, filter_field="format_tags", reverse=True)}'
         f'</div>'
     )

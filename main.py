@@ -457,6 +457,7 @@ def lookuppage():
     collection, wantlist, lists, list_releases = [], [], [], []
     user_not_found, rate_limited, cf_blocked_list = False, False, False
     collection_error, wantlist_error, lists_error = "", "", ""
+    collection_partial, wantlist_partial = "", ""
     loadtime, searched_at = "", ""
     has_results = bool(username)
     insights_html = ""
@@ -483,8 +484,10 @@ def lookuppage():
                 _name = _futures[_future]
                 try:
                     _result = _future.result()
-                    if _name == 'collection': collection = _result
-                    elif _name == 'wantlist':   wantlist   = _result
+                    if _name == 'collection':
+                        collection, collection_partial = _result
+                    elif _name == 'wantlist':
+                        wantlist, wantlist_partial = _result
                     elif _name == 'lists':      lists      = _result
                     elif _name == 'value':      total_value = _result
                 except lookup_helper.UserNotFoundError:
@@ -527,6 +530,8 @@ def lookuppage():
         collection_error=collection_error,
         wantlist_error=wantlist_error,
         lists_error=lists_error,
+        collection_partial=collection_partial,
+        wantlist_partial=wantlist_partial,
         loadtime=loadtime,
         searched_at=searched_at,
         has_results=has_results,

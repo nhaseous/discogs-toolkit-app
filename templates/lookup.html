@@ -101,6 +101,7 @@
             {% if collection_error %}
                 <div class="lookup-notice">{{ collection_error }}</div>
             {% elif collection %}
+                {% if collection_partial %}<div class="lookup-notice lookup-notice--warning">{{ collection_partial }}</div>{% endif %}
                 <div class="match-grid"></div>
                 <script type="application/json" class="lookup-data" data-tab="collection" data-show-stats="0">{{ collection | tojson | safe }}</script>
             {% else %}
@@ -112,6 +113,7 @@
             {% if wantlist_error %}
                 <div class="lookup-notice">{{ wantlist_error }}</div>
             {% elif wantlist %}
+                {% if wantlist_partial %}<div class="lookup-notice lookup-notice--warning">{{ wantlist_partial }}</div>{% endif %}
                 <div class="match-grid"></div>
                 <script type="application/json" class="lookup-data" data-tab="wantlist" data-show-stats="1">{{ wantlist | tojson | safe }}</script>
             {% else %}

@@ -581,6 +581,12 @@
     font-style: normal;
 }
 
+.lookup-notice--warning {
+    background: var(--amber-soft);
+    color: var(--amber);
+    font-style: normal;
+}
+
 /* =========================================================
    Records Specific
    ========================================================= */
@@ -717,6 +723,33 @@
 }
 
 .rec-pie-pct { color: var(--ink-muted); font-variant-numeric: tabular-nums; font-size: 12px; }
+
+.insights-filter-row {
+    cursor: pointer;
+    border-radius: 3px;
+    transition: background 0.12s ease;
+    &:hover { background: color-mix(in srgb, var(--rust) 8%, transparent); }
+}
+
+.insights-filter-row.insights-filter-active {
+    background: color-mix(in srgb, var(--rust) 14%, transparent);
+    .rec-sf-name, .rec-pie-name { font-weight: 600; color: var(--rust); }
+    .rec-pie-name::after { background: color-mix(in srgb, var(--rust) 30%, var(--rule)); }
+}
+
+.insights-filters-disabled .insights-filter-row {
+    cursor: default;
+    pointer-events: none;
+}
+
+@keyframes insights-filter-flash {
+    from { background: color-mix(in srgb, var(--rust) 38%, transparent); }
+    to   { background: color-mix(in srgb, var(--rust) 14%, transparent); }
+}
+
+.insights-filter-row.insights-filter-flash {
+    animation: insights-filter-flash 0.35s ease-out forwards;
+}
 
 .rec-tabs-row { background: var(--paper); padding: 0 0 1px; margin-bottom: 18px; }
 

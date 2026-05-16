@@ -15,31 +15,52 @@ from helper.common import API_HEADERS as _API_HEADERS
 def _is_gae():
     return os.environ.get('GAE_ENV', '').startswith('standard')
 
+def _extract_artists(artists_list):
+    result = []
+    for a in (artists_list or []):
+        name = clean_artist(a)
+        if name and name != "Various" and name not in result:
+            result.append(name)
+    return result
+
+def _extract_formats(formats_list):
+    seen, result = set(), []
+    for f in (formats_list or []):
+        name = f.get("name")
+        if not name or name == "All Media":
+            continue
+        if name in ("CD", "CDr"):
+            name = "CD(r)"
+        if name not in seen:
+            seen.add(name)
+            result.append(name)
+    return result
+
 def get_collection(username, scraper, auth=None):
     url = "https://api.discogs.com/users/{0}/collection/folders/0/releases".format(username)
     params = {"sort": "artist", "sort_order": "asc"}
 
     results = []
     try:
-        releases = fetch_all_pages(url, "releases", scraper, params=params, auth=auth)
+        releases, expected_total = fetch_all_pages(url, "releases", scraper, params=params, auth=auth, return_total=True)
     except UserNotFoundError: raise UserNotFoundError(username)
     except CollectionPrivateError: raise CollectionPrivateError(username)
-    
+
     for r in releases:
         info = r["basic_information"]
-        artist = clean_artist(info["artists"][0]) if info.get("artists") else ""
+        artists = _extract_artists(info.get("artists"))
         title = info.get("title", "")
         fmt_info = info["formats"][0] if info.get("formats") else {}
-        fmt = fmt_info.get("name", "")
+        fmt = _extract_formats(info.get("formats"))
         fmt_descriptions = ", ".join(fmt_info.get("descriptions") or [])
         fmt_text = fmt_info.get("text", "")
         release_id = info.get("id", "")
-        
+
         # New: include community stats and metadata for aggregation
         community = r.get("community", {})
         labels = [l.get("name", "") for l in (info.get("labels") or []) if l.get("name")]
         results.append({
-            "artist": artist,
+            "artist": artists,
             "title": title,
             "format": fmt,
             "format_descriptions": fmt_descriptions,
@@ -56,7 +77,12 @@ def get_collection(username, scraper, auth=None):
             "want": community.get("want", 0),
             "labels": labels,
         })
-    return results
+
+    partial_warning = ""
+    if expected_total and len(results) < expected_total:
+        partial_warning = "Partial results: fetched {0} of {1} collection items. Some records may be missing due to a connection issue.".format(len(results), expected_total)
+
+    return results, partial_warning
 
 def get_wantlist(username, scraper, auth=None):
     url = "https://api.discogs.com/users/{0}/wants".format(username)
@@ -64,21 +90,21 @@ def get_wantlist(username, scraper, auth=None):
 
     results = []
     try:
-        wants = fetch_all_pages(url, "wants", scraper, params=params, auth=auth)
+        wants, expected_total = fetch_all_pages(url, "wants", scraper, params=params, auth=auth, return_total=True)
     except UserNotFoundError: raise UserNotFoundError(username)
     except WantlistPrivateError: raise WantlistPrivateError(username)
 
     for w in wants:
         info = w["basic_information"]
-        artist = clean_artist(info["artists"][0]) if info.get("artists") else ""
+        artists = _extract_artists(info.get("artists"))
         title = info.get("title", "")
         fmt_info = info["formats"][0] if info.get("formats") else {}
-        fmt = fmt_info.get("name", "")
+        fmt = _extract_formats(info.get("formats"))
         fmt_descriptions = ", ".join(fmt_info.get("descriptions") or [])
         fmt_text = fmt_info.get("text", "")
         release_id = info.get("id", "")
         results.append({
-            "artist": artist,
+            "artist": artists,
             "title": title,
             "format": fmt,
             "format_descriptions": fmt_descriptions,
@@ -88,7 +114,12 @@ def get_wantlist(username, scraper, auth=None):
             "url": "https://www.discogs.com/release/{0}".format(release_id) if release_id else "",
             "stats": "",
         })
-    return results
+
+    partial_warning = ""
+    if expected_total and len(results) < expected_total:
+        partial_warning = "Partial results: fetched {0} of {1} wantlist items. Some records may be missing due to a connection issue.".format(len(results), expected_total)
+
+    return results, partial_warning
 
 def get_lists(username, scraper, auth=None):
     url = "https://api.discogs.com/users/{0}/lists".format(username)

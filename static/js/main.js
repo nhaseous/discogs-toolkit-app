@@ -1,3 +1,26 @@
+var _lookupActiveFilters = {};
+function _lookupGetFilteredItems(items) {
+    var fields = Object.keys(_lookupActiveFilters);
+    if (!fields.length) return items;
+    return items.filter(function(item) {
+        for (var fi = 0; fi < fields.length; fi++) {
+            var field = fields[fi];
+            var vals = _lookupActiveFilters[field];
+            if (!vals || !vals.size) continue;
+            var iv = item[field];
+            var found;
+            if (Array.isArray(iv)) {
+                found = true;
+                vals.forEach(function(v) { if (iv.indexOf(v) === -1) found = false; });
+            } else {
+                found = vals.has(String(iv));
+            }
+            if (!found) return false;
+        }
+        return true;
+    });
+}
+
 function _withLookupScroll(action) {
     var tabsRow = document.querySelector(".lookup-tabs-row");
     var contentMain = document.getElementById("content-main");
@@ -403,11 +426,18 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
                 if (window._resetMatchCardHover) window._resetMatchCardHover();
                 if (window._applyTabPage) window._applyTabPage(target);
                 if (window._layoutMatchGrids) window._layoutMatchGrids();
+                if (window._onLookupTabChange) window._onLookupTabChange(target);
             });
         });
     });
     var initTab = document.querySelector(".lookup-tab.active");
     if (countEl && initTab) countEl.textContent = initTab.getAttribute("data-count-text");
+    if (initTab) {
+        var initName = initTab.getAttribute("data-tab");
+        document.querySelectorAll(".lookup-panel").forEach(function(panel) {
+            panel.style.display = panel.id === "lookup-panel-" + initName ? "" : "none";
+        });
+    }
 })();
 
 (function() {
@@ -431,8 +461,8 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
             ? '<img src="' + _esc(imgSrc) + '" alt="" loading="lazy" class="match-card-img">'
             : '<div class="match-card-placeholder">' + VINYL_SVG + '</div>';
         var body = '<div class="match-card-title">' + _esc(m.title) + '</div>'
-            + '<div class="match-card-artist">' + _esc(m.artist) + '</div>'
-            + (m.format ? '<div class="match-card-format">' + _esc(m.format) + '</div>' : '')
+            + '<div class="match-card-artist">' + _esc(Array.isArray(m.artist) ? m.artist.join(' / ') : (m.artist || '')) + '</div>'
+            + (m.format && m.format.length ? '<div class="match-card-format">' + _esc(m.format.join(' / ')) + '</div>' : '')
             + (m.format_descriptions ? '<div class="match-card-format-desc">' + _esc(m.format_descriptions) + '</div>' : '')
             + (m.format_text ? '<div class="match-card-format-text">' + _esc(m.format_text) + '</div>' : '')
             + (m.for_sale && m.for_sale_url ? '<div class="match-card-forsale" data-href="' + _esc(m.for_sale_url) + '" onclick="event.stopPropagation();event.preventDefault();window.open(this.dataset.href,\'_blank\',\'noopener,noreferrer\')">' + _esc(m.for_sale) + '</div>' : '')
@@ -483,7 +513,9 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
         if (!grid) return;
         var start = (page - 1) * PAGE_SIZE;
         if (s.items) {
-            var pageItems = s.items.slice(start, start + PAGE_SIZE);
+            var sourceItems = (tabName === 'collection') ? _lookupGetFilteredItems(s.items) : s.items;
+            s.total = Math.max(1, Math.ceil(sourceItems.length / PAGE_SIZE));
+            var pageItems = sourceItems.slice(start, start + PAGE_SIZE);
             var html = '';
             pageItems.forEach(function(m) { html += renderLookupCard(m, s.showStats); });
             grid.innerHTML = html;
@@ -495,6 +527,49 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
             pageCards.forEach(function(c) { grid.appendChild(c); });
         }
     }
+    function _syncCollectionTabCount(cs) {
+        var isFiltered = Object.keys(_lookupActiveFilters).length > 0;
+        var total = cs.items.length;
+        var filtered = isFiltered ? _lookupGetFilteredItems(cs.items).length : total;
+        var collTab = document.querySelector('.lookup-tab[data-tab="collection"]');
+        if (!collTab) return;
+        // Lock width on first filter so the button doesn't resize
+        if (!collTab._lockedWidth) {
+            collTab.style.minWidth = collTab.offsetWidth + 'px';
+            collTab._lockedWidth = true;
+        }
+        collTab.textContent = 'Collection (' + filtered + ')';
+        var countText = filtered + ' item' + (filtered !== 1 ? 's' : '');
+        collTab.setAttribute('data-count-text', countText);
+        var countEl = document.getElementById('lookup-count');
+        if (countEl && collTab.classList.contains('active')) {
+            countEl.textContent = countText;
+        }
+        // Release width lock when filters are cleared
+        if (!isFiltered) {
+            collTab.style.minWidth = '';
+            collTab._lockedWidth = false;
+        }
+    }
+    var _exclusiveFilterFields = window._exclusiveFilterFields = { format_tags: true };
+    window._toggleLookupFilter = function(field, value) {
+        if (!_lookupActiveFilters[field]) _lookupActiveFilters[field] = new Set();
+        var fset = _lookupActiveFilters[field];
+        if (fset.has(value)) {
+            fset.delete(value);
+            if (!fset.size) delete _lookupActiveFilters[field];
+        } else {
+            if (_exclusiveFilterFields[field]) fset.clear();
+            fset.add(value);
+        }
+        var cs = state['collection'];
+        if (cs && cs.items) {
+            applyPage('collection', 1);
+            syncControls('collection');
+            _syncCollectionTabCount(cs);
+            if (window._layoutMatchGrids) window._layoutMatchGrids();
+        }
+    };
     window._applyTabPage = function(tabName) {
         var s = state[tabName];
         if (!s) return;
@@ -700,6 +775,60 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
         pendingCard = null;
         if (activeCard) { activeCard.classList.remove("match-card--active"); activeCard = null; }
     };
+})();
+
+// Insights dashboard filter click handling
+(function() {
+    var dash = document.getElementById('collection-insights-dash');
+
+    window._onLookupTabChange = function(tabName) {
+        if (!dash) return;
+        if (tabName === 'wantlist') {
+            dash.style.display = 'none';
+        } else {
+            dash.style.display = '';
+            dash.classList.toggle('insights-filters-disabled', tabName !== 'collection');
+        }
+    };
+
+    if (!dash) return;
+
+    var initTab = document.querySelector('.lookup-tab.active');
+    if (initTab) window._onLookupTabChange(initTab.getAttribute('data-tab'));
+
+    dash.addEventListener('click', function(e) {
+        if (dash.classList.contains('insights-filters-disabled')) return;
+        var row = e.target.closest('.insights-filter-row');
+        if (!row) return;
+        var field = row.getAttribute('data-filter-field');
+        var value = row.getAttribute('data-filter-value');
+        if (!field || value === null) return;
+
+        var isActive = row.classList.toggle('insights-filter-active');
+
+        if (isActive && _exclusiveFilterFields && _exclusiveFilterFields[field]) {
+            dash.querySelectorAll('.insights-filter-row[data-filter-field="' + field + '"]').forEach(function(r) {
+                if (r !== row) r.classList.remove('insights-filter-active');
+            });
+        }
+
+        dash.querySelectorAll('.insights-filter-row').forEach(function(r) {
+            if (r !== row &&
+                r.getAttribute('data-filter-field') === field &&
+                r.getAttribute('data-filter-value') === value) {
+                r.classList.toggle('insights-filter-active', isActive);
+            }
+        });
+
+        if (window._toggleLookupFilter) window._toggleLookupFilter(field, value);
+
+        if (isActive) {
+            row.classList.add('insights-filter-flash');
+            row.addEventListener('animationend', function() {
+                row.classList.remove('insights-filter-flash');
+            }, { once: true });
+        }
+    });
 })();
 
 // External link handling for pywebview (MacOS App)
