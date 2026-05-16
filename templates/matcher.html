@@ -5,6 +5,7 @@
 {% endblock %}
 
 {% block content %}
+<div class="lookup-search-header">
 <form id="matcher-form" class="search-bar" action="" method="get" role="search">
     <span class="search-bar-icon" aria-hidden="true">
         {% if search_icon_svg %}
@@ -34,6 +35,7 @@
 <div class="page-header">
     <div class="page-eyebrow">Collections</div>
     <h2>Collection <em>Matcher</em></h2>
+</div>
 </div>
 
 {% if has_results %}

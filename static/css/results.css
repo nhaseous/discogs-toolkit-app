@@ -406,6 +406,25 @@
 }
 
 /* =========================================================
+   Lookup — search/header reorder
+   ========================================================= */
+
+.lookup-search-header {
+    display: flex;
+    flex-direction: column;
+}
+
+/* Empty state: header above search bar */
+.lookup-search-header .page-header { order: 0; }
+.lookup-search-header .search-bar  { order: 1; }
+.lookup-search-header #spinner     { order: 2; }
+
+/* Has-results: restore DOM order (search bar above header) */
+.has-results .lookup-search-header .page-header { order: 0; }
+.has-results .lookup-search-header .search-bar  { order: -1; }
+.has-results .lookup-search-header #spinner     { order: -1; }
+
+/* =========================================================
    Lookup & Records — Tabs, Pagination, Panels
    ========================================================= */
 
@@ -623,6 +642,22 @@
 .rec-breakdown-section--wide { grid-column: 1 / -1; }
 
 .rec-breakdown-title { margin-bottom: 10px; }
+
+.insights-toggle-title {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+
+.insights-toggle-switch {
+    color: var(--ink-muted);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    letter-spacing: 0.03em;
+
+    &:hover { color: var(--ink); }
+}
 
 .rec-breakdown-table {
     width: 100%;

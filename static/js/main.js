@@ -406,6 +406,8 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
             });
         });
     });
+    var initTab = document.querySelector(".lookup-tab.active");
+    if (countEl && initTab) countEl.textContent = initTab.getAttribute("data-count-text");
 })();
 
 (function() {

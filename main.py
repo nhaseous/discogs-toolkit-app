@@ -1,7 +1,7 @@
 from dotenv import load_dotenv
 load_dotenv()
 
-from flask import Flask, request, render_template, session, redirect
+from flask import Flask, request, render_template, session, redirect, send_from_directory
 from helper import pricechecker, matcher, lookup as lookup_helper, records as records_helper, firestore_db as _firestore_db, insights as insights_helper, api as api_helper
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import cloudscraper, time, html as _html, os, requests as _requests, json as _json
@@ -26,12 +26,20 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE']   = os.environ.get('GAE_ENV', '').startswith('standard')
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=90)
 
-_STATIC_V = str(int(os.path.getmtime(os.path.abspath(__file__))))
+_static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
+_STATIC_V = str(int(max(
+    (os.path.getmtime(os.path.join(r, f)) for r, _, fs in os.walk(_static_dir) for f in fs),
+    default=os.path.getmtime(os.path.abspath(__file__))
+)))
 
 try:
     _records_data = records_helper.load_all()
 except Exception:
     _records_data = records_helper.empty_data()
+
+@app.route('/static/v<version>/<path:filename>')
+def versioned_static(version, filename):
+    return send_from_directory(app.static_folder, filename)
 
 @app.before_request
 def _load_persistent_auth():

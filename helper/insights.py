@@ -15,22 +15,21 @@ def get_collection_insights(items, total_value=None):
     genre_counts = collections.Counter()
     style_counts = collections.Counter()
     artist_counts = collections.Counter()
+    label_counts = collections.Counter()
     decade_counts = collections.Counter()
-    
-    # Weighting: compute "Demand Factor" per item
-    # Demand = Want / (Have + 1)
+
     demand_factors = []
     for item in items:
         have = item.get('have', 0)
         want = item.get('want', 0)
-        # Avoid division by zero, use +1 smoothing
         factor = want / (have + 1)
         demand_factors.append(factor)
-        
+
         for g in item.get('genres', []): genre_counts[g] += 1
         for s in item.get('styles', []): style_counts[s] += 1
+        for l in item.get('labels', []): label_counts[l] += 1
         if item.get('artist'): artist_counts[item['artist']] += 1
-        
+
         year = item.get('year', 0)
         if year > 1900:
             decade = (year // 10) * 10
@@ -59,11 +58,11 @@ def get_collection_insights(items, total_value=None):
                         for g in gs:
                             genre_values[g] = genre_values.get(g, 0) + val_per_genre
 
-    # Format for rendering
     top_genres = genre_counts.most_common(5)
     top_styles = style_counts.most_common(5)
     top_artists = artist_counts.most_common(5)
-    
+    top_labels = label_counts.most_common(5)
+
     decades_sorted = sorted(decade_counts.items())
     
     # Pie segments
@@ -81,9 +80,11 @@ def get_collection_insights(items, total_value=None):
         'top_genres': top_genres,
         'top_subgenres': top_styles,
         'top_artists': top_artists,
+        'top_labels': top_labels,
         'genre_total': sum(genre_counts.values()),
         'style_total': sum(style_counts.values()),
         'artist_total': sum(artist_counts.values()),
+        'label_total': sum(label_counts.values()),
         'decades': decades_sorted,
         'genre_pie': genre_pie,
         'genre_values': genre_values,
@@ -120,26 +121,32 @@ def render_insights_dashboard(insights):
     # Pie Chart Section
     pie_html = _pie_section("Genre Breakdown", insights['genre_pie'])
 
-    # Top 5 Tables
-    def top_table(title, data, value_suffix="", is_currency=False, total=None):
+    def make_rows(data, total):
         rows = ""
         for name, val in data:
-            if is_currency:
-                val_str = f"${val:,.2f}"
-            elif total:
-                pct = val / total * 100
-                val_str = (
-                    f'{val}{value_suffix}'
-                    f'<span style="color:var(--ink-muted);margin-left:6px">{pct:.0f}%</span>'
-                )
-            else:
-                val_str = f"{val}{value_suffix}"
+            pct = val / total * 100 if total else 0
             rows += (
                 f'<tr>'
                 f'<td class="rec-sf-name">{_html.escape(name)}</td>'
-                f'<td class="rec-sf-money">{val_str}</td>'
+                f'<td class="rec-sf-money">{val} items'
+                f'<span style="color:var(--ink-muted);margin-left:6px">{pct:.0f}%</span>'
+                f'</td>'
                 f'</tr>'
             )
+        return rows
+
+    def top_table(title, data, value_suffix="", is_currency=False, total=None):
+        if is_currency:
+            rows = ""
+            for name, val in data:
+                rows += (
+                    f'<tr>'
+                    f'<td class="rec-sf-name">{_html.escape(name)}</td>'
+                    f'<td class="rec-sf-money">${val:,.2f}</td>'
+                    f'</tr>'
+                )
+        else:
+            rows = make_rows(data, total)
         return (
             f'<div class="rec-breakdown-section">'
             f'<div class="rec-breakdown-title">{title}</div>'
@@ -147,23 +154,59 @@ def render_insights_dashboard(insights):
             f'</div>'
         )
 
+    def genre_toggle_section():
+        subgenre_rows = make_rows(insights['top_subgenres'], insights['style_total'])
+        genre_rows    = make_rows(insights['top_genres'],    insights['genre_total'])
+        return (
+            f'<div class="rec-breakdown-section insights-genre-toggle">'
+            f'<div class="insights-panel insights-panel--active">'
+            f'<div class="rec-breakdown-title insights-toggle-title">'
+            f'Top Sub-genres'
+            f'<span class="insights-toggle-switch">Genre</span>'
+            f'</div>'
+            f'<table class="rec-breakdown-table"><tbody>{subgenre_rows}</tbody></table>'
+            f'</div>'
+            f'<div class="insights-panel" style="display:none">'
+            f'<div class="rec-breakdown-title insights-toggle-title">'
+            f'Top Genres'
+            f'<span class="insights-toggle-switch">Sub-genre</span>'
+            f'</div>'
+            f'<table class="rec-breakdown-table"><tbody>{genre_rows}</tbody></table>'
+            f'</div>'
+            f'</div>'
+        )
+
     # Value per Genre Table (Approximated)
     value_genre_html = ""
     if insights['genre_values']:
-        # Sort by value descending
         sorted_val_genres = sorted(insights['genre_values'].items(), key=lambda x: x[1], reverse=True)[:5]
         value_genre_html = top_table("Value per Genre (Top 5)", sorted_val_genres, is_currency=True)
-        # Match the style and include disclaimer
         value_genre_html = value_genre_html.replace('rec-breakdown-section', 'rec-breakdown-section rec-breakdown-section--wide', 1)
         value_genre_html = value_genre_html.replace('</div><table', '<div class="rec-stat-sub" style="margin-bottom:8px">Approximated based on have/want data</div><table', 1)
 
     breakdown_html = (
         '<div class="rec-breakdown">' +
-        top_table("Top Genres", insights['top_genres'], " items", total=insights['genre_total']) +
-        top_table("Top Sub-genres", insights['top_subgenres'], " items", total=insights['style_total']) +
+        genre_toggle_section() +
         top_table("Top Artists", insights['top_artists'], " items", total=insights['artist_total']) +
-        '</div>' + 
+        top_table("Top Labels",  insights['top_labels'],  " items", total=insights['label_total']) +
+        '</div>' +
         value_genre_html
+    )
+
+    toggle_script = (
+        '<script>'
+        '(function(){'
+        'document.querySelectorAll(".insights-genre-toggle").forEach(function(wrap){'
+        'wrap.querySelectorAll(".insights-toggle-switch").forEach(function(btn){'
+        'btn.addEventListener("click",function(){'
+        'wrap.querySelectorAll(".insights-panel").forEach(function(p){'
+        'p.style.display=p.style.display==="none"?"":"none";'
+        '});'
+        '});'
+        '});'
+        '});'
+        '})();'
+        '</script>'
     )
 
     return (
@@ -171,7 +214,8 @@ def render_insights_dashboard(insights):
         banner_html +
         pie_html +
         breakdown_html +
-        '</div>'
+        '</div>' +
+        toggle_script
     )
 
 # Private helpers copied/adapted from records.py for consistency

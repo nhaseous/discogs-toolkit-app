@@ -114,7 +114,6 @@ html:has(.tool-grid-wrap) {
 }
 
 .tool-card--disabled {
-    opacity: 0.5;
     cursor: default;
 
     &::after { content: none; }
@@ -123,7 +122,7 @@ html:has(.tool-grid-wrap) {
         content: attr(data-tooltip);
         position: absolute;
         inset: 0;
-        background: color-mix(in srgb, var(--paper) 88%, transparent);
+        background: color-mix(in srgb, var(--paper) 55%, transparent);
         display: grid;
         place-items: center;
         text-align: center;
@@ -131,17 +130,15 @@ html:has(.tool-grid-wrap) {
         line-height: 1.4;
         color: var(--ink-soft);
         padding: 20px;
-        opacity: 0;
-        transition: opacity 0.15s ease;
+        transition: background 0.15s ease;
     }
 
     &:hover {
-        opacity: 1;
         transform: none;
         box-shadow: none;
         border-color: var(--rule);
 
-        &::before { opacity: 1; }
+        &::before { background: color-mix(in srgb, var(--paper) 88%, transparent); }
     }
 }
 

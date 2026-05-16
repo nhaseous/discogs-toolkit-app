@@ -8,16 +8,16 @@
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap">
-    <link rel="stylesheet" href="/static/css/vars.css?v={{ static_v }}">
-    <link rel="stylesheet" href="/static/css/sidebar.css?v={{ static_v }}">
+    <link rel="stylesheet" href="/static/v{{ static_v }}/css/vars.css">
+    <link rel="stylesheet" href="/static/v{{ static_v }}/css/sidebar.css">
     {% if request.path == '/' %}
-    <link rel="stylesheet" href="/static/css/tools.css?v={{ static_v }}">
+    <link rel="stylesheet" href="/static/v{{ static_v }}/css/tools.css">
     {% endif %}
     {% if request.path in ['/pricechecker', '/matcher', '/lookup'] %}
-    <link rel="stylesheet" href="/static/css/components.css?v={{ static_v }}">
+    <link rel="stylesheet" href="/static/v{{ static_v }}/css/components.css">
     {% endif %}
     {% if request.path in ['/pricechecker', '/matcher', '/lookup', '/records'] %}
-    <link rel="stylesheet" href="/static/css/results.css?v={{ static_v }}">
+    <link rel="stylesheet" href="/static/v{{ static_v }}/css/results.css">
     {% endif %}
 </head>
 <body>
@@ -63,7 +63,7 @@
     </main>
 </div>
 <div id="badge-tooltip"></div>
-<script src="/static/js/main.js?v={{ static_v }}"></script>
+<script src="/static/v{{ static_v }}/js/main.js"></script>
 {% block extra_js %}{% endblock %}
 </body>
 </html>

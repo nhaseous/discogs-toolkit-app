@@ -3,13 +3,17 @@ collections.Callable = collections.abc.Callable
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from bs4 import BeautifulSoup
-import html as _html, json, math, re
+import html as _html, json, math, os, re
 
 from helper.api import (
-    fetch_all_pages, clean_artist, 
-    UserNotFoundError, CollectionPrivateError, WantlistPrivateError, ListPrivateError, 
+    fetch_all_pages, request_with_retry, clean_artist,
+    UserNotFoundError, CollectionPrivateError, WantlistPrivateError, ListPrivateError,
     RateLimitError, CloudflareBlockedError
 )
+from helper.common import API_HEADERS as _API_HEADERS
+
+def _is_gae():
+    return os.environ.get('GAE_ENV', '').startswith('standard')
 
 def get_collection(username, scraper, auth=None):
     url = "https://api.discogs.com/users/{0}/collection/folders/0/releases".format(username)
@@ -33,6 +37,7 @@ def get_collection(username, scraper, auth=None):
         
         # New: include community stats and metadata for aggregation
         community = r.get("community", {})
+        labels = [l.get("name", "") for l in (info.get("labels") or []) if l.get("name")]
         results.append({
             "artist": artist,
             "title": title,
@@ -48,6 +53,7 @@ def get_collection(username, scraper, auth=None):
             "year": info.get("year", 0),
             "have": community.get("have", 0),
             "want": community.get("want", 0),
+            "labels": labels,
         })
     return results
 
@@ -103,7 +109,49 @@ def get_lists(username, scraper, auth=None):
     return results
 
 def get_list_releases(list_id, scraper):
-    # This stays mostly as is because it's scraping-based
+    if _is_gae():
+        return _get_list_releases_api(list_id, scraper)
+    return _get_list_releases_scrape(list_id, scraper)
+
+def _get_list_releases_api(list_id, scraper):
+    url = "https://api.discogs.com/lists/{0}".format(list_id)
+    try:
+        items = fetch_all_pages(url, "items", scraper)
+    except (UserNotFoundError, ListPrivateError, RateLimitError):
+        raise
+    except Exception:
+        return []
+
+    results = []
+    for item in items:
+        if item.get("type") != "release":
+            continue
+
+        display_title = item.get("display_title", "")
+        if " – " in display_title:        # em dash — standard Discogs separator
+            artist, _, title = display_title.partition(" – ")
+        elif " - " in display_title:
+            artist, _, title = display_title.partition(" - ")
+        else:
+            artist, title = "", display_title
+
+        results.append({
+            "artist":              artist.strip(),
+            "title":               title.strip(),
+            "format":              "",
+            "format_descriptions": "",
+            "format_text":         "",
+            "thumb":               item.get("image_url", ""),
+            "url":                 item.get("uri", ""),
+            "comment":             item.get("comment", ""),
+            "for_sale":            "",
+            "for_sale_url":        "",
+            "stats":               "",
+        })
+
+    return results
+
+def _get_list_releases_scrape(list_id, scraper):
     base_url = "https://www.discogs.com/lists/{0}".format(list_id)
 
     cache, total_pages = _scrape_list_page(base_url, scraper, page=1)
