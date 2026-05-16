@@ -751,6 +751,43 @@
     animation: insights-filter-flash 0.35s ease-out forwards;
 }
 
+#lookup-filter-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 0 2px;
+    &:empty { display: none; }
+}
+
+.lookup-filter-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--rust) 14%, transparent);
+    color: var(--rust);
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.12s ease;
+
+    .lookup-filter-badge-x {
+        display: none;
+        font-size: 13px;
+        line-height: 1;
+        font-weight: 400;
+        margin-left: 1px;
+    }
+
+    &:hover {
+        background: color-mix(in srgb, var(--rust) 22%, var(--paper));
+        .lookup-filter-badge-x { display: inline; }
+    }
+}
+
 .rec-tabs-row { background: var(--paper); padding: 0 0 1px; margin-bottom: 18px; }
 
 .rec-sf-tabs { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 14px; }

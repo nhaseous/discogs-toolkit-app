@@ -18,9 +18,12 @@ def get_collection_insights(items, total_value=None):
     label_counts = collections.Counter()
     format_counts = collections.Counter()
     release_type_counts = collections.Counter()
+    edition_counts = collections.Counter()
     decade_counts = collections.Counter()
 
-    _RELEASE_TYPES = {'EP', 'Album', 'Single'}
+    _RELEASE_TYPES = {'EP', 'Album', 'Single', 'Compilation'}
+    _EDITION_TAGS = {'Remastered', 'Deluxe Edition', 'Numbered', 'Club Edition',
+                     'Record Store Day', 'Picture Disc', 'Unofficial Release'}
 
     demand_factors = []
     for item in items:
@@ -37,6 +40,9 @@ def get_collection_insights(items, total_value=None):
             if tag in _RELEASE_TYPES:
                 release_type_counts[tag] += 1
                 break
+        for tag in item.get('format_tags', []):
+            if tag in _EDITION_TAGS:
+                edition_counts[tag] += 1
         for a in item.get('artist', []): artist_counts[a] += 1
 
         year = item.get('year', 0)
@@ -94,6 +100,7 @@ def get_collection_insights(items, total_value=None):
         'genre_pie':        _make_pie(genre_counts,        offset=0),
         'format_pie':       _make_pie(format_counts,       offset=4),
         'release_type_pie': _make_pie(release_type_counts, offset=9),
+        'edition_pie':      _make_pie(edition_counts,      offset=2),
         'genre_values': genre_values,
         'total_value': total_value,
     }
@@ -129,7 +136,7 @@ def render_insights_dashboard(insights):
     pies_html = (
         '<div class="insights-pies-row">' +
         _pie_section("Genre Breakdown", insights['genre_pie'], filter_field='genres') +
-        _format_breakdown_section(insights['format_pie'], insights['release_type_pie']) +
+        _format_breakdown_section(insights['format_pie'], insights['release_type_pie'], insights.get('edition_pie')) +
         '</div>'
     )
 
@@ -220,6 +227,16 @@ def render_insights_dashboard(insights):
         '});'
         '});'
         '});'
+        'document.querySelectorAll(".insights-format-toggle").forEach(function(wrap){'
+        'wrap.querySelectorAll(".insights-toggle-switch").forEach(function(btn){'
+        'btn.addEventListener("click",function(){'
+        'wrap.querySelectorAll(".insights-panel").forEach(function(p){'
+        'p.style.display=p.style.display==="none"?"":"none";'
+        '});'
+        'btn.textContent=btn.textContent==="More"?"Less":"More";'
+        '});'
+        '});'
+        '});'
         '})();'
         '</script>'
     )
@@ -288,7 +305,7 @@ def _pie_section(title, segments, filter_field=None):
         f'</div>'
     )
 
-def _format_breakdown_section(format_pie, release_type_pie):
+def _format_breakdown_section(format_pie, release_type_pie, edition_pie=None):
     if not format_pie and not release_type_pie: return ''
 
     def pie_block(segments, filter_field=None, reverse=False):
@@ -298,10 +315,27 @@ def _format_breakdown_section(format_pie, release_type_pie):
         cls = 'rec-pie-wrap rec-pie-wrap--reverse' if reverse else 'rec-pie-wrap'
         return f'<div class="{cls}">{svg}{legend}</div>'
 
+    if edition_pie:
+        toggle_cls = ' insights-format-toggle'
+        title = (
+            f'<div class="rec-breakdown-title insights-toggle-title">'
+            f'Format Breakdown'
+            f'<span class="insights-toggle-switch">More</span>'
+            f'</div>'
+        )
+        panel_fmt = f'<div class="insights-panel">{pie_block(format_pie, filter_field="format")}</div>'
+        panel_edition = f'<div class="insights-panel" style="display:none">{pie_block(edition_pie, filter_field="format_tags")}</div>'
+    else:
+        toggle_cls = ''
+        title = f'<div class="rec-breakdown-title">Format Breakdown</div>'
+        panel_fmt = pie_block(format_pie, filter_field="format")
+        panel_edition = ''
+
     return (
-        f'<div class="rec-breakdown-section">'
-        f'<div class="rec-breakdown-title">Format Breakdown</div>'
-        f'{pie_block(format_pie, filter_field="format", reverse=False)}'
+        f'<div class="rec-breakdown-section{toggle_cls}">'
+        f'{title}'
+        f'{panel_fmt}'
+        f'{panel_edition}'
         f'<div class="insights-format-sub insights-format-sub--lower">Type</div>'
         f'{pie_block(release_type_pie, filter_field="format_tags", reverse=True)}'
         f'</div>'

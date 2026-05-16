@@ -551,7 +551,24 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
             collTab._lockedWidth = false;
         }
     }
-    var _exclusiveFilterFields = window._exclusiveFilterFields = { format_tags: true };
+    var _exclusiveFilterFields = window._exclusiveFilterFields = {};
+    var _filterBadgesEl = document.getElementById('lookup-filter-badges');
+    function _syncFilterBadges() {
+        if (!_filterBadgesEl) return;
+        _filterBadgesEl.innerHTML = '';
+        Object.keys(_lookupActiveFilters).forEach(function(field) {
+            _lookupActiveFilters[field].forEach(function(value) {
+                var badge = document.createElement('span');
+                badge.className = 'lookup-filter-badge';
+                badge.innerHTML = _esc(value) + '<span class="lookup-filter-badge-x">&times;</span>';
+                badge.addEventListener('click', function() {
+                    if (window._deactivateDashFilter) window._deactivateDashFilter(field, value);
+                    window._toggleLookupFilter(field, value);
+                });
+                _filterBadgesEl.appendChild(badge);
+            });
+        });
+    }
     window._toggleLookupFilter = function(field, value) {
         if (!_lookupActiveFilters[field]) _lookupActiveFilters[field] = new Set();
         var fset = _lookupActiveFilters[field];
@@ -562,6 +579,7 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
             if (_exclusiveFilterFields[field]) fset.clear();
             fset.add(value);
         }
+        _syncFilterBadges();
         var cs = state['collection'];
         if (cs && cs.items) {
             applyPage('collection', 1);
@@ -789,6 +807,16 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
             dash.style.display = '';
             dash.classList.toggle('insights-filters-disabled', tabName !== 'collection');
         }
+    };
+
+    window._deactivateDashFilter = function(field, value) {
+        if (!dash) return;
+        dash.querySelectorAll('.insights-filter-row').forEach(function(r) {
+            if (r.getAttribute('data-filter-field') === field &&
+                r.getAttribute('data-filter-value') === value) {
+                r.classList.remove('insights-filter-active');
+            }
+        });
     };
 
     if (!dash) return;
