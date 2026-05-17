@@ -142,17 +142,21 @@
 
 @media (max-width: 680px) {
     .search-bar {
-        border-radius: 14px;
-        padding: 10px;
+        border-radius: 12px;
+        padding: 4px;
         flex-direction: column;
         align-items: stretch;
+        min-height: 0;
+        gap: 0;
     }
+
+    .search-bar input[type="text"] { font-size: 14px; padding: 2px 0; }
 
     .search-bar-divider { display: none; }
     .search-bar-icon    { display: none; }
-    .search-bar-segment { padding: 8px 10px; border-bottom: 1px solid var(--rule); }
-    .search-bar-toggle  { padding: 10px; }
-    .search-bar-submit  { padding: 12px; margin: 4px 0 0; justify-content: center; }
+    .search-bar-segment { padding: 4px 10px; border-bottom: 1px solid var(--rule); }
+    .search-bar-toggle  { padding: 6px 10px; font-size: 13px; }
+    .search-bar-submit  { padding: 8px; margin: 2px 0 0; font-size: 13px; justify-content: center; }
 }
 
 /* =========================================================

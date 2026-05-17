@@ -134,7 +134,10 @@
     width: 73px;
     top: 16px;
     left: 73px;
-    pointer-events: none;
+    cursor: pointer;
+    transition: filter 0.15s ease;
+
+    &:hover { filter: brightness(1.15); }
 }
 
 .sidebar-platter.spinning { animation: rotate 3s linear infinite; }

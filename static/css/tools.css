@@ -142,3 +142,30 @@ html:has(.tool-grid-wrap) {
     }
 }
 
+@media (max-width: 768px) {
+    .tool-card {
+        padding: 12px 12px 14px;
+        margin: 4px;
+        border-radius: 7px;
+
+        &::after { right: 12px; top: 10px; font-size: 14px; }
+    }
+    .tool-card-label { font-size: 9px; letter-spacing: 0.1em; margin-bottom: 6px; }
+    .tool-card-title { font-size: 15px; margin-bottom: 4px; line-height: 1.15; }
+    .tool-card-desc  { font-size: 11px; line-height: 1.35; }
+    .tool-card--disabled::before { font-size: 10px; padding: 8px; line-height: 1.25; }
+}
+
+@media (max-width: 480px) {
+    .tool-card {
+        padding: 8px 8px 10px;
+        margin: 2px;
+
+        &::after { display: none; }
+    }
+    .tool-card-label { font-size: 8px; margin-bottom: 3px; }
+    .tool-card-title { font-size: 12px; letter-spacing: -0.005em; }
+    .tool-card-desc  { display: none; }
+    .tool-card--disabled::before { font-size: 9px; padding: 4px; }
+}
+

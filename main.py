@@ -1,3 +1,7 @@
+import warnings
+warnings.filterwarnings("ignore", category=FutureWarning, module="google")
+warnings.filterwarnings("ignore", message="urllib3 v2 only supports OpenSSL")
+
 from dotenv import load_dotenv
 load_dotenv()
 
@@ -26,16 +30,25 @@ app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 app.config['SESSION_COOKIE_SECURE']   = os.environ.get('GAE_ENV', '').startswith('standard')
 app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=90)
 
-_static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
-_STATIC_V = str(int(max(
-    (os.path.getmtime(os.path.join(r, f)) for r, _, fs in os.walk(_static_dir) for f in fs),
-    default=os.path.getmtime(os.path.abspath(__file__))
-)))
-
+if getattr(sys, 'frozen', False):
+    _static_dir = os.path.join(os.environ.get('RESOURCEPATH', os.getcwd()), 'static')
+else:
+    _static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
 try:
-    _records_data = records_helper.load_all()
-except Exception:
-    _records_data = records_helper.empty_data()
+    _mtimes = [os.path.getmtime(os.path.join(r, f)) for r, _, fs in os.walk(_static_dir) for f in fs]
+    _STATIC_V = str(int(max(_mtimes))) if _mtimes else '1'
+except OSError:
+    _STATIC_V = '1'
+
+_records_data = None
+def _get_records_data():
+    global _records_data
+    if _records_data is None:
+        try:
+            _records_data = records_helper.load_all()
+        except Exception:
+            _records_data = records_helper.empty_data()
+    return _records_data
 
 @app.route('/static/v<version>/<path:filename>')
 def versioned_static(version, filename):
@@ -549,10 +562,11 @@ def recordspage():
     if session.get('discogs_username') != 'curefortheitch':
         return "Access Denied: You do not have permission to access this page. This feature is restricted to authorized users only.", 403
 
-    stats = _records_data['stats']
-    collection = _records_data['collection']
-    inventory  = _records_data['inventory']
-    sold       = _records_data['sold']
+    data = _get_records_data()
+    stats = data['stats']
+    collection = data['collection']
+    inventory  = data['inventory']
+    sold       = data['sold']
 
     col_count = stats['col_count']
     inv_count = stats['inv_count']

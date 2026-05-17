@@ -28,8 +28,9 @@ OPTIONS = {
     'argv_emulation': True,
     'iconfile': 'AppIcon.icns',
     'packages': [
-        'flask', 'webview', 'cloudscraper', 'requests', 'bs4', 
-        'discord_webhook', 'gspread', 'discogs_client', 
+        'flask', 'webview', 'cloudscraper', 'requests', 'bs4',
+        'charset_normalizer',
+        'discord_webhook', 'gspread', 'discogs_client',
         'requests_oauthlib', 'helper', 'server',
         'objc', 'AppKit', 'Foundation', 'WebKit'
     ],

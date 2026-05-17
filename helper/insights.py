@@ -73,10 +73,10 @@ def get_collection_insights(items, total_value=None):
                         for g in gs:
                             genre_values[g] = genre_values.get(g, 0) + val_per_genre
 
-    top_genres = genre_counts.most_common(5)
-    top_styles = style_counts.most_common(5)
-    top_artists = artist_counts.most_common(5)
-    top_labels = label_counts.most_common(5)
+    all_genres  = genre_counts.most_common()
+    all_styles  = style_counts.most_common()
+    all_artists = artist_counts.most_common()
+    all_labels  = label_counts.most_common()
 
     decades_sorted = sorted(decade_counts.items())
     
@@ -88,10 +88,10 @@ def get_collection_insights(items, total_value=None):
         ]
 
     return {
-        'top_genres': top_genres,
-        'top_subgenres': top_styles,
-        'top_artists': top_artists,
-        'top_labels': top_labels,
+        'all_genres': all_genres,
+        'all_subgenres': all_styles,
+        'all_artists': all_artists,
+        'all_labels': all_labels,
         'genre_total': sum(genre_counts.values()),
         'style_total': sum(style_counts.values()),
         'artist_total': sum(artist_counts.values()),
@@ -140,15 +140,20 @@ def render_insights_dashboard(insights):
         '</div>'
     )
 
-    def make_rows(data, total, filter_field=None):
+    def make_rows(data, total, filter_field=None, primary=5):
         rows = ""
-        for name, val in data:
+        for i, (name, val) in enumerate(data):
             pct = val / total * 100 if total else 0
-            ff = (f' class="insights-filter-row"'
-                  f' data-filter-field="{_html.escape(filter_field)}"'
-                  f' data-filter-value="{_html.escape(str(name))}"') if filter_field else ''
+            classes = []
+            if filter_field: classes.append('insights-filter-row')
+            if i >= primary: classes.append('rec-breakdown-row-extra')
+            attrs = ''
+            if classes: attrs += f' class="{" ".join(classes)}"'
+            if filter_field:
+                attrs += (f' data-filter-field="{_html.escape(filter_field)}"'
+                          f' data-filter-value="{_html.escape(str(name))}"')
             rows += (
-                f'<tr{ff}>'
+                f'<tr{attrs}>'
                 f'<td class="rec-sf-name">{_html.escape(name)}</td>'
                 f'<td class="rec-sf-money">{val} items'
                 f'<span style="color:var(--ink-muted);margin-left:6px">{pct:.0f}%</span>'
@@ -157,60 +162,96 @@ def render_insights_dashboard(insights):
             )
         return rows
 
-    def top_table(title, data, value_suffix="", is_currency=False, total=None, filter_field=None):
-        if is_currency:
-            rows = ""
-            for name, val in data:
-                rows += (
-                    f'<tr>'
-                    f'<td class="rec-sf-name">{_html.escape(name)}</td>'
-                    f'<td class="rec-sf-money">${val:,.2f}</td>'
-                    f'</tr>'
-                )
-        else:
-            rows = make_rows(data, total, filter_field=filter_field)
+    def make_currency_rows(data, primary=5):
+        rows = ""
+        for i, (name, val) in enumerate(data):
+            cls = ' class="rec-breakdown-row-extra"' if i >= primary else ''
+            rows += (
+                f'<tr{cls}>'
+                f'<td class="rec-sf-name">{_html.escape(name)}</td>'
+                f'<td class="rec-sf-money">${val:,.2f}</td>'
+                f'</tr>'
+            )
+        return rows
+
+    def _expand_toggle():
+        return '<span class="breakdown-expand" title="Show all">+</span>'
+
+    def top_table(title, data, total=None, filter_field=None, expandable=True):
+        rows = make_rows(data, total, filter_field=filter_field) if data else ''
+        has_extras = expandable and len(data) > 5
+        section_cls = 'rec-breakdown-section'
+        if has_extras: section_cls += ' breakdown-expandable'
+        title_inner = f'<span class="rec-breakdown-title-text">{title}</span>' + (_expand_toggle() if has_extras else '')
+        title_cls = 'rec-breakdown-title' + (' rec-breakdown-title--row' if has_extras else '')
         return (
-            f'<div class="rec-breakdown-section">'
-            f'<div class="rec-breakdown-title">{title}</div>'
+            f'<div class="{section_cls}">'
+            f'<div class="{title_cls}">{title_inner}</div>'
+            f'<div class="rec-breakdown-scroll">'
             f'<table class="rec-breakdown-table"><tbody>{rows}</tbody></table>'
+            f'</div>'
             f'</div>'
         )
 
     def genre_toggle_section():
-        subgenre_rows = make_rows(insights['top_subgenres'], insights['style_total'], filter_field='styles')
-        genre_rows    = make_rows(insights['top_genres'],    insights['genre_total'],  filter_field='genres')
+        sub_data   = insights['all_subgenres']
+        genre_data = insights['all_genres']
+        subgenre_rows = make_rows(sub_data,   insights['style_total'], filter_field='styles')
+        genre_rows    = make_rows(genre_data, insights['genre_total'], filter_field='genres')
+        sub_has_extras   = len(sub_data) > 5
+        genre_has_extras = len(genre_data) > 5
+
+        def _panel(label_main, swap_label, rows_html, has_extras, active):
+            style = '' if active else ' style="display:none"'
+            cls = 'insights-panel' + (' insights-panel--active' if active else '')
+            section_extra = ' breakdown-expandable' if has_extras else ''
+            expand_btn = _expand_toggle() if has_extras else ''
+            return (
+                f'<div class="{cls}{section_extra}"{style}>'
+                f'<div class="rec-breakdown-title rec-breakdown-title--row insights-toggle-title">'
+                f'<span class="rec-breakdown-title-text">{label_main} '
+                f'<span class="insights-toggle-switch">/ {swap_label}</span>'
+                f'</span>'
+                f'{expand_btn}'
+                f'</div>'
+                f'<div class="rec-breakdown-scroll">'
+                f'<table class="rec-breakdown-table"><tbody>{rows_html}</tbody></table>'
+                f'</div>'
+                f'</div>'
+            )
+
         return (
-            f'<div class="rec-breakdown-section insights-genre-toggle">'
-            f'<div class="insights-panel insights-panel--active">'
-            f'<div class="rec-breakdown-title insights-toggle-title">'
-            f'Top Sub-genres'
-            f'<span class="insights-toggle-switch">Genre</span>'
-            f'</div>'
-            f'<table class="rec-breakdown-table"><tbody>{subgenre_rows}</tbody></table>'
-            f'</div>'
-            f'<div class="insights-panel" style="display:none">'
-            f'<div class="rec-breakdown-title insights-toggle-title">'
-            f'Top Genres'
-            f'<span class="insights-toggle-switch">Sub-genre</span>'
-            f'</div>'
-            f'<table class="rec-breakdown-table"><tbody>{genre_rows}</tbody></table>'
+            '<div class="rec-breakdown-section insights-genre-toggle">'
+            + _panel('Top Sub-Genres', 'Genres',     subgenre_rows, sub_has_extras,   active=True)
+            + _panel('Top Genres',     'Sub-Genres', genre_rows,    genre_has_extras, active=False)
+            + '</div>'
+        )
+
+    # Value per Genre Table (Approximated) — expandable but not filterable
+    value_genre_html = ""
+    if insights['genre_values']:
+        sorted_val_genres = sorted(insights['genre_values'].items(), key=lambda x: x[1], reverse=True)
+        has_extras = len(sorted_val_genres) > 5
+        rows_html = make_currency_rows(sorted_val_genres)
+        section_cls = 'rec-breakdown-section rec-breakdown-section--wide'
+        if has_extras: section_cls += ' breakdown-expandable'
+        title_inner = '<span class="rec-breakdown-title-text">Value per Genre (Top 5)</span>' + (_expand_toggle() if has_extras else '')
+        title_cls = 'rec-breakdown-title' + (' rec-breakdown-title--row' if has_extras else '')
+        value_genre_html = (
+            f'<div class="{section_cls}">'
+            f'<div class="{title_cls}">{title_inner}</div>'
+            f'<div class="rec-stat-sub" style="margin-bottom:8px">Approximated based on have/want data</div>'
+            f'<div class="rec-breakdown-scroll">'
+            f'<table class="rec-breakdown-table"><tbody>{rows_html}</tbody></table>'
             f'</div>'
             f'</div>'
         )
 
-    # Value per Genre Table (Approximated)
-    value_genre_html = ""
-    if insights['genre_values']:
-        sorted_val_genres = sorted(insights['genre_values'].items(), key=lambda x: x[1], reverse=True)[:5]
-        value_genre_html = top_table("Value per Genre (Top 5)", sorted_val_genres, is_currency=True)
-        value_genre_html = value_genre_html.replace('rec-breakdown-section', 'rec-breakdown-section rec-breakdown-section--wide', 1)
-        value_genre_html = value_genre_html.replace('</div><table', '<div class="rec-stat-sub" style="margin-bottom:8px">Approximated based on have/want data</div><table', 1)
-
     breakdown_html = (
         '<div class="rec-breakdown">' +
         genre_toggle_section() +
-        top_table("Top Artists", insights['top_artists'], " items", total=insights['artist_total'], filter_field='artist') +
-        top_table("Top Labels",  insights['top_labels'],  " items", total=insights['label_total'],  filter_field='labels') +
+        top_table("Top Artists", insights['all_artists'], total=insights['artist_total'], filter_field='artist') +
+        top_table("Top Labels",  insights['all_labels'],  total=insights['label_total'],  filter_field='labels') +
         '</div>' +
         value_genre_html
     )

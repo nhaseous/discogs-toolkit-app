@@ -184,3 +184,38 @@ em { font-style: normal; }
 @media (max-width: 900px) {
     .content { margin-left: 0; padding: 24px 20px 48px; }
 }
+
+/* Print: export content-main to PDF (triggered by sidebar platter click) */
+@media print {
+    .sidebar, #badge-tooltip, #spinner, #lookup-pagination, .lookup-pagination { display: none !important; }
+    body { background: var(--paper) !important; }
+    .layout { display: block !important; min-height: 0 !important; }
+    .content {
+        margin-left: 0 !important;
+        padding: 0 !important;
+        max-width: none !important;
+        width: 100% !important;
+    }
+    #content-main { margin: 0 !important; padding: 0 !important; }
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+    .match-card,
+    .rec-stat-card,
+    .rec-breakdown-section,
+    .tool-card,
+    .result-card,
+    .place-summary,
+    .lookup-notice {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+    /* When expanded breakdown cards print, show all rows (no clipping) */
+    .rec-breakdown-scroll {
+        overflow: visible !important;
+        max-height: none !important;
+    }
+    .breakdown-expandable .rec-breakdown-row-extra { display: table-row !important; }
+    .breakdown-expand { display: none !important; }
+}

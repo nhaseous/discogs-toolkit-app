@@ -714,6 +714,40 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
     }
     var platter = document.querySelector(".sidebar-platter");
     if (!platter) return;
+
+    platter.setAttribute("title", "Export page as PDF");
+    platter.setAttribute("role", "button");
+    platter.setAttribute("aria-label", "Export page as PDF");
+    platter.addEventListener("click", function() {
+        var path = window.location.pathname;
+        var qs = new URLSearchParams(window.location.search);
+        var pageNames = {
+            "/": "Home",
+            "/pricechecker": "Price Checker",
+            "/matcher": "Matcher",
+            "/lookup": "Lookup",
+            "/records": "Records"
+        };
+        var parts = ["Discogs Toolkit", pageNames[path] || path.replace(/^\//, "") || "Page"];
+        if (path === "/pricechecker" && qs.get("seller")) parts.push(qs.get("seller"));
+        else if (path === "/matcher" && (qs.get("collection") || qs.get("wantlist"))) {
+            parts.push((qs.get("collection") || "?") + " + " + (qs.get("wantlist") || "?"));
+        }
+        else if (path === "/lookup" && qs.get("username")) {
+            var u = qs.get("username");
+            if (qs.get("list_id")) u += " list " + qs.get("list_id");
+            parts.push(u);
+        }
+        var originalTitle = document.title;
+        document.title = parts.join(" - ");
+        var restore = function() {
+            document.title = originalTitle;
+            window.removeEventListener("afterprint", restore);
+        };
+        window.addEventListener("afterprint", restore);
+        window.print();
+    });
+
     platter.style.transform = "translateY(150px)";
     platter.style.opacity = "0";
     setTimeout(function() {
@@ -825,6 +859,40 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
     if (initTab) window._onLookupTabChange(initTab.getAttribute('data-tab'));
 
     dash.addEventListener('click', function(e) {
+        var expandBtn = e.target.closest('.breakdown-expand');
+        if (expandBtn) {
+            var panel = expandBtn.closest('.breakdown-expandable');
+            if (!panel) return;
+            var scroll = panel.querySelector('.rec-breakdown-scroll');
+            if (!scroll) return;
+
+            if (panel.classList.contains('is-expanded')) {
+                var finish = function() {
+                    panel.classList.remove('is-expanded');
+                    scroll.style.maxHeight = '';
+                    expandBtn.textContent = '+';
+                    expandBtn.setAttribute('title', 'Show all');
+                };
+                if (scroll.scrollTop <= 0) {
+                    finish();
+                } else {
+                    scroll.scrollTo({ top: 0, behavior: 'smooth' });
+                    var start = Date.now();
+                    (function tick() {
+                        if (scroll.scrollTop <= 1 || Date.now() - start > 600) finish();
+                        else requestAnimationFrame(tick);
+                    })();
+                }
+            } else {
+                var h = scroll.clientHeight;
+                if (h > 0) scroll.style.maxHeight = h + 'px';
+                panel.classList.add('is-expanded');
+                expandBtn.textContent = '−';
+                expandBtn.setAttribute('title', 'Show less');
+            }
+            return;
+        }
+
         if (dash.classList.contains('insights-filters-disabled')) return;
         var row = e.target.closest('.insights-filter-row');
         if (!row) return;
