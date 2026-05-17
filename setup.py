@@ -6,7 +6,7 @@ APP = ['mac_main.py']
 
 # Setup standard data files
 DATA_FILES = [
-    ('', ['assets.py', '.env', 'AppIcon.icns']),
+    ('', ['assets.py', '.env', 'static/AppIcon.icns']),
 ]
 
 def add_directory(dest_root, source_root):
@@ -26,7 +26,7 @@ add_directory('static', 'static')
 
 OPTIONS = {
     'argv_emulation': True,
-    'iconfile': 'AppIcon.icns',
+    'iconfile': 'static/AppIcon.icns',
     'packages': [
         'flask', 'webview', 'cloudscraper', 'requests', 'bs4',
         'charset_normalizer',
