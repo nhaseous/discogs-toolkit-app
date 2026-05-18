@@ -5,7 +5,7 @@ warnings.filterwarnings("ignore", message="urllib3 v2 only supports OpenSSL")
 from dotenv import load_dotenv
 load_dotenv()
 
-from flask import Flask, request, render_template, session, redirect, send_from_directory
+from flask import Flask, request, render_template, session, redirect, send_from_directory, jsonify
 from helper import pricechecker, matcher, lookup as lookup_helper, records as records_helper, firestore_db as _firestore_db, insights as insights_helper, api as api_helper
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import cloudscraper, time, html as _html, os, requests as _requests, json as _json
@@ -474,6 +474,7 @@ def lookuppage():
     loadtime, searched_at = "", ""
     has_results = bool(username)
     insights_html = ""
+    wantlist_insights_html = ""
 
     if username:
         start_time = time.time()
@@ -518,6 +519,10 @@ def lookuppage():
             insights = insights_helper.get_collection_insights(collection, total_value=total_value)
             insights_html = insights_helper.render_insights_dashboard(insights)
 
+        if wantlist and not user_not_found:
+            wantlist_insights = insights_helper.get_collection_insights(wantlist)
+            wantlist_insights_html = insights_helper.render_insights_dashboard(wantlist_insights, kind='wantlist')
+
         if list_id and not user_not_found and not rate_limited:
             try:
                 list_releases = lookup_helper.get_list_releases(list_id, scraper)
@@ -526,6 +531,8 @@ def lookuppage():
             except lookup_helper.CloudflareBlockedError:
                 cf_blocked_list = True
 
+        list_name = next((l['name'] for l in lists if str(l['id']) == str(list_id)), "") if list_id else ""
+
         end_time = time.time()
         loadtime = round(end_time - start_time, 2)
         searched_at = datetime.now().astimezone().strftime("%-I:%M %p %Z · %-d %b %y")
@@ -533,6 +540,7 @@ def lookuppage():
     return render_template('lookup.html',
         username=username,
         list_id=list_id,
+        list_name=list_name,
         collection=collection,
         wantlist=wantlist,
         lists=lists,
@@ -549,10 +557,28 @@ def lookuppage():
         searched_at=searched_at,
         has_results=has_results,
         insights_html=insights_html,
+        wantlist_insights_html=wantlist_insights_html,
         content_class='has-results' if has_results else '',
         show_platter=has_results,
         title='User Lookup'
     )
+
+
+@app.route("/lookup/list")
+def lookup_list_data():
+    list_id = request.args.get("list_id", "")
+    if not list_id:
+        return jsonify({"error": "Missing list_id"}), 400
+    scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'android', 'desktop': False})
+    try:
+        releases = lookup_helper.get_list_releases(list_id, scraper)
+    except lookup_helper.RateLimitError:
+        return jsonify({"error": "rate_limited"}), 429
+    except lookup_helper.CloudflareBlockedError:
+        return jsonify({"error": "cf_blocked"}), 503
+    except Exception:
+        return jsonify({"error": "failed"}), 500
+    return jsonify({"releases": releases})
 
 
 ## Records ##

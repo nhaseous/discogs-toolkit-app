@@ -41,27 +41,29 @@ def _throttle(resp):
 def request_with_retry(scraper, method, url, max_retries=3, **kwargs):
     """
     Executes a request with exponential backoff on 429 Rate Limit.
+    Raises RateLimitError if 429 persists after retries.
+    Raises the underlying exception if network errors persist after retries.
     """
-    retries = 0
-    while retries <= max_retries:
+    for attempt in range(max_retries + 1):
+        is_last = (attempt == max_retries)
         try:
             resp = scraper.request(method, url, **kwargs)
-            _throttle(resp)
-            
-            if resp.status_code == 429:
-                wait_time = (2 ** retries) + random.random()
-                time.sleep(wait_time)
-                retries += 1
-                continue
-                
-            return resp
         except Exception:
-            if retries == max_retries:
+            if is_last:
                 raise
-            wait_time = (2 ** retries) + random.random()
-            time.sleep(wait_time)
-            retries += 1
-    return None
+            time.sleep((2 ** attempt) + random.random())
+            continue
+
+        _throttle(resp)
+
+        if resp.status_code == 429:
+            if is_last:
+                raise RateLimitError()
+            time.sleep((2 ** attempt) + random.random())
+            continue
+
+        return resp
+    return None  # unreachable
 
 def fetch_all_pages(url, items_key, scraper, params=None, auth=None, return_total=False):
     """
@@ -94,6 +96,7 @@ def fetch_all_pages(url, items_key, scraper, params=None, auth=None, return_tota
     total_items = pagination.get("items", 0)
 
     if total_pages > 1:
+        rate_limited = False
         with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
             futures = {
                 executor.submit(request_with_retry, scraper, "GET", url, params=dict(params, page=p), headers=_API_HEADERS, auth=auth): p
@@ -106,8 +109,12 @@ def fetch_all_pages(url, items_key, scraper, params=None, auth=None, return_tota
                         data = _safe_json(resp)
                         if data:
                             results.extend(data.get(items_key, []))
+                except RateLimitError:
+                    rate_limited = True
                 except Exception:
                     continue
+        if rate_limited:
+            raise RateLimitError()
 
     return (results, total_items) if return_total else results
 

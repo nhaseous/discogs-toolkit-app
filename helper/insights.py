@@ -105,9 +105,11 @@ def get_collection_insights(items, total_value=None):
         'total_value': total_value,
     }
 
-def render_insights_dashboard(insights):
+def render_insights_dashboard(insights, kind='collection'):
     """
     Returns HTML for the insights dashboard, matching rec-dash-group style.
+    kind='collection' renders the full dashboard; kind='wantlist' renders only
+    the Top 5 breakdown row (Sub-Genres/Genres toggle + Top Artists + Top Labels).
     """
     def stat_card(label, value, sub='', value_class=''):
         sub_html = f'<div class="rec-stat-sub">{sub}</div>' if sub else ''
@@ -252,8 +254,7 @@ def render_insights_dashboard(insights):
         genre_toggle_section() +
         top_table("Top Artists", insights['all_artists'], total=insights['artist_total'], filter_field='artist') +
         top_table("Top Labels",  insights['all_labels'],  total=insights['label_total'],  filter_field='labels') +
-        '</div>' +
-        value_genre_html
+        '</div>'
     )
 
     toggle_script = (
@@ -282,13 +283,20 @@ def render_insights_dashboard(insights):
         '</script>'
     )
 
+    if kind == 'wantlist':
+        dash_id = 'wantlist-insights-dash'
+        content = breakdown_html
+        script = ''  # collection dashboard's script already binds both toggle wraps
+    else:
+        dash_id = 'collection-insights-dash'
+        content = banner_html + pies_html + breakdown_html + value_genre_html
+        script = toggle_script
+
     return (
-        '<div class="rec-dash-group" id="collection-insights-dash">' +
-        banner_html +
-        pies_html +
-        breakdown_html +
+        '<div class="rec-dash-group" id="' + dash_id + '">' +
+        content +
         '</div>' +
-        toggle_script
+        script
     )
 
 def _pie_svg(segments, size=110, extra_class=''):

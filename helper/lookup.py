@@ -103,16 +103,26 @@ def get_wantlist(username, scraper, auth=None):
         fmt_descriptions = ", ".join(fmt_info.get("descriptions") or [])
         fmt_text = fmt_info.get("text", "")
         release_id = info.get("id", "")
+
+        community = w.get("community", {}) or {}
+        labels = [l.get("name", "") for l in (info.get("labels") or []) if l.get("name")]
         results.append({
             "artist": artists,
             "title": title,
             "format": fmt,
             "format_descriptions": fmt_descriptions,
             "format_text": fmt_text,
+            "format_tags": fmt_info.get("descriptions") or [],
             "thumb": info.get("thumb", ""),
             "cover_image": info.get("cover_image", ""),
             "url": "https://www.discogs.com/release/{0}".format(release_id) if release_id else "",
             "stats": "",
+            "genres": info.get("genres") or [],
+            "styles": info.get("styles") or [],
+            "year": info.get("year", 0),
+            "have": community.get("have", 0),
+            "want": community.get("want", 0),
+            "labels": labels,
         })
 
     partial_warning = ""

@@ -353,14 +353,14 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
 })();
 
 (function() {
-    var tabs = document.querySelectorAll(".lookup-tab");
-    if (!tabs.length) return;
+    var tabsContainer = document.querySelector(".lookup-tabs");
+    if (!tabsContainer || !tabsContainer.querySelector(".lookup-tab")) return;
     var EASE = "transform 0.35s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease";
     function switchMosaics(target) {
         var all = Array.from(document.querySelectorAll(".lookup-mosaic"));
         var incoming = document.getElementById("lookup-mosaic-" + target);
         var outgoing = all.find(function(m) { return m !== incoming && !m.classList.contains("lookup-mosaic--inactive"); });
-        
+
         var wrap = document.querySelector(".lookup-mosaic-wrap");
         if (!wrap) return;
         var w = wrap.offsetWidth;
@@ -412,26 +412,33 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
         }
     }
     var countEl = document.getElementById("lookup-count");
-    tabs.forEach(function(tab) {
-        tab.addEventListener("click", function() {
-            var target = this.getAttribute("data-tab");
-            var countText = this.getAttribute("data-count-text");
-            _withLookupScroll(function() {
-                tabs.forEach(function(t) { t.classList.toggle("active", t.getAttribute("data-tab") === target); });
-                document.querySelectorAll(".lookup-panel").forEach(function(panel) {
-                    panel.style.display = panel.id === "lookup-panel-" + target ? "" : "none";
-                });
-                switchMosaics(target);
-                if (countEl && countText) countEl.textContent = countText;
-                if (window._resetMatchCardHover) window._resetMatchCardHover();
-                if (window._applyTabPage) window._applyTabPage(target);
-                if (window._layoutMatchGrids) window._layoutMatchGrids();
-                if (window._onLookupTabChange) window._onLookupTabChange(target);
-            });
+    function doTabSwitch(target) {
+        var countText = '';
+        document.querySelectorAll(".lookup-tab").forEach(function(t) {
+            var isTarget = t.getAttribute("data-tab") === target;
+            t.classList.toggle("active", isTarget);
+            if (isTarget) countText = t.getAttribute("data-count-text") || '';
         });
+        document.querySelectorAll(".lookup-panel").forEach(function(panel) {
+            panel.style.display = panel.id === "lookup-panel-" + target ? "" : "none";
+        });
+        switchMosaics(target);
+        if (countEl && countText) countEl.textContent = countText;
+        if (window._resetMatchCardHover) window._resetMatchCardHover();
+        if (window._applyTabPage) window._applyTabPage(target);
+        if (window._layoutMatchGrids) window._layoutMatchGrids();
+        if (window._onLookupTabChange) window._onLookupTabChange(target);
+    }
+    tabsContainer.addEventListener("click", function(e) {
+        var tab = e.target.closest(".lookup-tab");
+        if (!tab) return;
+        _withLookupScroll(function() { doTabSwitch(tab.getAttribute("data-tab")); });
     });
+    window._switchToTab = function(target) {
+        _withLookupScroll(function() { doTabSwitch(target); });
+    };
     var initTab = document.querySelector(".lookup-tab.active");
-    if (countEl && initTab) countEl.textContent = initTab.getAttribute("data-count-text");
+    if (countEl && initTab) countEl.textContent = initTab.getAttribute("data-count-text") || '';
     if (initTab) {
         var initName = initTab.getAttribute("data-tab");
         document.querySelectorAll(".lookup-panel").forEach(function(panel) {
@@ -593,6 +600,13 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
         if (!s) return;
         if (!s.ready) applyPage(tabName, 1);
         syncControls(tabName);
+    };
+    window._registerAndApplyTab = function(tabName, items, showStats) {
+        var total = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+        state[tabName] = { page: 1, total: total, items: items, cards: null, showStats: showStats, backCard: null, ready: false };
+        applyPage(tabName, 1);
+        syncControls(tabName);
+        if (window._layoutMatchGrids) window._layoutMatchGrids();
     };
     pagTabs.forEach(function(tab) {
         applyPage(tab.getAttribute("data-tab"), 1);
@@ -769,6 +783,123 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
     }, artAnimating ? 600 : 200);
 })();
 
+// List sub-tab: intercept list index clicks, AJAX-load releases, create sub-tab dynamically
+(function() {
+    var listsPanel = document.getElementById("lookup-panel-lists");
+    if (!listsPanel) return;
+
+    function getOrCreateListPanel() {
+        var p = document.getElementById("lookup-panel-list");
+        if (p) {
+            var g = p.querySelector(".match-grid");
+            if (g) g.innerHTML = '';
+            var d = p.querySelector(".lookup-data");
+            if (d) d.remove();
+            var e = p.querySelector(".match-empty");
+            if (e) e.remove();
+            return p;
+        }
+        p = document.createElement("div");
+        p.id = "lookup-panel-list";
+        p.className = "lookup-panel";
+        p.style.display = "none";
+        p.innerHTML = '<div class="match-grid"></div>';
+        var ref = document.getElementById("lookup-panel-lists");
+        ref.parentNode.insertBefore(p, ref.nextSibling);
+        return p;
+    }
+
+    function getOrCreateListTab(listName) {
+        var container = document.querySelector(".lookup-tabs");
+        var tab = document.querySelector('.lookup-tab[data-tab="list"]');
+        if (!tab) {
+            tab = document.createElement("button");
+            tab.className = "lookup-tab";
+            tab.type = "button";
+            tab.setAttribute("data-tab", "list");
+            if (container) container.appendChild(tab);
+        }
+        tab.textContent = listName + "…";
+        tab.setAttribute("data-count-text", "");
+        return tab;
+    }
+
+    listsPanel.addEventListener("click", function(e) {
+        var card = e.target.closest(".match-card");
+        if (!card) return;
+        var href = card.getAttribute("href") || "";
+        var qi = href.indexOf("?");
+        var listId = new URLSearchParams(qi !== -1 ? href.slice(qi + 1) : "").get("list_id");
+        if (!listId) return;
+        e.preventDefault();
+
+        var titleEl = card.querySelector(".match-card-title");
+        var listName = titleEl ? titleEl.textContent.trim() : "List";
+
+        var listPanel = getOrCreateListPanel();
+        var listTab = getOrCreateListTab(listName);
+        listTab.disabled = true;
+
+        if (window._switchToTab) window._switchToTab("list");
+
+        var params = new URLSearchParams(window.location.search);
+        params.set("list_id", listId);
+        history.pushState(null, "", window.location.pathname + "?" + params.toString());
+
+        fetch("/lookup/list?list_id=" + encodeURIComponent(listId))
+            .then(function(r) {
+                if (!r.ok) throw new Error("HTTP " + r.status);
+                return r.json();
+            })
+            .then(function(data) {
+                var releases = data.releases || [];
+                var count = releases.length;
+                var countText = count + " release" + (count !== 1 ? "s" : "");
+
+                listTab.disabled = false;
+                listTab.textContent = listName + " (" + count + ")";
+                listTab.setAttribute("data-count-text", countText);
+
+                var mosaic = document.getElementById("lookup-mosaic-list");
+                if (mosaic) {
+                    mosaic.innerHTML = '';
+                    releases.forEach(function(m) {
+                        if (!m.thumb) return;
+                        var span = document.createElement("span");
+                        span.className = "mosaic-item";
+                        var img = document.createElement("img");
+                        img.src = m.thumb;
+                        img.className = "mosaic-thumb";
+                        img.alt = "";
+                        img.loading = "lazy";
+                        span.appendChild(img);
+                        mosaic.appendChild(span);
+                    });
+                }
+
+                var countEl = document.getElementById("lookup-count");
+                if (countEl) countEl.textContent = countText;
+
+                if (!releases.length) {
+                    var emptyEl = document.createElement("p");
+                    emptyEl.className = "match-empty";
+                    emptyEl.textContent = "This list is empty.";
+                    listPanel.appendChild(emptyEl);
+                }
+
+                if (window._registerAndApplyTab) window._registerAndApplyTab("list", releases, false);
+            })
+            .catch(function() {
+                listTab.disabled = false;
+                listTab.textContent = listName + " (error)";
+                var emptyEl = document.createElement("p");
+                emptyEl.className = "match-empty";
+                emptyEl.textContent = "Failed to load this list. Please try again.";
+                listPanel.appendChild(emptyEl);
+            });
+    });
+})();
+
 // Match-card hover sequencing: queue next card open until closing animation finishes
 (function() {
     if (!document.querySelector(".match-grid")) return;
@@ -831,99 +962,105 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
 
 // Insights dashboard filter click handling
 (function() {
-    var dash = document.getElementById('collection-insights-dash');
+    var collDash = document.getElementById('collection-insights-dash');
+    var wantDash = document.getElementById('wantlist-insights-dash');
+    var dashes = [collDash, wantDash].filter(Boolean);
 
     window._onLookupTabChange = function(tabName) {
-        if (!dash) return;
-        if (tabName === 'wantlist') {
-            dash.style.display = 'none';
-        } else {
-            dash.style.display = '';
-            dash.classList.toggle('insights-filters-disabled', tabName !== 'collection');
+        if (collDash) {
+            collDash.style.display = (tabName === 'wantlist') ? 'none' : '';
+            collDash.classList.toggle('insights-filters-disabled', tabName !== 'collection');
+        }
+        if (wantDash) {
+            wantDash.style.display = (tabName === 'wantlist') ? '' : 'none';
+            wantDash.classList.add('insights-filters-disabled');
         }
     };
 
     window._deactivateDashFilter = function(field, value) {
-        if (!dash) return;
-        dash.querySelectorAll('.insights-filter-row').forEach(function(r) {
-            if (r.getAttribute('data-filter-field') === field &&
-                r.getAttribute('data-filter-value') === value) {
-                r.classList.remove('insights-filter-active');
-            }
+        dashes.forEach(function(d) {
+            d.querySelectorAll('.insights-filter-row').forEach(function(r) {
+                if (r.getAttribute('data-filter-field') === field &&
+                    r.getAttribute('data-filter-value') === value) {
+                    r.classList.remove('insights-filter-active');
+                }
+            });
         });
     };
 
-    if (!dash) return;
+    if (!dashes.length) return;
 
     var initTab = document.querySelector('.lookup-tab.active');
     if (initTab) window._onLookupTabChange(initTab.getAttribute('data-tab'));
 
-    dash.addEventListener('click', function(e) {
-        var expandBtn = e.target.closest('.breakdown-expand');
-        if (expandBtn) {
-            var panel = expandBtn.closest('.breakdown-expandable');
-            if (!panel) return;
-            var scroll = panel.querySelector('.rec-breakdown-scroll');
-            if (!scroll) return;
+    dashes.forEach(function(dash) {
+        dash.addEventListener('click', function(e) {
+            var expandBtn = e.target.closest('.breakdown-expand');
+            if (expandBtn) {
+                var panel = expandBtn.closest('.breakdown-expandable');
+                if (!panel) return;
+                var scroll = panel.querySelector('.rec-breakdown-scroll');
+                if (!scroll) return;
 
-            if (panel.classList.contains('is-expanded')) {
-                var finish = function() {
-                    panel.classList.remove('is-expanded');
-                    scroll.style.maxHeight = '';
-                    expandBtn.textContent = '+';
-                    expandBtn.setAttribute('title', 'Show all');
-                };
-                if (scroll.scrollTop <= 0) {
-                    finish();
+                if (panel.classList.contains('is-expanded')) {
+                    var finish = function() {
+                        panel.classList.remove('is-expanded');
+                        scroll.style.maxHeight = '';
+                        expandBtn.textContent = '+';
+                        expandBtn.setAttribute('title', 'Show all');
+                    };
+                    if (scroll.scrollTop <= 0) {
+                        finish();
+                    } else {
+                        scroll.scrollTo({ top: 0, behavior: 'smooth' });
+                        var start = Date.now();
+                        (function tick() {
+                            if (scroll.scrollTop <= 1 || Date.now() - start > 600) finish();
+                            else requestAnimationFrame(tick);
+                        })();
+                    }
                 } else {
-                    scroll.scrollTo({ top: 0, behavior: 'smooth' });
-                    var start = Date.now();
-                    (function tick() {
-                        if (scroll.scrollTop <= 1 || Date.now() - start > 600) finish();
-                        else requestAnimationFrame(tick);
-                    })();
+                    var h = scroll.clientHeight;
+                    if (h > 0) scroll.style.maxHeight = h + 'px';
+                    panel.classList.add('is-expanded');
+                    expandBtn.textContent = '−';
+                    expandBtn.setAttribute('title', 'Show less');
                 }
-            } else {
-                var h = scroll.clientHeight;
-                if (h > 0) scroll.style.maxHeight = h + 'px';
-                panel.classList.add('is-expanded');
-                expandBtn.textContent = '−';
-                expandBtn.setAttribute('title', 'Show less');
+                return;
             }
-            return;
-        }
 
-        if (dash.classList.contains('insights-filters-disabled')) return;
-        var row = e.target.closest('.insights-filter-row');
-        if (!row) return;
-        var field = row.getAttribute('data-filter-field');
-        var value = row.getAttribute('data-filter-value');
-        if (!field || value === null) return;
+            if (dash.classList.contains('insights-filters-disabled')) return;
+            var row = e.target.closest('.insights-filter-row');
+            if (!row) return;
+            var field = row.getAttribute('data-filter-field');
+            var value = row.getAttribute('data-filter-value');
+            if (!field || value === null) return;
 
-        var isActive = row.classList.toggle('insights-filter-active');
+            var isActive = row.classList.toggle('insights-filter-active');
 
-        if (isActive && _exclusiveFilterFields && _exclusiveFilterFields[field]) {
-            dash.querySelectorAll('.insights-filter-row[data-filter-field="' + field + '"]').forEach(function(r) {
-                if (r !== row) r.classList.remove('insights-filter-active');
+            if (isActive && _exclusiveFilterFields && _exclusiveFilterFields[field]) {
+                dash.querySelectorAll('.insights-filter-row[data-filter-field="' + field + '"]').forEach(function(r) {
+                    if (r !== row) r.classList.remove('insights-filter-active');
+                });
+            }
+
+            dash.querySelectorAll('.insights-filter-row').forEach(function(r) {
+                if (r !== row &&
+                    r.getAttribute('data-filter-field') === field &&
+                    r.getAttribute('data-filter-value') === value) {
+                    r.classList.toggle('insights-filter-active', isActive);
+                }
             });
-        }
 
-        dash.querySelectorAll('.insights-filter-row').forEach(function(r) {
-            if (r !== row &&
-                r.getAttribute('data-filter-field') === field &&
-                r.getAttribute('data-filter-value') === value) {
-                r.classList.toggle('insights-filter-active', isActive);
+            if (window._toggleLookupFilter) window._toggleLookupFilter(field, value);
+
+            if (isActive) {
+                row.classList.add('insights-filter-flash');
+                row.addEventListener('animationend', function() {
+                    row.classList.remove('insights-filter-flash');
+                }, { once: true });
             }
         });
-
-        if (window._toggleLookupFilter) window._toggleLookupFilter(field, value);
-
-        if (isActive) {
-            row.classList.add('insights-filter-flash');
-            row.addEventListener('animationend', function() {
-                row.classList.remove('insights-filter-flash');
-            }, { once: true });
-        }
     });
 })();
 
