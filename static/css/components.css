@@ -26,7 +26,10 @@
     }
 
     input[type="text"] {
+        -webkit-appearance: none;
+        appearance: none;
         border: none;
+        border-radius: 0;
         background: transparent;
         outline: none;
         flex: 1;
@@ -34,6 +37,7 @@
         width: 100%;
         font-family: inherit;
         font-size: 15px;
+        line-height: 1.2;
         color: var(--ink);
         padding: 5px 0;
         letter-spacing: -0.005em;
@@ -150,11 +154,11 @@
         gap: 0;
     }
 
-    .search-bar input[type="text"] { font-size: 14px; padding: 2px 0; }
+    .search-bar input[type="text"] { font-size: 14px; padding: 0; line-height: 1.2; }
 
     .search-bar-divider { display: none; }
     .search-bar-icon    { display: none; }
-    .search-bar-segment { padding: 4px 10px; border-bottom: 1px solid var(--rule); }
+    .search-bar-segment { padding: 6px 10px; border-bottom: 1px solid var(--rule); align-items: center; }
     .search-bar-toggle  { padding: 6px 10px; font-size: 13px; }
     .search-bar-submit  { padding: 8px; margin: 2px 0 0; font-size: 13px; justify-content: center; }
 }

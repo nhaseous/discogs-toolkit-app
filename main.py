@@ -34,11 +34,15 @@ if getattr(sys, 'frozen', False):
     _static_dir = os.path.join(os.environ.get('RESOURCEPATH', os.getcwd()), 'static')
 else:
     _static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
-try:
-    _mtimes = [os.path.getmtime(os.path.join(r, f)) for r, _, fs in os.walk(_static_dir) for f in fs]
-    _STATIC_V = str(int(max(_mtimes))) if _mtimes else '1'
-except OSError:
-    _STATIC_V = '1'
+_GAE_VERSION = os.environ.get('GAE_VERSION', '')
+if _GAE_VERSION:
+    _STATIC_V = _GAE_VERSION
+else:
+    try:
+        _mtimes = [os.path.getmtime(os.path.join(r, f)) for r, _, fs in os.walk(_static_dir) for f in fs]
+        _STATIC_V = str(int(max(_mtimes))) if _mtimes else '1'
+    except OSError:
+        _STATIC_V = '1'
 
 _records_data = None
 def _get_records_data():
@@ -52,7 +56,20 @@ def _get_records_data():
 
 @app.route('/static/v<version>/<path:filename>')
 def versioned_static(version, filename):
-    return send_from_directory(app.static_folder, filename)
+    resp = send_from_directory(app.static_folder, filename)
+    # URL is version-busted, so safe to cache forever
+    resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
+    return resp
+
+@app.after_request
+def _no_cache_html(resp):
+    # Prevent browsers from caching HTML — ensures they always re-fetch
+    # the page and pick up the latest versioned static URLs after a deploy.
+    if resp.mimetype == 'text/html':
+        resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+        resp.headers['Pragma'] = 'no-cache'
+        resp.headers['Expires'] = '0'
+    return resp
 
 @app.before_request
 def _load_persistent_auth():
@@ -472,6 +489,7 @@ def lookuppage():
     collection_error, wantlist_error, lists_error = "", "", ""
     collection_partial, wantlist_partial = "", ""
     loadtime, searched_at = "", ""
+    list_name = ""
     has_results = bool(username)
     insights_html = ""
     wantlist_insights_html = ""
