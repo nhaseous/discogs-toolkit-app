@@ -1,0 +1,55 @@
+/* =========================================================
+   Lookup — notices and active-filter badges
+   ========================================================= */
+
+.lookup-notice { margin: 20px 0; font-size: 14px; color: var(--ink-soft); font-style: italic; }
+
+.lookup-notice--error {
+    border-color: var(--rust-soft);
+    background: var(--rust-soft);
+    color: var(--rust);
+    font-style: normal;
+}
+
+.lookup-notice--warning {
+    background: var(--amber-soft);
+    color: var(--amber);
+    font-style: normal;
+}
+
+#lookup-filter-badges {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    padding: 8px 0 2px;
+    &:empty { display: none; }
+}
+
+.lookup-filter-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 11px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    padding: 2px 8px;
+    border-radius: 4px;
+    background: color-mix(in srgb, var(--rust) 14%, transparent);
+    color: var(--rust);
+    cursor: pointer;
+    user-select: none;
+    transition: background 0.12s ease;
+
+    .lookup-filter-badge-x {
+        display: none;
+        font-size: 13px;
+        line-height: 1;
+        font-weight: 400;
+        margin-left: 1px;
+    }
+
+    &:hover {
+        background: color-mix(in srgb, var(--rust) 22%, var(--paper));
+        .lookup-filter-badge-x { display: inline; }
+    }
+}

@@ -38,12 +38,15 @@ def _throttle(resp):
     if remaining is not None and int(remaining) < 5:
         time.sleep(2)
 
-def request_with_retry(scraper, method, url, max_retries=3, **kwargs):
+def request_with_retry(scraper, method, url, max_retries=3, max_429_retries=1, **kwargs):
     """
-    Executes a request with exponential backoff on 429 Rate Limit.
-    Raises RateLimitError if 429 persists after retries.
-    Raises the underlying exception if network errors persist after retries.
+    Executes a request with exponential backoff.
+    Network errors retry up to max_retries times.
+    HTTP 429 (Discogs rate limit) retries up to max_429_retries times before
+    raising RateLimitError — Discogs uses a sliding 60s window, so additional
+    retries within the same call rarely succeed and just delay the user.
     """
+    rate_limit_hits = 0
     for attempt in range(max_retries + 1):
         is_last = (attempt == max_retries)
         try:
@@ -57,8 +60,9 @@ def request_with_retry(scraper, method, url, max_retries=3, **kwargs):
         _throttle(resp)
 
         if resp.status_code == 429:
-            if is_last:
+            if rate_limit_hits >= max_429_retries:
                 raise RateLimitError()
+            rate_limit_hits += 1
             time.sleep((2 ** attempt) + random.random())
             continue
 

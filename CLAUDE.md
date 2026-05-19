@@ -5,9 +5,9 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 ## Project Overview
 
 Discogs Toolkit is a Flask web app for Discogs marketplace research and collection browsing. It has four tools:
-- **Price Checker** (`/pricechecker`): scrapes a seller's inventory and shows where each listing ranks among all marketplace listings for the same release. Disabled on GAE (Cloudflare blocks scraping from server IPs); only available locally and in the macOS desktop app.
+- **Price Checker** (`/pricechecker`): scrapes a seller's inventory and shows where each listing ranks among all marketplace listings for the same release. Disabled on GAE (Cloudflare blocks scraping from server IPs); only available locally and in the macOS desktop app. Supports a per-user **Watchlist** persisted to Firestore.
 - **Matcher** (`/matcher`): finds overlap between one user's collection and another user's wantlist
-- **Lookup** (`/lookup`): browse any user's collection, wantlist, and curated lists as a card grid
+- **Lookup** (`/lookup`): browse any user's collection, wantlist, and curated lists as a card grid. Includes an **Insights Dashboard** for collection stats and estimated value.
 - **Records** (`/records`): personal collection dashboard backed by Google Sheets; restricted to user `curefortheitch`
 
 Deployed on Google App Engine. Live at: https://discogs-toolkit.uc.r.appspot.com
@@ -23,6 +23,7 @@ Also ships as a standalone macOS desktop app (built with `py2app` + `pywebview`)
 - **requests-oauthlib** — OAuth 1.0a flow for Discogs login (`/login` → `/callback`)
 - **ThreadPoolExecutor** — concurrent scraping; 10 workers in Price Checker, 5 in Matcher/Lookup
 - **gspread + google-auth** — Google Sheets access for the Records dashboard
+- **Google Cloud Firestore** — persists user watchlists
 - **Google App Engine** — production deployment (`app.yaml`, `runtime: python312`)
 - **pywebview + pyobjc** — native macOS .app wrapper (macOS only)
 
@@ -35,8 +36,11 @@ mac_main.py           # macOS .app entry point — starts Flask + opens pywebvie
 setup.py              # py2app config for building the macOS .app bundle
 
 helper/
+  api.py              # Centralized API logic: retries, pagination, rate-limiting, value fetch
   auth.py             # macOS Keychain credential persistence (save/get/delete)
   common.py           # Shared API headers (User-Agent)
+  firestore_db.py     # Firestore integration for watchlist persistence
+  insights.py         # Aggregates collection stats and renders the Insights Dashboard
   pricechecker.py     # Price Checker — inventory fetch, marketplace scraping, HTML rendering
   matcher.py          # Matcher — collection/wantlist fetch and comparison
   lookup.py           # Lookup — collection, wantlist, lists fetch + list page scraping
@@ -78,6 +82,8 @@ templates/
 | `/pricechecker` | GET | Price Checker UI (disabled on GAE) | Optional |
 | `/matcher` | GET | Matcher UI | Optional |
 | `/lookup` | GET | Lookup UI | Optional |
+| `/lookup/list` | GET | JSON API — fetches list releases (bypass scrape on GAE) | — |
+| `/watchlist` | GET/POST | Firestore API — manage user's Price Checker watchlist | Required |
 | `/records` | GET | Personal records dashboard | `curefortheitch` only |
 | `/reprice` | POST | JSON API — reprices selected Discogs listings | Required |
 | `/refresh_card` | POST | JSON API — re-scrapes a single release card | Optional |
@@ -123,8 +129,9 @@ None of the calls this app makes require authentication — they all access publ
 | Endpoint | Used in | Notes |
 |---|---|---|
 | `GET /users/{username}/inventory` | `pricechecker.py` | Returns seller's for-sale listings. Paginated. |
-| `GET /users/{username}/collection/folders/0/releases` | `lookup.py`, `matcher.py` | Folder `0` is the "All" folder. Returns 401/403 if private. |
-| `GET /users/{username}/wants` | `lookup.py`, `matcher.py` | Returns 401/403 if private. |
+| `GET /users/{username}/collection/folders/0/releases` | `lookup.py`, `matcher.py` | Folder `0` is the "All" folder. |
+| `GET /users/{username}/collection/value` | `main.py` | Fetches collection value range. Requires auth for owner. |
+| `GET /users/{username}/wants` | `lookup.py`, `matcher.py` | Returns user's wantlist. |
 | `GET /users/{username}/lists` | `lookup.py` | Returns the user's curated lists index. |
 | `GET /listings/{listing_id}` | `main.py` `/reprice` | Fetches current listing data before updating. |
 | `POST /listings/{listing_id}` | `main.py` `/reprice` | Updates a listing's price (requires OAuth). |

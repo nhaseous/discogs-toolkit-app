@@ -1,8 +1,13 @@
 {% extends "base.html" %}
 
+{% block extra_css %}
+<link rel="stylesheet" href="/static/v{{ static_v }}/css/reprice.css">
+{% endblock %}
+
 {% block extra_js %}
 <script>window.TOOLKIT_CONFIG = { session_user: {{ session_user | tojson }} };</script>
 <script src="/static/js/pricechecker.js"></script>
+<script src="/static/js/reprice.js"></script>
 {% endblock %}
 
 {% block content %}

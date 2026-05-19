@@ -287,13 +287,17 @@ def render_insights_dashboard(insights, kind='collection'):
         dash_id = 'wantlist-insights-dash'
         content = breakdown_html
         script = ''  # collection dashboard's script already binds both toggle wraps
+        # Hidden by default — collection (or list) is the active tab on page load,
+        # so the wantlist dashboard would otherwise flash before _onLookupTabChange hides it.
+        style_attr = ' style="display:none"'
     else:
         dash_id = 'collection-insights-dash'
         content = banner_html + pies_html + breakdown_html + value_genre_html
         script = toggle_script
+        style_attr = ''
 
     return (
-        '<div class="rec-dash-group" id="' + dash_id + '">' +
+        '<div class="rec-dash-group" id="' + dash_id + '"' + style_attr + '>' +
         content +
         '</div>' +
         script

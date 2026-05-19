@@ -1,4 +1,9 @@
 {% extends "base.html" %}
+
+{% block extra_css %}
+<link rel="stylesheet" href="/static/v{{ static_v }}/css/records.css">
+{% endblock %}
+
 {% block extra_js %}
 <script src="/static/js/records.js"></script>
 {% endblock %}

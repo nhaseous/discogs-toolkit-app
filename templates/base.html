@@ -19,6 +19,7 @@
     {% if request.path in ['/pricechecker', '/matcher', '/lookup', '/records'] %}
     <link rel="stylesheet" href="/static/v{{ static_v }}/css/results.css">
     {% endif %}
+    {% block extra_css %}{% endblock %}
 </head>
 <body>
 <div class="layout">

@@ -11,13 +11,17 @@ Flask web app for Discogs marketplace research and collection browsing. Deployed
 ### Price Checker (`/pricechecker`)
 Enter a seller's username. Fetches their entire for-sale inventory, then for each release scrapes the Discogs marketplace to show where the seller's listing ranks among all other listings for that release. Each card shows the full list of competing prices with conditions, the seller's rank, total number of marketplace listings, and last sold date. Cards can be filtered by supply (Lowest / Low / High / Highest) and recency (Recent / Old). Logged-in users can reprice selected listings directly from the UI.
 
+**Watchlist:** Logged-in users can add releases to a personal watchlist when viewing their own store. Watchlist state is persisted to Google Cloud Firestore and syncs across devices.
+
 > Price Checker is disabled on Google App Engine (Cloudflare blocks scraping from server IPs). It's available locally and in the macOS desktop app.
 
 ### Matcher (`/matcher`)
 Enter two usernames — one collection, one wantlist. Returns all releases in the collection that also appear on the wantlist. Two match modes: fuzzy (artist + title + format only) and exact (also includes format description and pressing text). Useful for figuring out what you have that someone else wants, or vice versa.
 
 ### User Lookup (`/lookup`)
-Enter any Discogs username. Browse their full collection, wantlist, and any public curated lists as a card grid with album art. For a curated list, each card also shows the number of marketplace copies for sale and the lowest price, plus any per-item comments the list owner left.
+Enter any Discogs username. Browse their full collection, wantlist, and any public curated lists as a card grid with album art.
+
+**Insights Dashboard:** Aggregates collection and wantlist data into an interactive dashboard showing breakdowns by genre, artist, label, format, and decade. If you look up your own username while logged in, it also displays your total collection value (minimum, median, maximum) and an approximated "Value per Genre" breakdown.
 
 ### Records (`/records`)
 Personal collection dashboard backed by Google Sheets. Shows collection stats, inventory, and sold records. Restricted to a single user.
@@ -33,6 +37,9 @@ mac_main.py           # macOS .app entry point
 setup.py              # py2app build config for macOS .app
 
 helper/
+  api.py              # Centralized API logic: retries, pagination, rate-limiting, value fetch
+  insights.py         # Aggregates collection stats and renders the Insights Dashboard
+  firestore_db.py     # Firestore integration for watchlist persistence
   pricechecker.py     # Price Checker — inventory fetch + marketplace scraping + rendering
   matcher.py          # Matcher — collection/wantlist fetch and comparison
   lookup.py           # Lookup — collection, wantlist, lists fetch + list scraping

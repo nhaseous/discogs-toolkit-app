@@ -35,14 +35,24 @@ if getattr(sys, 'frozen', False):
 else:
     _static_dir = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'static')
 _GAE_VERSION = os.environ.get('GAE_VERSION', '')
+def _compute_static_v():
+    try:
+        _mtimes = [os.path.getmtime(os.path.join(r, f)) for r, _, fs in os.walk(_static_dir) for f in fs]
+        return str(int(max(_mtimes))) if _mtimes else '1'
+    except OSError:
+        return '1'
+
 if _GAE_VERSION:
     _STATIC_V = _GAE_VERSION
 else:
-    try:
-        _mtimes = [os.path.getmtime(os.path.join(r, f)) for r, _, fs in os.walk(_static_dir) for f in fs]
-        _STATIC_V = str(int(max(_mtimes))) if _mtimes else '1'
-    except OSError:
-        _STATIC_V = '1'
+    _STATIC_V = _compute_static_v()
+
+def _current_static_v():
+    # On GAE / frozen builds, the static tree is immutable — use the cached value.
+    # In local dev, recompute so JS/CSS edits bust the cache without a server restart.
+    if _GAE_VERSION or getattr(sys, 'frozen', False):
+        return _STATIC_V
+    return _compute_static_v()
 
 _records_data = None
 def _get_records_data():
@@ -132,7 +142,7 @@ def _inject_globals():
         'session_avatar': session.get('discogs_avatar', ''),
         'price_checker_enabled': _is_price_checker_enabled(),
         'is_frozen': getattr(sys, 'frozen', False),
-        'static_v': _STATIC_V,
+        'static_v': _current_static_v(),
         'entry_badges': pricechecker._entry_badges,
         'get_inventory_stats': get_inventory_stats,
     }

@@ -1,11 +1,17 @@
-var _lookupActiveFilters = {};
-function _lookupGetFilteredItems(items) {
-    var fields = Object.keys(_lookupActiveFilters);
+var _lookupActiveFilters = { collection: {}, wantlist: {} };
+function _getActiveLookupTab() {
+    var t = document.querySelector('.lookup-tab.active');
+    return t ? t.getAttribute('data-tab') : null;
+}
+function _lookupGetFilteredItems(items, tabName) {
+    var filters = _lookupActiveFilters[tabName];
+    if (!filters) return items;
+    var fields = Object.keys(filters);
     if (!fields.length) return items;
     return items.filter(function(item) {
         for (var fi = 0; fi < fields.length; fi++) {
             var field = fields[fi];
-            var vals = _lookupActiveFilters[field];
+            var vals = filters[field];
             if (!vals || !vals.size) continue;
             var iv = item[field];
             var found;
@@ -68,204 +74,6 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
         }
     });
 });
-
-(function() {
-    var active = new Set();
-    var pills = document.querySelectorAll(".inv-count-badge[data-filter]");
-    if (!pills.length) return;
-    pills.forEach(function(pill) {
-        pill.addEventListener("click", function() {
-            var f = this.getAttribute("data-filter");
-            if (active.has(f)) {
-                active.delete(f);
-                this.classList.remove("filter-active");
-                if (f === "low") {
-                    active.delete("lowest");
-                    var lb = document.querySelector(".inv-count-badge[data-filter='lowest']");
-                    if (lb) lb.classList.remove("filter-active");
-                }
-            } else {
-                active.add(f);
-                this.classList.add("filter-active");
-                if (f === "lowest") {
-                    active.add("low");
-                    var lowb = document.querySelector(".inv-count-badge[data-filter='low']");
-                    if (lowb) lowb.classList.add("filter-active");
-                }
-                if (f === "recent") {
-                    active.delete("old");
-                    var oldb = document.querySelector(".inv-count-badge[data-filter='old']");
-                    if (oldb) oldb.classList.remove("filter-active");
-                }
-                if (f === "old") {
-                    active.delete("recent");
-                    var recentb = document.querySelector(".inv-count-badge[data-filter='recent']");
-                    if (recentb) recentb.classList.remove("filter-active");
-                }
-            }
-            filter();
-        });
-    });
-    function filter() {
-        document.querySelectorAll(".result-card").forEach(function(card) {
-            if (!active.size) { card.style.display = ""; return; }
-            var cb = (card.getAttribute("data-badges") || "").split(" ");
-            var show = true;
-            active.forEach(function(f) { if (cb.indexOf(f) === -1) show = false; });
-            card.style.display = show ? "" : "none";
-        });
-        document.querySelectorAll(".sort-group-header").forEach(function(hdr) {
-            if (!active.size) { hdr.style.display = ""; return; }
-            var sib = hdr.nextElementSibling;
-            var vis = false;
-            while (sib && !sib.classList.contains("sort-group-header")) {
-                if (sib.classList.contains("result-card") && sib.style.display !== "none") { vis = true; break; }
-                sib = sib.nextElementSibling;
-            }
-            hdr.style.display = vis ? "" : "none";
-        });
-    }
-})();
-
-(function() {
-    var mosaic = document.getElementById("results-mosaic");
-    if (!mosaic) return;
-    var container = mosaic.closest(".content");
-    var sticky = null;
-    var syncObservers = [];
-    function reposition() {
-        if (!sticky) return;
-        sticky.style.left = document.getElementById("content-main").getBoundingClientRect().right + 48 + "px";
-    }
-    function activate() {
-        if (sticky) return;
-        sticky = document.createElement("div");
-        sticky.id = "sticky-mosaic";
-        mosaic.querySelectorAll(".mosaic-item").forEach(function(item) {
-            sticky.appendChild(item.cloneNode(true));
-        });
-        var invCount = mosaic.nextElementSibling;
-        if (invCount) {
-            var cloned = invCount.cloneNode(true);
-            cloned.querySelectorAll(".inv-count-badge[data-filter]").forEach(function(cb) {
-                cb.addEventListener("click", function(e) {
-                    e.stopPropagation();
-                    var orig = invCount.querySelector(".inv-count-badge[data-filter='" + this.getAttribute("data-filter") + "']");
-                    if (orig) orig.click();
-                });
-            });
-            invCount.querySelectorAll(".inv-count-badge[data-filter]").forEach(function(ob) {
-                var mo = new MutationObserver(function() {
-                    var cb = cloned.querySelector(".inv-count-badge[data-filter='" + ob.getAttribute("data-filter") + "']");
-                    if (cb) cb.classList.toggle("filter-active", ob.classList.contains("filter-active"));
-                });
-                mo.observe(ob, { attributes: true, attributeFilter: ["class"] });
-                syncObservers.push(mo);
-            });
-            var origRC = invCount.querySelector(".reprice-controls");
-            var cloneRC = cloned.querySelector(".reprice-controls");
-            if (origRC && cloneRC) {
-                var origBtns = origRC.querySelectorAll("button");
-                var cloneBtns = cloneRC.querySelectorAll("button");
-                cloneBtns.forEach(function(cloneBtn, idx) {
-                    var origBtn = origBtns[idx];
-                    if (!origBtn) return;
-                    cloneBtn.addEventListener("click", function(e) {
-                        e.stopPropagation();
-                        origBtn.click();
-                    });
-                    var moBtn = new MutationObserver(function() {
-                        cloneBtn.style.cssText = origBtn.style.cssText;
-                        cloneBtn.className = origBtn.className;
-                        if (cloneBtn.textContent !== origBtn.textContent) cloneBtn.textContent = origBtn.textContent;
-                    });
-                    moBtn.observe(origBtn, { attributes: true, attributeFilter: ["style", "class"], childList: true, characterData: true, subtree: true });
-                    syncObservers.push(moBtn);
-                });
-                var moRC = new MutationObserver(function() {
-                    cloneRC.style.cssText = origRC.style.cssText;
-                });
-                moRC.observe(origRC, { attributes: true, attributeFilter: ["style"] });
-                syncObservers.push(moRC);
-                var origStatus = origRC.querySelector(".reprice-status");
-                var cloneStatus = cloneRC.querySelector(".reprice-status");
-                if (origStatus && cloneStatus) {
-                    var moSt = new MutationObserver(function() {
-                        cloneStatus.style.cssText = origStatus.style.cssText;
-                        cloneStatus.textContent = origStatus.textContent;
-                    });
-                    moSt.observe(origStatus, { attributes: true, attributeFilter: ["style"], childList: true, characterData: true, subtree: true });
-                    syncObservers.push(moSt);
-                }
-            }
-            sticky.appendChild(cloned);
-        }
-        document.body.appendChild(sticky);
-        reposition();
-        window.addEventListener("resize", reposition);
-        container.classList.add("sticky-mosaic-active");
-        sticky.style.transform = "translateY(-100%)";
-        requestAnimationFrame(function() {
-            requestAnimationFrame(function() {
-                if (!sticky) return;
-                sticky.style.transition = "transform 0.35s cubic-bezier(0.4,0,0.2,1)";
-                sticky.style.transform = "translateY(0)";
-            });
-        });
-    }
-    var MOSAIC_EASE = "transform 0.35s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease";
-    function slideInMosaic() {
-        var w = mosaic.offsetWidth;
-        var clip = document.getElementById("content-main");
-        if (clip) clip.style.overflow = "hidden";
-        mosaic.style.transition = "none";
-        mosaic.style.transform = "translateX(-" + w + "px)";
-        mosaic.style.opacity = "0";
-        requestAnimationFrame(function() {
-            requestAnimationFrame(function() {
-                mosaic.style.transition = MOSAIC_EASE;
-                mosaic.style.transform = "translateX(0)";
-                mosaic.style.opacity = "1";
-                mosaic.addEventListener("transitionend", function cleanup(e) {
-                    if (e.propertyName !== "transform") return;
-                    mosaic.removeEventListener("transitionend", cleanup);
-                    mosaic.style.transition = "";
-                    mosaic.style.transform = "";
-                    mosaic.style.opacity = "";
-                    if (clip) clip.style.overflow = "";
-                });
-            });
-        });
-    }
-    function revealMosaic() {
-        container.classList.remove("sticky-mosaic-active");
-        slideInMosaic();
-    }
-    function deactivate() {
-        if (!sticky) return;
-        syncObservers.forEach(function(mo) { mo.disconnect(); });
-        syncObservers = [];
-        window.removeEventListener("resize", reposition);
-        var el = sticky;
-        sticky = null;
-        el.style.transition = "transform 0.35s cubic-bezier(0.4,0,0.2,1)";
-        el.style.transform = "translateY(-100%)";
-        el.addEventListener("transitionend", function() { el.remove(); revealMosaic(); }, { once: true });
-    }
-    new IntersectionObserver(function(entries) {
-        if (!entries[0].isIntersecting && entries[0].boundingClientRect.top < 0) { activate(); }
-    }).observe(mosaic);
-    var invCount = mosaic.nextElementSibling;
-    if (invCount) {
-        new IntersectionObserver(function(entries) {
-            if (!entries[0].isIntersecting) return;
-            if (sticky) { deactivate(); return; }
-            if (!container.classList.contains("sticky-mosaic-active")) return;
-            revealMosaic();
-        }).observe(invCount);
-    }
-    slideInMosaic();
-})();
 
 (function() {
     var tip = document.getElementById("badge-tooltip");
@@ -520,7 +328,8 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
         if (!grid) return;
         var start = (page - 1) * PAGE_SIZE;
         if (s.items) {
-            var sourceItems = (tabName === 'collection') ? _lookupGetFilteredItems(s.items) : s.items;
+            var sourceItems = (tabName === 'collection' || tabName === 'wantlist')
+                ? _lookupGetFilteredItems(s.items, tabName) : s.items;
             s.total = Math.max(1, Math.ceil(sourceItems.length / PAGE_SIZE));
             var pageItems = sourceItems.slice(start, start + PAGE_SIZE);
             var html = '';
@@ -534,28 +343,30 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
             pageCards.forEach(function(c) { grid.appendChild(c); });
         }
     }
-    function _syncCollectionTabCount(cs) {
-        var isFiltered = Object.keys(_lookupActiveFilters).length > 0;
-        var total = cs.items.length;
-        var filtered = isFiltered ? _lookupGetFilteredItems(cs.items).length : total;
-        var collTab = document.querySelector('.lookup-tab[data-tab="collection"]');
-        if (!collTab) return;
+    var _tabLabels = { collection: 'Collection', wantlist: 'Wantlist' };
+    function _syncTabCount(tabName, s) {
+        var filters = _lookupActiveFilters[tabName] || {};
+        var isFiltered = Object.keys(filters).length > 0;
+        var total = s.items.length;
+        var filtered = isFiltered ? _lookupGetFilteredItems(s.items, tabName).length : total;
+        var tabEl = document.querySelector('.lookup-tab[data-tab="' + tabName + '"]');
+        if (!tabEl) return;
         // Lock width on first filter so the button doesn't resize
-        if (!collTab._lockedWidth) {
-            collTab.style.minWidth = collTab.offsetWidth + 'px';
-            collTab._lockedWidth = true;
+        if (!tabEl._lockedWidth) {
+            tabEl.style.minWidth = tabEl.offsetWidth + 'px';
+            tabEl._lockedWidth = true;
         }
-        collTab.textContent = 'Collection (' + filtered + ')';
+        tabEl.textContent = (_tabLabels[tabName] || tabName) + ' (' + filtered + ')';
         var countText = filtered + ' item' + (filtered !== 1 ? 's' : '');
-        collTab.setAttribute('data-count-text', countText);
+        tabEl.setAttribute('data-count-text', countText);
         var countEl = document.getElementById('lookup-count');
-        if (countEl && collTab.classList.contains('active')) {
+        if (countEl && tabEl.classList.contains('active')) {
             countEl.textContent = countText;
         }
         // Release width lock when filters are cleared
         if (!isFiltered) {
-            collTab.style.minWidth = '';
-            collTab._lockedWidth = false;
+            tabEl.style.minWidth = '';
+            tabEl._lockedWidth = false;
         }
     }
     var _exclusiveFilterFields = window._exclusiveFilterFields = {};
@@ -563,35 +374,42 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
     function _syncFilterBadges() {
         if (!_filterBadgesEl) return;
         _filterBadgesEl.innerHTML = '';
-        Object.keys(_lookupActiveFilters).forEach(function(field) {
-            _lookupActiveFilters[field].forEach(function(value) {
+        var tabName = _getActiveLookupTab();
+        var filters = _lookupActiveFilters[tabName];
+        if (!filters) return;
+        Object.keys(filters).forEach(function(field) {
+            filters[field].forEach(function(value) {
                 var badge = document.createElement('span');
                 badge.className = 'lookup-filter-badge';
                 badge.innerHTML = _esc(value) + '<span class="lookup-filter-badge-x">&times;</span>';
                 badge.addEventListener('click', function() {
-                    if (window._deactivateDashFilter) window._deactivateDashFilter(field, value);
-                    window._toggleLookupFilter(field, value);
+                    if (window._deactivateDashFilter) window._deactivateDashFilter(field, value, tabName);
+                    window._toggleLookupFilter(field, value, tabName);
                 });
                 _filterBadgesEl.appendChild(badge);
             });
         });
     }
-    window._toggleLookupFilter = function(field, value) {
-        if (!_lookupActiveFilters[field]) _lookupActiveFilters[field] = new Set();
-        var fset = _lookupActiveFilters[field];
+    window._syncLookupFilterBadges = _syncFilterBadges;
+    window._toggleLookupFilter = function(field, value, tabName) {
+        tabName = tabName || _getActiveLookupTab();
+        if (tabName !== 'collection' && tabName !== 'wantlist') return;
+        var filters = _lookupActiveFilters[tabName];
+        if (!filters[field]) filters[field] = new Set();
+        var fset = filters[field];
         if (fset.has(value)) {
             fset.delete(value);
-            if (!fset.size) delete _lookupActiveFilters[field];
+            if (!fset.size) delete filters[field];
         } else {
             if (_exclusiveFilterFields[field]) fset.clear();
             fset.add(value);
         }
         _syncFilterBadges();
-        var cs = state['collection'];
-        if (cs && cs.items) {
-            applyPage('collection', 1);
-            syncControls('collection');
-            _syncCollectionTabCount(cs);
+        var s = state[tabName];
+        if (s && s.items) {
+            applyPage(tabName, 1);
+            syncControls(tabName);
+            _syncTabCount(tabName, s);
             if (window._layoutMatchGrids) window._layoutMatchGrids();
         }
     };
@@ -783,123 +601,6 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
     }, artAnimating ? 600 : 200);
 })();
 
-// List sub-tab: intercept list index clicks, AJAX-load releases, create sub-tab dynamically
-(function() {
-    var listsPanel = document.getElementById("lookup-panel-lists");
-    if (!listsPanel) return;
-
-    function getOrCreateListPanel() {
-        var p = document.getElementById("lookup-panel-list");
-        if (p) {
-            var g = p.querySelector(".match-grid");
-            if (g) g.innerHTML = '';
-            var d = p.querySelector(".lookup-data");
-            if (d) d.remove();
-            var e = p.querySelector(".match-empty");
-            if (e) e.remove();
-            return p;
-        }
-        p = document.createElement("div");
-        p.id = "lookup-panel-list";
-        p.className = "lookup-panel";
-        p.style.display = "none";
-        p.innerHTML = '<div class="match-grid"></div>';
-        var ref = document.getElementById("lookup-panel-lists");
-        ref.parentNode.insertBefore(p, ref.nextSibling);
-        return p;
-    }
-
-    function getOrCreateListTab(listName) {
-        var container = document.querySelector(".lookup-tabs");
-        var tab = document.querySelector('.lookup-tab[data-tab="list"]');
-        if (!tab) {
-            tab = document.createElement("button");
-            tab.className = "lookup-tab";
-            tab.type = "button";
-            tab.setAttribute("data-tab", "list");
-            if (container) container.appendChild(tab);
-        }
-        tab.textContent = listName + "…";
-        tab.setAttribute("data-count-text", "");
-        return tab;
-    }
-
-    listsPanel.addEventListener("click", function(e) {
-        var card = e.target.closest(".match-card");
-        if (!card) return;
-        var href = card.getAttribute("href") || "";
-        var qi = href.indexOf("?");
-        var listId = new URLSearchParams(qi !== -1 ? href.slice(qi + 1) : "").get("list_id");
-        if (!listId) return;
-        e.preventDefault();
-
-        var titleEl = card.querySelector(".match-card-title");
-        var listName = titleEl ? titleEl.textContent.trim() : "List";
-
-        var listPanel = getOrCreateListPanel();
-        var listTab = getOrCreateListTab(listName);
-        listTab.disabled = true;
-
-        if (window._switchToTab) window._switchToTab("list");
-
-        var params = new URLSearchParams(window.location.search);
-        params.set("list_id", listId);
-        history.pushState(null, "", window.location.pathname + "?" + params.toString());
-
-        fetch("/lookup/list?list_id=" + encodeURIComponent(listId))
-            .then(function(r) {
-                if (!r.ok) throw new Error("HTTP " + r.status);
-                return r.json();
-            })
-            .then(function(data) {
-                var releases = data.releases || [];
-                var count = releases.length;
-                var countText = count + " release" + (count !== 1 ? "s" : "");
-
-                listTab.disabled = false;
-                listTab.textContent = listName + " (" + count + ")";
-                listTab.setAttribute("data-count-text", countText);
-
-                var mosaic = document.getElementById("lookup-mosaic-list");
-                if (mosaic) {
-                    mosaic.innerHTML = '';
-                    releases.forEach(function(m) {
-                        if (!m.thumb) return;
-                        var span = document.createElement("span");
-                        span.className = "mosaic-item";
-                        var img = document.createElement("img");
-                        img.src = m.thumb;
-                        img.className = "mosaic-thumb";
-                        img.alt = "";
-                        img.loading = "lazy";
-                        span.appendChild(img);
-                        mosaic.appendChild(span);
-                    });
-                }
-
-                var countEl = document.getElementById("lookup-count");
-                if (countEl) countEl.textContent = countText;
-
-                if (!releases.length) {
-                    var emptyEl = document.createElement("p");
-                    emptyEl.className = "match-empty";
-                    emptyEl.textContent = "This list is empty.";
-                    listPanel.appendChild(emptyEl);
-                }
-
-                if (window._registerAndApplyTab) window._registerAndApplyTab("list", releases, false);
-            })
-            .catch(function() {
-                listTab.disabled = false;
-                listTab.textContent = listName + " (error)";
-                var emptyEl = document.createElement("p");
-                emptyEl.className = "match-empty";
-                emptyEl.textContent = "Failed to load this list. Please try again.";
-                listPanel.appendChild(emptyEl);
-            });
-    });
-})();
-
 // Match-card hover sequencing: queue next card open until closing animation finishes
 (function() {
     if (!document.querySelector(".match-grid")) return;
@@ -958,110 +659,6 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
         pendingCard = null;
         if (activeCard) { activeCard.classList.remove("match-card--active"); activeCard = null; }
     };
-})();
-
-// Insights dashboard filter click handling
-(function() {
-    var collDash = document.getElementById('collection-insights-dash');
-    var wantDash = document.getElementById('wantlist-insights-dash');
-    var dashes = [collDash, wantDash].filter(Boolean);
-
-    window._onLookupTabChange = function(tabName) {
-        if (collDash) {
-            collDash.style.display = (tabName === 'wantlist') ? 'none' : '';
-            collDash.classList.toggle('insights-filters-disabled', tabName !== 'collection');
-        }
-        if (wantDash) {
-            wantDash.style.display = (tabName === 'wantlist') ? '' : 'none';
-            wantDash.classList.add('insights-filters-disabled');
-        }
-    };
-
-    window._deactivateDashFilter = function(field, value) {
-        dashes.forEach(function(d) {
-            d.querySelectorAll('.insights-filter-row').forEach(function(r) {
-                if (r.getAttribute('data-filter-field') === field &&
-                    r.getAttribute('data-filter-value') === value) {
-                    r.classList.remove('insights-filter-active');
-                }
-            });
-        });
-    };
-
-    if (!dashes.length) return;
-
-    var initTab = document.querySelector('.lookup-tab.active');
-    if (initTab) window._onLookupTabChange(initTab.getAttribute('data-tab'));
-
-    dashes.forEach(function(dash) {
-        dash.addEventListener('click', function(e) {
-            var expandBtn = e.target.closest('.breakdown-expand');
-            if (expandBtn) {
-                var panel = expandBtn.closest('.breakdown-expandable');
-                if (!panel) return;
-                var scroll = panel.querySelector('.rec-breakdown-scroll');
-                if (!scroll) return;
-
-                if (panel.classList.contains('is-expanded')) {
-                    var finish = function() {
-                        panel.classList.remove('is-expanded');
-                        scroll.style.maxHeight = '';
-                        expandBtn.textContent = '+';
-                        expandBtn.setAttribute('title', 'Show all');
-                    };
-                    if (scroll.scrollTop <= 0) {
-                        finish();
-                    } else {
-                        scroll.scrollTo({ top: 0, behavior: 'smooth' });
-                        var start = Date.now();
-                        (function tick() {
-                            if (scroll.scrollTop <= 1 || Date.now() - start > 600) finish();
-                            else requestAnimationFrame(tick);
-                        })();
-                    }
-                } else {
-                    var h = scroll.clientHeight;
-                    if (h > 0) scroll.style.maxHeight = h + 'px';
-                    panel.classList.add('is-expanded');
-                    expandBtn.textContent = '−';
-                    expandBtn.setAttribute('title', 'Show less');
-                }
-                return;
-            }
-
-            if (dash.classList.contains('insights-filters-disabled')) return;
-            var row = e.target.closest('.insights-filter-row');
-            if (!row) return;
-            var field = row.getAttribute('data-filter-field');
-            var value = row.getAttribute('data-filter-value');
-            if (!field || value === null) return;
-
-            var isActive = row.classList.toggle('insights-filter-active');
-
-            if (isActive && _exclusiveFilterFields && _exclusiveFilterFields[field]) {
-                dash.querySelectorAll('.insights-filter-row[data-filter-field="' + field + '"]').forEach(function(r) {
-                    if (r !== row) r.classList.remove('insights-filter-active');
-                });
-            }
-
-            dash.querySelectorAll('.insights-filter-row').forEach(function(r) {
-                if (r !== row &&
-                    r.getAttribute('data-filter-field') === field &&
-                    r.getAttribute('data-filter-value') === value) {
-                    r.classList.toggle('insights-filter-active', isActive);
-                }
-            });
-
-            if (window._toggleLookupFilter) window._toggleLookupFilter(field, value);
-
-            if (isActive) {
-                row.classList.add('insights-filter-flash');
-                row.addEventListener('animationend', function() {
-                    row.classList.remove('insights-filter-flash');
-                }, { once: true });
-            }
-        });
-    });
 })();
 
 // External link handling for pywebview (MacOS App)

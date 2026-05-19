@@ -1,0 +1,188 @@
+/* =========================================================
+   Reprice UI
+   ========================================================= */
+
+.reprice-controls { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
+
+.reprice-btn, .reprice-action-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 3px 10px;
+    border-radius: 4px;
+    border: 1.5px solid;
+    cursor: pointer;
+    font-family: inherit;
+}
+
+.reprice-btn {
+    border-color: var(--red);
+    background: var(--red);
+    color: #fff;
+    &:hover, &.active { border-color: var(--red-deep); background: var(--red-deep); }
+    &.active::after { content: "\00D7"; margin-left: 4px; }
+}
+
+.reprice-action-btn {
+    border-color: var(--amber);
+    background: var(--amber);
+    color: var(--paper);
+    &:hover { opacity: 0.78; }
+    &.active { background: var(--ink); color: var(--paper); border-color: var(--ink); opacity: 1; }
+}
+
+.reprice-submit-btn {
+    border-color: var(--green);
+    background: var(--green);
+    color: #fff;
+    &:hover { background: color-mix(in srgb, var(--green) 74%, #000); border-color: color-mix(in srgb, var(--green) 74%, #000); }
+    &:disabled { opacity: 0.6; cursor: default; }
+}
+
+.reprice-status {
+    font-size: 11px;
+    color: var(--red);
+    max-width: 300px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.result-card.reprice-selectable {
+    cursor: pointer;
+    &:hover {
+        border-color: color-mix(in srgb, var(--red) 38%, transparent);
+        box-shadow: 0 0 0 3px rgba(200, 32, 32, 0.08);
+    }
+}
+
+.result-card.reprice-selected {
+    border-color: var(--red);
+    box-shadow: 0 0 0 3px rgba(200, 32, 32, 0.14);
+    position: relative;
+}
+
+.result-card.reprice-review-visible { position: relative; z-index: 101; }
+
+#reprice-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.42);
+    z-index: 100;
+    pointer-events: none;
+}
+
+.badge-count.reprice-review-bar {
+    position: sticky;
+    top: 0;
+    z-index: 102;
+    background: var(--paper);
+    padding-block: 8px;
+    margin-bottom: 4px;
+}
+
+.reprice-old   { text-decoration: line-through; opacity: 0.45; font-size: 0.9em; }
+.reprice-arrow { color: var(--ink-muted); font-size: 0.9em; }
+
+a.reprice-new { color: var(--green-text); font-weight: 600; }
+
+.reprice-spread-wrap {
+    display: inline-flex;
+    align-items: center;
+    gap: 5px;
+    background: var(--amber-soft);
+    border: 1.5px solid var(--amber);
+    border-radius: 5px;
+    padding: 3px 9px;
+    margin-left: 3px;
+}
+
+.reprice-spread-label { white-space: nowrap; }
+
+.reprice-spread-input {
+    width: 4ch;
+    background: var(--card);
+    border: 1.5px solid var(--rule-strong);
+    border-radius: 3px;
+    color: var(--ink);
+    font: inherit;
+    font-size: 11px;
+    font-weight: 700;
+    text-align: center;
+    padding: 1px 3px;
+    outline: none;
+
+    &:focus {
+        border-color: var(--amber);
+        box-shadow: 0 0 0 2px rgba(165, 121, 28, 0.18);
+    }
+
+    &::-webkit-inner-spin-button, &::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+}
+
+.reprice-spread-pct { color: var(--amber); font-size: 10.5px; font-weight: 700; }
+
+input.reprice-price-input {
+    width: 5.5ch;
+    background: transparent;
+    border: none;
+    border-bottom: 1px dashed var(--green-text);
+    color: var(--green-text);
+    font: inherit;
+    font-size: 0.95em;
+    font-weight: 600;
+    text-align: right;
+    padding: 0 1px;
+    outline: none;
+
+    &:focus { border-bottom-style: solid; }
+    &::-webkit-inner-spin-button, &::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
+}
+
+.reprice-pct { font-size: 0.82em; color: var(--ink-muted); margin-left: 3px; }
+
+mark.mark--done { background: #d4f0cc; outline: 1.5px solid #5aac44; }
+
+/* =========================================================
+   Watchlist
+   ========================================================= */
+
+.card-watch-toggle {
+    background: transparent;
+    border: none;
+    cursor: pointer;
+    padding: 0;
+    margin-left: 6px;
+    color: var(--ink);
+    opacity: 0.4;
+    vertical-align: middle;
+    line-height: 0;
+
+    svg { width: 12px; height: 12px; display: block; }
+    &:hover { opacity: 0.55; }
+}
+
+.card-watch-badge-inline {
+    display: inline-flex;
+    align-items: center;
+    gap: 3px;
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 0.1em;
+    color: #7a5c00;
+    background: #fde047;
+    border-radius: 999px;
+    padding: 1px 6px;
+    margin-left: 7px;
+    vertical-align: middle;
+    cursor: pointer;
+    line-height: 1.6;
+
+    .card-watch-x {
+        display: none;
+        font-size: 12px;
+        line-height: 1;
+        font-weight: 500;
+    }
+
+    &:hover .card-watch-x { display: inline; }
+}
