@@ -438,9 +438,22 @@
     position: sticky;
     top: 0;
     z-index: 10;
+    min-width: 0;
+    max-width: 100%;
 }
 
-.lookup-tabs, .rec-tabs { display: flex; }
+.lookup-tabs, .rec-tabs {
+    display: flex;
+    flex: 1 1 auto;
+    min-width: 0;
+    overflow-x: auto;
+    overflow-y: hidden;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+}
+
+.lookup-tabs::-webkit-scrollbar,
+.rec-tabs::-webkit-scrollbar { display: none; }
 
 .lookup-tab, .rec-tab {
     font: inherit;
@@ -454,6 +467,8 @@
     margin-bottom: -1px;
     cursor: pointer;
     letter-spacing: 0.01em;
+    flex-shrink: 0;
+    white-space: nowrap;
 
     &:hover { color: var(--rust); }
 
@@ -469,6 +484,7 @@
     align-items: center;
     gap: 10px;
     padding-bottom: 8px;
+    flex-shrink: 0;
 }
 
 .pag-select { position: relative; }

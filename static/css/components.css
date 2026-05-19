@@ -154,11 +154,34 @@
         gap: 0;
     }
 
-    .search-bar input[type="text"] { font-size: 14px; padding: 0; line-height: 1.2; }
+    .search-bar input[type="text"] {
+        -webkit-appearance: none;
+        appearance: none;
+        font-size: 14px;
+        padding: 0;
+        line-height: 1;
+        height: 14px;
+        min-height: 0;
+        max-height: 14px;
+        box-shadow: none;
+        background: transparent;
+    }
+
+    .search-bar-label { line-height: 1; }
 
     .search-bar-divider { display: none; }
     .search-bar-icon    { display: none; }
-    .search-bar-segment { padding: 6px 10px; border-bottom: 1px solid var(--rule); align-items: center; }
+    .search-bar-segment {
+        padding: 5px 10px;
+        border-bottom: 1px solid var(--rule);
+        align-items: center;
+        flex: 0 0 36px;
+        height: 36px;
+        min-height: 0;
+        max-height: 36px;
+        overflow: hidden;
+        line-height: 1;
+    }
     .search-bar-toggle  { padding: 6px 10px; font-size: 13px; }
     .search-bar-submit  { padding: 8px; margin: 2px 0 0; font-size: 13px; justify-content: center; }
 }
