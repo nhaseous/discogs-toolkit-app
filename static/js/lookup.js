@@ -1,3 +1,13 @@
+// Add border-bottom to page-header while navigating away after a search
+(function() {
+    var form = document.getElementById('lookup-form');
+    if (!form) return;
+    form.addEventListener('submit', function() {
+        var header = document.querySelector('.page-header');
+        if (header) header.classList.add('page-header--searching');
+    });
+})();
+
 // List sub-tab: intercept list index clicks, AJAX-load releases, create sub-tab dynamically
 (function() {
     var listsPanel = document.getElementById("lookup-panel-lists");
@@ -69,7 +79,7 @@
             .then(function(data) {
                 var releases = data.releases || [];
                 var count = releases.length;
-                var countText = count + " release" + (count !== 1 ? "s" : "");
+                var countText = listName + ": " + count + " release" + (count !== 1 ? "s" : "");
 
                 listTab.disabled = false;
                 listTab.textContent = listName + " (" + count + ")";

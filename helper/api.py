@@ -88,11 +88,24 @@ def fetch_all_pages(url, items_key, scraper, params=None, auth=None, return_tota
         if "lists" in url: raise ListPrivateError()
 
     if not first_resp or first_resp.status_code != 200:
+        # Non-standard status: check if Discogs sent an error body anyway
+        if first_resp:
+            _err = _safe_json(first_resp)
+            if _err and "message" in _err:
+                if "collection" in url: raise CollectionPrivateError()
+                if "wants" in url: raise WantlistPrivateError()
+                if "lists" in url: raise ListPrivateError()
         return ([], 0) if return_total else []
 
     first_data = _safe_json(first_resp)
     if not first_data:
         return ([], 0) if return_total else []
+
+    # 200 OK but body is an error message (no items key) — treat as inaccessible
+    if "message" in first_data and items_key not in first_data:
+        if "collection" in url: raise CollectionPrivateError()
+        if "wants" in url: raise WantlistPrivateError()
+        if "lists" in url: raise ListPrivateError()
 
     results = first_data.get(items_key, [])
     pagination = first_data.get("pagination", {})

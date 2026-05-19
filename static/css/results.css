@@ -707,7 +707,7 @@
 
 .rec-sf-name  { color: var(--ink); font-weight: 500; width: 60%; }
 .rec-sf-count { color: var(--ink-muted); font-size: 12px; width: 10%; text-align: right; padding-right: 12px !important; }
-.rec-sf-money { color: var(--ink); font-variant-numeric: tabular-nums; width: 40%; text-align: right; padding-right: 6px !important; }
+.rec-sf-money { color: var(--ink); font-variant-numeric: tabular-nums; width: 40%; white-space: nowrap; text-align: right; padding-right: 6px !important; }
 .rec-sf-label { color: var(--ink-muted); font-size: 11px; }
 .rec-sf-header { background: var(--paper-alt); }
 
@@ -756,6 +756,51 @@
 
 .rec-pie-pct { color: var(--ink-muted); font-variant-numeric: tabular-nums; font-size: 12px; }
 
+.insights-bar-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+
+.insights-bar-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(60px, 1.6fr) auto;
+    align-items: center;
+    column-gap: 10px;
+    font-size: 13px;
+}
+
+.insights-bar-label {
+    color: var(--ink);
+    white-space: nowrap;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    &::after { content: ''; flex: 1; height: 1px; background: var(--rule); }
+}
+
+.insights-bar-track {
+    height: 7px;
+    background: color-mix(in srgb, var(--ink) 7%, transparent);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.insights-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    min-width: 2px;
+}
+
+.insights-bar-count {
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
 .insights-filter-row {
     cursor: pointer;
     border-radius: 3px;
@@ -765,8 +810,9 @@
 
 .insights-filter-row.insights-filter-active {
     background: color-mix(in srgb, var(--rust) 14%, transparent);
-    .rec-sf-name, .rec-pie-name { font-weight: 600; color: var(--rust); }
-    .rec-pie-name::after { background: color-mix(in srgb, var(--rust) 30%, var(--rule)); }
+    .rec-sf-name, .rec-pie-name, .insights-bar-label { font-weight: 600; color: var(--rust); }
+    .rec-pie-name::after,
+    .insights-bar-label::after { background: color-mix(in srgb, var(--rust) 30%, var(--rule)); }
 }
 
 .insights-filters-disabled .insights-filter-row {

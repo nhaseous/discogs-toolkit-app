@@ -34,6 +34,10 @@
 </div>
 </div>
 
+{% if not has_results %}
+<p class="lookup-hint">You can log in with Discogs to view your Collection or Wantlist if they are not public. <br> Authenticating with Discogs also raises your rate limit from 25 to 60 requests/minute (it takes 1 request to fetch 100 Collection or Wantlist items).</p>
+{% endif %}
+
 {% if has_results %}
     <div class="meta">
         <span>
@@ -77,10 +81,10 @@
 
         <div class="lookup-tabs-row">
             <div class="lookup-tabs">
-                <button class="lookup-tab{{ '' if list_id else ' active' }}" data-tab="collection" data-count-text="{{ collection | length }} item{{ 's' if collection|length != 1 else '' }}">Collection ({{ collection | length }})</button>
-                <button class="lookup-tab" data-tab="wantlist" data-count-text="{{ wantlist | length }} item{{ 's' if wantlist|length != 1 else '' }}">Wantlist ({{ wantlist | length }})</button>
-                <button class="lookup-tab" data-tab="lists" data-count-text="{{ lists | length }} list{{ 's' if lists|length != 1 else '' }}">Lists ({{ lists | length }})</button>
-                {% if list_id %}<button class="lookup-tab active" data-tab="list" data-count-text="{{ list_releases | length }} release{{ 's' if list_releases|length != 1 else '' }}">{{ list_name or 'List' }} ({{ list_releases | length }})</button>{% endif %}
+                <button class="lookup-tab{{ '' if list_id else ' active' }}" data-tab="collection" data-count-text="Collection: {{ collection | length }} item{{ 's' if collection|length != 1 else '' }}">Collection ({{ collection | length }})</button>
+                <button class="lookup-tab" data-tab="wantlist" data-count-text="Wantlist: {{ wantlist | length }} item{{ 's' if wantlist|length != 1 else '' }}">Wantlist ({{ wantlist | length }})</button>
+                <button class="lookup-tab" data-tab="lists" data-count-text="Lists: {{ lists | length }} list{{ 's' if lists|length != 1 else '' }}">Lists ({{ lists | length }})</button>
+                {% if list_id %}<button class="lookup-tab active" data-tab="list" data-count-text="{{ list_name or 'List' }}: {{ list_releases | length }} release{{ 's' if list_releases|length != 1 else '' }}">{{ list_name or 'List' }} ({{ list_releases | length }})</button>{% endif %}
             </div>
             <div class="lookup-pagination" id="lookup-pagination">
                 <button class="pag-expand-btn" id="pag-expand-btn" type="button" title="Expand all cards">

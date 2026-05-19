@@ -535,9 +535,9 @@ def lookuppage():
                 except lookup_helper.UserNotFoundError:
                     user_not_found = True
                 except lookup_helper.CollectionPrivateError:
-                    collection_error = "This user's collection is not public."
+                    collection_error = "This user's collection is not public or could not be accessed."
                 except lookup_helper.WantlistPrivateError:
-                    wantlist_error = "This user's wantlist is not public."
+                    wantlist_error = "This user's wantlist is not public or could not be accessed."
                 except lookup_helper.ListPrivateError:
                     lists_error = "This user's lists are not public."
                 except lookup_helper.RateLimitError:

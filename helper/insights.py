@@ -259,7 +259,7 @@ def render_insights_dashboard(insights, kind='collection'):
 
     toggle_script = (
         '<script>'
-        '(function(){'
+        'document.addEventListener("DOMContentLoaded",function(){'
         'document.querySelectorAll(".insights-genre-toggle").forEach(function(wrap){'
         'wrap.querySelectorAll(".insights-toggle-switch").forEach(function(btn){'
         'btn.addEventListener("click",function(){'
@@ -279,7 +279,7 @@ def render_insights_dashboard(insights, kind='collection'):
         '});'
         '});'
         '});'
-        '})();'
+        '});'
         '</script>'
     )
 
@@ -346,6 +346,31 @@ def _pie_legend_html(segments, filter_field=None):
         )
     return ''.join(items)
 
+def _bar_chart_html(segments, filter_field=None):
+    if not segments: return ''
+    max_val = max((s['value'] for s in segments if s['value'] > 0), default=0)
+    if max_val == 0: return ''
+    rows = []
+    for seg in segments:
+        if seg['value'] <= 0: continue
+        pct_of_max = seg['value'] / max_val * 100
+        cls = 'insights-bar-row'
+        ff = ''
+        if filter_field:
+            cls += ' insights-filter-row'
+            ff = (f' data-filter-field="{_html.escape(filter_field)}"'
+                  f' data-filter-value="{_html.escape(str(seg["name"] or ""))}"')
+        rows.append(
+            f'<div class="{cls}"{ff}>'
+            f'<div class="insights-bar-label">{_html.escape(seg["name"] or "—")}</div>'
+            f'<div class="insights-bar-track">'
+            f'<div class="insights-bar-fill" style="width:{pct_of_max:.1f}%;background:{seg["color"]}"></div>'
+            f'</div>'
+            f'<div class="insights-bar-count">{seg["value"]} items</div>'
+            f'</div>'
+        )
+    return f'<div class="insights-bar-chart">{"".join(rows)}</div>'
+
 def _pie_section(title, segments, filter_field=None):
     if not segments or sum(s['value'] for s in segments) == 0: return ''
     return (
@@ -377,7 +402,7 @@ def _format_breakdown_section(format_pie, release_type_pie, edition_pie=None):
             f'</div>'
         )
         panel_fmt = f'<div class="insights-panel">{pie_block(format_pie, filter_field="format")}</div>'
-        panel_edition = f'<div class="insights-panel" style="display:none">{pie_block(edition_pie, filter_field="format_tags")}</div>'
+        panel_edition = f'<div class="insights-panel" style="display:none">{_bar_chart_html(edition_pie, filter_field="format_tags")}</div>'
     else:
         toggle_cls = ''
         title = f'<div class="rec-breakdown-title">Format Breakdown</div>'

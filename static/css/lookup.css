@@ -2,6 +2,12 @@
    Lookup — notices and active-filter badges
    ========================================================= */
 
+.lookup-hint { font-size: 15px; color: var(--ink-soft); line-height: 1.6; max-width: 760px; }
+
+.page-header--searching { border-bottom: 1px solid var(--rule); }
+
+.content:not(.has-results) #spinner { border-bottom: 1px solid var(--rule); padding-bottom: 16px; }
+
 .lookup-notice { margin: 20px 0; font-size: 14px; color: var(--ink-soft); font-style: italic; }
 
 .lookup-notice--error {

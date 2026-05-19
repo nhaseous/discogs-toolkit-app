@@ -357,7 +357,8 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
             tabEl._lockedWidth = true;
         }
         tabEl.textContent = (_tabLabels[tabName] || tabName) + ' (' + filtered + ')';
-        var countText = filtered + ' item' + (filtered !== 1 ? 's' : '');
+        var countLabel = isFiltered ? 'Selected' : (_tabLabels[tabName] || tabName);
+        var countText = countLabel + ': ' + filtered + ' item' + (filtered !== 1 ? 's' : '');
         tabEl.setAttribute('data-count-text', countText);
         var countEl = document.getElementById('lookup-count');
         if (countEl && tabEl.classList.contains('active')) {
