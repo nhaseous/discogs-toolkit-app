@@ -3,10 +3,11 @@ collections.Callable = collections.abc.Callable
 
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from bs4 import BeautifulSoup
+import cloudscraper
 import html as _html, json, math, os, re
 
 from helper.api import (
-    fetch_all_pages, request_with_retry, clean_artist,
+    fetch_all_pages, request_with_retry, get_user_profile, make_api_session, clean_artist,
     UserNotFoundError, CollectionPrivateError, WantlistPrivateError, ListPrivateError,
     RateLimitError, CloudflareBlockedError
 )
@@ -46,6 +47,13 @@ def get_collection(username, scraper, auth=None):
     except UserNotFoundError: raise UserNotFoundError(username)
     except CollectionPrivateError: raise CollectionPrivateError(username)
 
+    # Like get_wantlist: a private collection can come back as an empty 200,
+    # indistinguishable from a genuinely empty one. num_collection is reported in
+    # the profile even when the collection is private, so use it to tell them
+    # apart and show the correct "not public" notice.
+    if not releases and (get_user_profile(username, scraper, auth=auth).get("num_collection") or 0) > 0:
+        raise CollectionPrivateError(username)
+
     for r in releases:
         info = r["basic_information"]
         artists = _extract_artists(info.get("artists"))
@@ -56,8 +64,7 @@ def get_collection(username, scraper, auth=None):
         fmt_text = fmt_info.get("text", "")
         release_id = info.get("id", "")
 
-        # New: include community stats and metadata for aggregation
-        community = r.get("community", {})
+        # Metadata for aggregation in the Insights Dashboard.
         labels = [l.get("name", "") for l in (info.get("labels") or []) if l.get("name")]
         results.append({
             "artist": artists,
@@ -73,8 +80,6 @@ def get_collection(username, scraper, auth=None):
             "genres": info.get("genres") or [],
             "styles": info.get("styles") or [],
             "year": info.get("year", 0),
-            "have": community.get("have", 0),
-            "want": community.get("want", 0),
             "labels": labels,
         })
 
@@ -94,6 +99,14 @@ def get_wantlist(username, scraper, auth=None):
     except UserNotFoundError: raise UserNotFoundError(username)
     except WantlistPrivateError: raise WantlistPrivateError(username)
 
+    # A private wantlist returns 200 with an empty list (Discogs hides the
+    # contents rather than returning 403), so it's indistinguishable from a
+    # genuinely empty one at this point. Cross-check the profile's num_wantlist,
+    # which Discogs reports even when the list is private, so we can show the
+    # correct "not public" notice instead of "This wantlist is empty."
+    if not wants and (get_user_profile(username, scraper, auth=auth).get("num_wantlist") or 0) > 0:
+        raise WantlistPrivateError(username)
+
     for w in wants:
         info = w["basic_information"]
         artists = _extract_artists(info.get("artists"))
@@ -104,7 +117,6 @@ def get_wantlist(username, scraper, auth=None):
         fmt_text = fmt_info.get("text", "")
         release_id = info.get("id", "")
 
-        community = w.get("community", {}) or {}
         labels = [l.get("name", "") for l in (info.get("labels") or []) if l.get("name")]
         results.append({
             "artist": artists,
@@ -120,8 +132,6 @@ def get_wantlist(username, scraper, auth=None):
             "genres": info.get("genres") or [],
             "styles": info.get("styles") or [],
             "year": info.get("year", 0),
-            "have": community.get("have", 0),
-            "want": community.get("want", 0),
             "labels": labels,
         })
 
@@ -140,6 +150,11 @@ def get_lists(username, scraper, auth=None):
     except UserNotFoundError: raise UserNotFoundError(username)
     except ListPrivateError: raise ListPrivateError(username)
 
+    # As with collection/wantlist, private lists can come back as an empty 200.
+    # num_lists reflects the true count even when the lists are inaccessible.
+    if not lists and (get_user_profile(username, scraper, auth=auth).get("num_lists") or 0) > 0:
+        raise ListPrivateError(username)
+
     for lst in lists:
         if not lst.get("public", True):
             continue
@@ -150,10 +165,18 @@ def get_lists(username, scraper, auth=None):
         })
     return results
 
-def get_list_releases(list_id, scraper):
+def _make_scrape_session():
+    return cloudscraper.create_scraper(
+        browser={'browser': 'chrome', 'platform': 'android', 'desktop': False})
+
+def get_list_releases(list_id):
+    # List detail comes from the REST API on GAE (Cloudflare blocks scraping from
+    # server IPs) and from scraping www.discogs.com locally. Each path uses the
+    # right session: a plain requests session for the API, cloudscraper for the
+    # HTML scrape.
     if _is_gae():
-        return _get_list_releases_api(list_id, scraper)
-    return _get_list_releases_scrape(list_id, scraper)
+        return _get_list_releases_api(list_id, make_api_session())
+    return _get_list_releases_scrape(list_id, _make_scrape_session())
 
 def _get_list_releases_api(list_id, scraper):
     url = "https://api.discogs.com/lists/{0}".format(list_id)

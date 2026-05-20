@@ -1,10 +1,23 @@
 import time
 import random
 import re
+import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from helper.common import API_HEADERS as _API_HEADERS
 
 _MAX_WORKERS = 5
+
+def make_api_session():
+    """
+    Returns a plain requests.Session for Discogs REST API calls (api.discogs.com).
+
+    The REST API is NOT behind Cloudflare, so there's no reason to route these
+    calls through cloudscraper: it only adds Cloudflare challenge-solving overhead
+    (and an extra TLS fingerprinting layer) for endpoints that never challenge.
+    cloudscraper is reserved for the HTML-scraping endpoints on www.discogs.com,
+    which is the only place a Cloudflare interstitial actually appears.
+    """
+    return requests.Session()
 
 class UserNotFoundError(Exception):
     pass
@@ -80,16 +93,20 @@ def fetch_all_pages(url, items_key, scraper, params=None, auth=None, return_tota
 
     first_resp = request_with_retry(scraper, "GET", url, params=dict(params, page=1), headers=_API_HEADERS, auth=auth)
 
-    if first_resp and first_resp.status_code == 404:
+    # NB: test `first_resp is not None`, not `if first_resp` — requests.Response
+    # is falsy for any 4xx/5xx (its __bool__ returns .ok), so a plain `if first_resp`
+    # silently skips these checks for exactly the error responses we care about
+    # (404 / 401 / 403), making private and missing users look like empty results.
+    if first_resp is not None and first_resp.status_code == 404:
         raise UserNotFoundError()
-    if first_resp and first_resp.status_code in (401, 403):
+    if first_resp is not None and first_resp.status_code in (401, 403):
         if "collection" in url: raise CollectionPrivateError()
         if "wants" in url: raise WantlistPrivateError()
         if "lists" in url: raise ListPrivateError()
 
-    if not first_resp or first_resp.status_code != 200:
+    if first_resp is None or first_resp.status_code != 200:
         # Non-standard status: check if Discogs sent an error body anyway
-        if first_resp:
+        if first_resp is not None:
             _err = _safe_json(first_resp)
             if _err and "message" in _err:
                 if "collection" in url: raise CollectionPrivateError()
@@ -145,6 +162,19 @@ def get_collection_value(username, scraper, auth=None):
     if resp and resp.status_code == 200:
         return _safe_json(resp)
     return None
+
+def get_user_profile(username, scraper, auth=None):
+    """
+    Fetches a user's public profile. Used to read counts like num_wantlist and
+    num_collection, which Discogs exposes even when the underlying list is set
+    to private — useful for telling a private list apart from an empty one.
+    Returns {} if the profile can't be fetched.
+    """
+    url = "https://api.discogs.com/users/{0}".format(username)
+    resp = request_with_retry(scraper, "GET", url, headers=_API_HEADERS, auth=auth)
+    if resp and resp.status_code == 200:
+        return _safe_json(resp) or {}
+    return {}
 
 def clean_artist(artist_info):
     name = artist_info.get("anv") or artist_info.get("name", "")

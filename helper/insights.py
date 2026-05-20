@@ -23,15 +23,9 @@ def get_collection_insights(items, total_value=None):
 
     _RELEASE_TYPES = {'EP', 'Album', 'Single', 'Compilation'}
     _EDITION_TAGS = {'Remastered', 'Deluxe Edition', 'Numbered', 'Club Edition',
-                     'Record Store Day', 'Picture Disc', 'Unofficial Release'}
+                     'Record Store Day', 'Picture Disc', 'Unofficial Release', 'Test Pressing'}
 
-    demand_factors = []
     for item in items:
-        have = item.get('have', 0)
-        want = item.get('want', 0)
-        factor = want / (have + 1)
-        demand_factors.append(factor)
-
         for g in item.get('genres', []): genre_counts[g] += 1
         for s in item.get('styles', []): style_counts[s] += 1
         for l in item.get('labels', []): label_counts[l] += 1
@@ -49,43 +43,29 @@ def get_collection_insights(items, total_value=None):
         if year > 1900:
             decade = (year // 10) * 10
             decade_counts[decade] += 1
-
-    # Genre Value Approximation
-    genre_values = {}
-    if total_value and total_value.get('median'):
-        try:
-            total_median = float(total_value['median'].replace('$', '').replace(',', '').strip())
-        except (ValueError, AttributeError):
-            total_median = 0
-            
-        if total_median > 0:
-            # Distribute total_median across items based on demand factors
-            total_demand = sum(demand_factors)
-            if total_demand > 0:
-                # Value per item = total_median * (item_demand / total_demand)
-                # Value per genre = sum of values of items in that genre
-                for i, item in enumerate(items):
-                    item_value = total_median * (demand_factors[i] / total_demand)
-                    # Since items can have multiple genres, we split the item's value equally among them
-                    gs = item.get('genres', [])
-                    if gs:
-                        val_per_genre = item_value / len(gs)
-                        for g in gs:
-                            genre_values[g] = genre_values.get(g, 0) + val_per_genre
+            # Stamp a decade label on the item so the card grid can be filtered
+            # by decade (same mechanism as genre/format filters).
+            item['decade'] = f'{decade}s'
 
     all_genres  = genre_counts.most_common()
     all_styles  = style_counts.most_common()
     all_artists = artist_counts.most_common()
     all_labels  = label_counts.most_common()
 
-    decades_sorted = sorted(decade_counts.items())
-    
     def _make_pie(counter, limit=10, offset=0):
         return [
             {'name': name, 'value': count, 'color': _PIE_COLORS[(i + offset) % len(_PIE_COLORS)]}
             for i, (name, count) in enumerate(counter.most_common(limit))
             if count > 0
         ]
+
+    # Decade pie: sorted by count (most common first), like the Genre Breakdown.
+    # Names ("1980s") match the per-item 'decade' stamp for filtering.
+    decade_pie = [
+        {'name': f'{decade}s', 'value': count, 'color': _PIE_COLORS[i % len(_PIE_COLORS)]}
+        for i, (decade, count) in enumerate(decade_counts.most_common())
+        if count > 0
+    ]
 
     return {
         'all_genres': all_genres,
@@ -96,12 +76,11 @@ def get_collection_insights(items, total_value=None):
         'style_total': sum(style_counts.values()),
         'artist_total': sum(artist_counts.values()),
         'label_total': sum(label_counts.values()),
-        'decades': decades_sorted,
         'genre_pie':        _make_pie(genre_counts,        offset=0),
+        'decade_pie':       decade_pie,
         'format_pie':       _make_pie(format_counts,       offset=4),
         'release_type_pie': _make_pie(release_type_counts, offset=9),
         'edition_pie':      _make_pie(edition_counts,      offset=2),
-        'genre_values': genre_values,
         'total_value': total_value,
     }
 
@@ -137,7 +116,7 @@ def render_insights_dashboard(insights, kind='collection'):
     # Pie charts row — Genre Breakdown + Format Breakdown side by side
     pies_html = (
         '<div class="insights-pies-row">' +
-        _pie_section("Genre Breakdown", insights['genre_pie'], filter_field='genres') +
+        _genre_year_section(insights['genre_pie'], insights.get('decade_pie')) +
         _format_breakdown_section(insights['format_pie'], insights['release_type_pie'], insights.get('edition_pie')) +
         '</div>'
     )
@@ -160,18 +139,6 @@ def render_insights_dashboard(insights, kind='collection'):
                 f'<td class="rec-sf-money">{val} items'
                 f'<span style="color:var(--ink-muted);margin-left:6px">{pct:.0f}%</span>'
                 f'</td>'
-                f'</tr>'
-            )
-        return rows
-
-    def make_currency_rows(data, primary=5):
-        rows = ""
-        for i, (name, val) in enumerate(data):
-            cls = ' class="rec-breakdown-row-extra"' if i >= primary else ''
-            rows += (
-                f'<tr{cls}>'
-                f'<td class="rec-sf-name">{_html.escape(name)}</td>'
-                f'<td class="rec-sf-money">${val:,.2f}</td>'
                 f'</tr>'
             )
         return rows
@@ -229,26 +196,6 @@ def render_insights_dashboard(insights, kind='collection'):
             + '</div>'
         )
 
-    # Value per Genre Table (Approximated) — expandable but not filterable
-    value_genre_html = ""
-    if insights['genre_values']:
-        sorted_val_genres = sorted(insights['genre_values'].items(), key=lambda x: x[1], reverse=True)
-        has_extras = len(sorted_val_genres) > 5
-        rows_html = make_currency_rows(sorted_val_genres)
-        section_cls = 'rec-breakdown-section rec-breakdown-section--wide'
-        if has_extras: section_cls += ' breakdown-expandable'
-        title_inner = '<span class="rec-breakdown-title-text">Value per Genre (Top 5)</span>' + (_expand_toggle() if has_extras else '')
-        title_cls = 'rec-breakdown-title' + (' rec-breakdown-title--row' if has_extras else '')
-        value_genre_html = (
-            f'<div class="{section_cls}">'
-            f'<div class="{title_cls}">{title_inner}</div>'
-            f'<div class="rec-stat-sub" style="margin-bottom:8px">Approximated based on have/want data</div>'
-            f'<div class="rec-breakdown-scroll">'
-            f'<table class="rec-breakdown-table"><tbody>{rows_html}</tbody></table>'
-            f'</div>'
-            f'</div>'
-        )
-
     breakdown_html = (
         '<div class="rec-breakdown">' +
         genre_toggle_section() +
@@ -260,6 +207,30 @@ def render_insights_dashboard(insights, kind='collection'):
     toggle_script = (
         '<script>'
         'document.addEventListener("DOMContentLoaded",function(){'
+        # Genre Breakdown <-> Year Breakdown: lock the card height once (using the
+        # taller of the two panels) so the in-place swap never resizes the card.
+        'document.querySelectorAll(".insights-pie-toggle").forEach(function(wrap){'
+        'var lock=function(){'
+        'if(wrap._locked)return;'
+        'var max=0;'
+        'wrap.querySelectorAll(".insights-panel").forEach(function(p){'
+        'var hidden=p.style.display==="none";'
+        'if(hidden){p.style.visibility="hidden";p.style.display="";}'
+        'max=Math.max(max,p.offsetHeight);'
+        'if(hidden){p.style.display="none";p.style.visibility="";}'
+        '});'
+        'if(max>0){wrap.style.minHeight=max+"px";wrap._locked=true;}'
+        '};'
+        'lock();'
+        'wrap.querySelectorAll(".insights-toggle-switch").forEach(function(btn){'
+        'btn.addEventListener("click",function(){'
+        'lock();'
+        'wrap.querySelectorAll(".insights-panel").forEach(function(p){'
+        'p.style.display=p.style.display==="none"?"":"none";'
+        '});'
+        '});'
+        '});'
+        '});'
         'document.querySelectorAll(".insights-genre-toggle").forEach(function(wrap){'
         'wrap.querySelectorAll(".insights-toggle-switch").forEach(function(btn){'
         'btn.addEventListener("click",function(){'
@@ -292,7 +263,7 @@ def render_insights_dashboard(insights, kind='collection'):
         style_attr = ' style="display:none"'
     else:
         dash_id = 'collection-insights-dash'
-        content = banner_html + pies_html + breakdown_html + value_genre_html
+        content = banner_html + pies_html + breakdown_html
         script = toggle_script
         style_attr = ''
 
@@ -381,6 +352,49 @@ def _pie_section(title, segments, filter_field=None):
         f'<div class="rec-pie-legend">{_pie_legend_html(segments, filter_field)}</div>'
         f'</div>'
         f'</div>'
+    )
+
+def _genre_year_section(genre_pie, year_pie):
+    """
+    Genre Breakdown card that toggles to a Year Breakdown pie in place. The
+    title carries a switch ("Genre Breakdown / Year" ⇄ "Year Breakdown /
+    Genres"); clicking it swaps the two panels without resizing the card. Both
+    legends are clickable filter rows, like the other pie charts. The Year pie
+    shows the per-decade distribution and filters the grid by decade.
+    """
+    has_genre = genre_pie and sum(s['value'] for s in genre_pie) > 0
+    has_year  = year_pie  and sum(s['value'] for s in year_pie)  > 0
+
+    # Degrade gracefully if either side has no data: render a plain, non-toggling pie.
+    if not has_genre:
+        return _pie_section("Year Breakdown", year_pie, filter_field='decade') if has_year else ''
+    if not has_year:
+        return _pie_section("Genre Breakdown", genre_pie, filter_field='genres')
+
+    def _panel(title, swap_label, segments, filter_field, active):
+        style = '' if active else ' style="display:none"'
+        cls = 'insights-panel' + (' insights-panel--active' if active else '')
+        return (
+            f'<div class="{cls}"{style}>'
+            f'<div class="rec-breakdown-title insights-toggle-title">'
+            f'<span class="rec-breakdown-title-text">{title} '
+            f'<span class="insights-toggle-switch">/ {swap_label}</span>'
+            f'</span>'
+            f'</div>'
+            f'<div class="rec-pie-wrap">'
+            f'{_pie_svg(segments)}'
+            f'<div class="rec-pie-legend">{_pie_legend_html(segments, filter_field)}</div>'
+            f'</div>'
+            f'</div>'
+        )
+
+    # insights-pie-toggle has its own handler that locks the card height (so the
+    # swap never resizes it) and then swaps the two panels.
+    return (
+        '<div class="rec-breakdown-section insights-pie-toggle">'
+        + _panel('Genre Breakdown', 'Year',  genre_pie, 'genres', active=True)
+        + _panel('Year Breakdown',  'Genre', year_pie,  'decade', active=False)
+        + '</div>'
     )
 
 def _format_breakdown_section(format_pie, release_type_pie, edition_pie=None):

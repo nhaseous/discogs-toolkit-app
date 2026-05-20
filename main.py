@@ -71,6 +71,16 @@ def versioned_static(version, filename):
     resp.headers['Cache-Control'] = 'public, max-age=31536000, immutable'
     return resp
 
+@app.route('/favicon.ico')
+def favicon():
+    # Safari requests /favicon.ico directly (ignoring the <link> tag in <head>)
+    # and is picky about a PNG-only declaration, so serve the icon here too.
+    # Must be cacheable: the HTML is sent no-store, and Safari otherwise won't
+    # persist the favicon association for freshly-navigated result URLs.
+    resp = send_from_directory(app.static_folder, 'logo-64.png', mimetype='image/png')
+    resp.headers['Cache-Control'] = 'public, max-age=86400'
+    return resp
+
 @app.after_request
 def _no_cache_html(resp):
     # Prevent browsers from caching HTML — ensures they always re-fetch
@@ -243,7 +253,10 @@ def pricecheckerpage():
         # API calls). The marketplace scraping for each release is driven from the
         # browser via /scrape_batch so cards can stream in progressively.
         try:
-            scraper = _get_pc_scraper()
+            # Inventory is a REST API call (api.discogs.com) — use a plain
+            # requests session, not cloudscraper. cloudscraper is only needed for
+            # the marketplace HTML scrape, which runs later via /scrape_batch.
+            scraper = api_helper.make_api_session()
             release_titles_ids = None
             for attempt in range(2):
                 try:
@@ -523,7 +536,9 @@ def matcherpage():
     if collection_user and wantlist_user:
         start_time = time.time()
         try:
-            scraper = cloudscraper.create_scraper(browser={'browser':'chrome','platform':'android','desktop':False})
+            # Matcher only hits the REST API (collection + wantlist) — no
+            # scraping — so use a plain requests session.
+            scraper = api_helper.make_api_session()
             auth = _oauth_auth()
 
             collection = matcher.get_collection(collection_user, scraper, auth=auth)
@@ -586,7 +601,10 @@ def lookuppage():
 
     if username:
         start_time = time.time()
-        scraper = cloudscraper.create_scraper(browser={'browser':'chrome','platform':'android','desktop':False})
+        # collection, wantlist, lists and value are all REST API calls — use a
+        # plain requests session. List detail (get_list_releases) manages its own
+        # session since it may scrape www.discogs.com locally.
+        scraper = api_helper.make_api_session()
         auth = _oauth_auth()
 
         _fetch_tasks = {
@@ -633,7 +651,7 @@ def lookuppage():
 
         if list_id and not user_not_found and not rate_limited:
             try:
-                list_releases = lookup_helper.get_list_releases(list_id, scraper)
+                list_releases = lookup_helper.get_list_releases(list_id)
             except lookup_helper.RateLimitError:
                 rate_limited = True
             except lookup_helper.CloudflareBlockedError:
@@ -677,9 +695,8 @@ def lookup_list_data():
     list_id = request.args.get("list_id", "")
     if not list_id:
         return jsonify({"error": "Missing list_id"}), 400
-    scraper = cloudscraper.create_scraper(browser={'browser': 'chrome', 'platform': 'android', 'desktop': False})
     try:
-        releases = lookup_helper.get_list_releases(list_id, scraper)
+        releases = lookup_helper.get_list_releases(list_id)
     except lookup_helper.RateLimitError:
         return jsonify({"error": "rate_limited"}), 429
     except lookup_helper.CloudflareBlockedError:
