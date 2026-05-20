@@ -164,6 +164,36 @@
     var initTab = document.querySelector('.lookup-tab.active');
     if (initTab) window._onLookupTabChange(initTab.getAttribute('data-tab'));
 
+    // Cross-hover: hovering any .insights-filter-row highlights matching peers
+    function _clearCrossHover(d) {
+        d.querySelectorAll('.insights-filter-hover').forEach(function(r) {
+            r.classList.remove('insights-filter-hover');
+        });
+    }
+
+    dashes.forEach(function(dash) {
+        dash.addEventListener('mouseover', function(e) {
+            var row = e.target.closest('.insights-filter-row');
+            if (!row || row.contains(e.relatedTarget)) return;
+            _clearCrossHover(dash);
+            var field = row.getAttribute('data-filter-field');
+            var value = row.getAttribute('data-filter-value');
+            if (!field || value === null) return;
+            dash.querySelectorAll('.insights-filter-row').forEach(function(r) {
+                if (r !== row &&
+                    r.getAttribute('data-filter-field') === field &&
+                    r.getAttribute('data-filter-value') === value) {
+                    r.classList.add('insights-filter-hover');
+                }
+            });
+        });
+        dash.addEventListener('mouseout', function(e) {
+            var row = e.target.closest('.insights-filter-row');
+            if (!row || row.contains(e.relatedTarget)) return;
+            _clearCrossHover(dash);
+        });
+    });
+
     dashes.forEach(function(dash) {
         var dashTab = (dash === wantDash) ? 'wantlist' : 'collection';
         dash.addEventListener('click', function(e) {

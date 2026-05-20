@@ -274,7 +274,7 @@ def render_insights_dashboard(insights, kind='collection'):
         script
     )
 
-def _pie_svg(segments, size=110, extra_class=''):
+def _pie_svg(segments, size=110, extra_class='', filter_field=None):
     total = sum(s['value'] for s in segments)
     if total == 0: return ''
     cx, cy, r = size/2, size/2, size/2 - 2
@@ -291,10 +291,16 @@ def _pie_svg(segments, size=110, extra_class=''):
         y2 = cy + r * math.sin(math.radians(end_angle))
         large_arc = 1 if sweep > 180 else 0
         d = f"M {cx} {cy} L {x1} {y1} A {r} {r} 0 {large_arc} 1 {x2} {y2} Z"
-        paths.append(f'<path d="{d}" fill="{seg["color"]}" stroke="var(--paper)" stroke-width="2"/>')
+        path_cls = 'rec-pie-path'
+        ff = ''
+        if filter_field:
+            path_cls += ' insights-filter-row'
+            ff = (f' data-filter-field="{_html.escape(filter_field)}"'
+                  f' data-filter-value="{_html.escape(str(seg["name"] or ""))}"')
+        paths.append(f'<path class="{path_cls}" d="{d}" fill="{seg["color"]}" stroke="var(--paper)" stroke-width="2"{ff}/>')
         angle = end_angle
-    cls = f'rec-pie-svg{" " + extra_class if extra_class else ""}'
-    return f'<svg viewBox="0 0 {size} {size}" xmlns="http://www.w3.org/2000/svg" class="{cls}">{"".join(paths)}</svg>'
+    svg_cls = f'rec-pie-svg{" " + extra_class if extra_class else ""}'
+    return f'<svg viewBox="0 0 {size} {size}" xmlns="http://www.w3.org/2000/svg" class="{svg_cls}">{"".join(paths)}</svg>'
 
 def _pie_legend_html(segments, filter_field=None):
     total = sum(s['value'] for s in segments)
@@ -348,7 +354,7 @@ def _pie_section(title, segments, filter_field=None):
         f'<div class="rec-breakdown-section">'
         f'<div class="rec-breakdown-title">{title}</div>'
         f'<div class="rec-pie-wrap">'
-        f'{_pie_svg(segments)}'
+        f'{_pie_svg(segments, filter_field=filter_field)}'
         f'<div class="rec-pie-legend">{_pie_legend_html(segments, filter_field)}</div>'
         f'</div>'
         f'</div>'
@@ -382,7 +388,7 @@ def _genre_year_section(genre_pie, year_pie):
             f'</span>'
             f'</div>'
             f'<div class="rec-pie-wrap">'
-            f'{_pie_svg(segments)}'
+            f'{_pie_svg(segments, filter_field=filter_field)}'
             f'<div class="rec-pie-legend">{_pie_legend_html(segments, filter_field)}</div>'
             f'</div>'
             f'</div>'
@@ -402,7 +408,7 @@ def _format_breakdown_section(format_pie, release_type_pie, edition_pie=None):
 
     def pie_block(segments, filter_field=None, reverse=False):
         if not segments: return ''
-        svg = _pie_svg(segments, size=80, extra_class='rec-pie-svg--sm')
+        svg = _pie_svg(segments, size=80, extra_class='rec-pie-svg--sm', filter_field=filter_field)
         legend = f'<div class="rec-pie-legend">{_pie_legend_html(segments, filter_field)}</div>'
         cls = 'rec-pie-wrap rec-pie-wrap--reverse' if reverse else 'rec-pie-wrap'
         return f'<div class="{cls}">{svg}{legend}</div>'

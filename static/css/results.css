@@ -879,6 +879,49 @@
     animation: insights-filter-flash 0.35s ease-out forwards;
 }
 
+/* Cross-hover: row or legend item highlighted via JS when its pie slice is hovered */
+.insights-filter-row.insights-filter-hover {
+    background: color-mix(in srgb, var(--rust) 8%, transparent);
+}
+
+/* Pie path interactivity */
+.rec-pie-path { transition: opacity 0.12s ease, filter 0.12s ease; }
+
+.rec-pie-path.insights-filter-row { cursor: pointer; }
+
+.rec-pie-path.insights-filter-row:hover,
+.rec-pie-path.insights-filter-row.insights-filter-hover {
+    stroke-width: 3;
+    filter: brightness(1.14);
+}
+
+.rec-pie-path.insights-filter-active {
+    stroke-width: 4;
+    filter: brightness(1.1);
+}
+
+/* Dim neighboring slices on hover or when a slice is selected */
+.rec-pie-svg:has(.rec-pie-path.insights-filter-row:hover) .rec-pie-path:not(:hover),
+.rec-pie-svg:has(.rec-pie-path.insights-filter-hover) .rec-pie-path:not(.insights-filter-hover),
+.rec-pie-svg:has(.rec-pie-path.insights-filter-active) .rec-pie-path:not(.insights-filter-active) {
+    opacity: 0.45;
+}
+
+/* Keep the hovered slice fully opaque even when another slice is selected */
+.rec-pie-path.insights-filter-row:hover,
+.rec-pie-path.insights-filter-row.insights-filter-hover {
+    opacity: 1;
+}
+
+@keyframes insights-pie-flash {
+    from { filter: brightness(1.5); }
+    to   { filter: brightness(1.1); }
+}
+
+.rec-pie-path.insights-filter-flash {
+    animation: insights-pie-flash 0.35s ease-out forwards;
+}
+
 @media (max-width: 768px) {
     .rec-stat-grid { grid-template-columns: 1fr 1fr; }
     .rec-breakdown,
