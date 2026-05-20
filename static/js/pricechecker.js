@@ -37,9 +37,17 @@
     window._pcUpdateBadgeCounts = updateBadgeCounts;
     window._pcGetActiveContainer = getActiveContainer;
 
+    function ordinal(n) {
+        if (11 <= (n % 100) && (n % 100) <= 13) return n + "th";
+        return n + ({1: "st", 2: "nd", 3: "rd"}[n % 10] || "th");
+    }
+
+    var seller = (window.PC_PENDING && window.PC_PENDING.seller) ||
+                 new URLSearchParams(window.location.search).get("seller") || "";
+
     // --- Watchlist (own store only) ---
+    var watchedIds = new Set();
     (function() {
-        var seller = new URLSearchParams(window.location.search).get("seller") || "";
         var user = window.TOOLKIT_CONFIG ? window.TOOLKIT_CONFIG.session_user : null;
         if (!user || !seller || user.toLowerCase() !== seller.toLowerCase()) return;
 
@@ -52,7 +60,6 @@
 
         function getWatchedIds() {
             var ids = [];
-            // Use querySelectorAll to find ALL cards (both sorted and unsorted) to ensure sync
             document.querySelectorAll(".result-card").forEach(function(card) {
                 if ((card.getAttribute("data-badges") || "").split(" ").indexOf("watch") !== -1) {
                     var id = card.id.replace("card-", "");
@@ -124,28 +131,121 @@
             scheduleSave();
         }
 
-        // Insert eye icons into all cards
-        document.querySelectorAll(".result-card").forEach(function(card) {
-            setCardWatched(card, false);
-        });
+        // Apply the watch eye-button / badge to a single card based on its
+        // current state plus the loaded watchlist set. Called per card as
+        // they stream in, and on clones built for the sorted view.
+        window._pcInitWatchForCard = function(card) {
+            var id = card.id.replace("card-", "");
+            if (watchedIds.has(id)) {
+                var b = (card.getAttribute("data-badges") || "").split(" ").filter(Boolean);
+                if (b.indexOf("watch") === -1) {
+                    b.push("watch");
+                    card.setAttribute("data-badges", b.join(" "));
+                }
+            }
+            var watched = (card.getAttribute("data-badges") || "").split(" ").indexOf("watch") !== -1;
+            setCardWatched(card, watched);
+        };
 
-        // Load watchlist from Firestore and apply watched state to both containers
+        // Load watchlist from Firestore, then apply to any cards already present.
         fetch("/watchlist?seller=" + encodeURIComponent(seller))
             .then(function(r) { return r.json(); })
             .then(function(data) {
-                (data.watchlist || []).forEach(function(id) {
-                    document.querySelectorAll('[id="card-' + id + '"]').forEach(function(card) {
-                        var badges = (card.getAttribute("data-badges") || "").split(" ").filter(Boolean);
-                        if (badges.indexOf("watch") === -1) {
-                            badges.push("watch");
-                            card.setAttribute("data-badges", badges.join(" "));
-                        }
-                        setCardWatched(card, true);
-                    });
+                (data.watchlist || []).forEach(function(id) { watchedIds.add(String(id)); });
+                document.querySelectorAll(".result-card").forEach(function(card) {
+                    window._pcInitWatchForCard(card);
                 });
                 updateBadgeCounts();
             });
     })();
+
+    // --- Sorted-by-place view (built client-side from streamed results) ---
+    var loaded = [];   // { index, place, el } — el is the unsorted card node
+    window._pcRegisterLoaded = function(item) { loaded.push(item); };
+
+    function buildSortedView() {
+        var sortedDiv = document.getElementById('pc-list-sorted');
+        if (!sortedDiv) return;
+
+        var groups = [];
+        for (var i = 0; i < 10; i++) groups.push([]);
+        loaded.forEach(function(item) {
+            if (!item.place || item.place <= 0) return;
+            var gi = item.place < 10 ? item.place - 1 : 9;
+            groups[gi].push(item);
+        });
+
+        var activeIdx = [];
+        groups.forEach(function(g, i) { if (g.length) activeIdx.push(i); });
+
+        sortedDiv.innerHTML = "";
+        var wrap = document.createElement("div");
+        wrap.className = "sorted-results";
+
+        var summary = document.createElement("div");
+        summary.className = "place-summary";
+        var title = document.createElement("div");
+        title.className = "place-summary-title";
+        title.textContent = "Place Summary";
+        summary.appendChild(title);
+        activeIdx.forEach(function(gi) {
+            var n = gi + 1;
+            var a = document.createElement("a");
+            a.href = "#place-" + n;
+            a.className = "place-summary-link";
+            a.textContent = ordinal(n);
+            summary.appendChild(a);
+            summary.appendChild(document.createTextNode(": " + groups[gi].length));
+            summary.appendChild(document.createElement("br"));
+        });
+        wrap.appendChild(summary);
+
+        var running = 0;
+        activeIdx.forEach(function(gi, ai) {
+            var n = gi + 1;
+            var count = groups[gi].length;
+            var hdr = document.createElement("div");
+            hdr.className = "sort-group-header";
+            hdr.id = "place-" + n;
+            var label = document.createElement("span");
+            label.textContent = ordinal(n) + " Place — " + count + " listing" + (count !== 1 ? "s" : "");
+            hdr.appendChild(label);
+            var nav = document.createElement("span");
+            nav.className = "place-nav-buttons";
+            if (ai > 0) {
+                var prev = document.createElement("a");
+                prev.href = "#place-" + (activeIdx[ai - 1] + 1);
+                prev.className = "place-nav-btn";
+                prev.innerHTML = "&#8592; Prev";
+                nav.appendChild(prev);
+            }
+            if (ai < activeIdx.length - 1) {
+                var next = document.createElement("a");
+                next.href = "#place-" + (activeIdx[ai + 1] + 1);
+                next.className = "place-nav-btn";
+                next.innerHTML = "Next &#8594;";
+                nav.appendChild(next);
+            }
+            hdr.appendChild(nav);
+            wrap.appendChild(hdr);
+
+            groups[gi].slice().sort(function(a, b) { return a.index - b.index; }).forEach(function(item) {
+                running++;
+                var clone = item.el.cloneNode(true);
+                clone.classList.remove("pc-card-enter");
+                clone.classList.remove("pc-card-in");
+                var numSpan = clone.querySelector(".card-number > span");
+                if (numSpan && numSpan.firstChild && numSpan.firstChild.nodeType === 3) {
+                    numSpan.firstChild.nodeValue = "#" + running;
+                }
+                wrap.appendChild(clone);
+                if (window._pcInitWatchForCard) window._pcInitWatchForCard(clone);
+            });
+        });
+
+        sortedDiv.appendChild(wrap);
+    }
+    window._pcBuildSortedView = buildSortedView;
 
     // --- Sort toggle ---
     (function() {
@@ -156,11 +256,40 @@
         sortToggle.addEventListener('change', function() {
             if (window._pcIsRepriceActive && window._pcIsRepriceActive()) { this.checked = !this.checked; return; }
             var showSorted = this.checked;
+            if (showSorted) buildSortedView();
             unsortedDiv.style.display = showSorted ? 'none' : '';
             sortedDiv.style.display = showSorted ? '' : 'none';
             updateBadgeCounts();
         });
     })();
+
+    // --- Smooth-scroll handlers for place nav + mosaic (delegated, so they
+    //     work for the dynamically built sorted view) ---
+    document.addEventListener("click", function(e) {
+        var link = e.target.closest(".place-nav-btn, .place-summary-link");
+        if (link) {
+            e.preventDefault();
+            var el = document.getElementById(link.getAttribute("href").slice(1));
+            if (!el) return;
+            el.style.position = "static";
+            var top = el.getBoundingClientRect().top + window.scrollY;
+            el.style.position = "";
+            window.scrollTo({ top: top, behavior: "smooth" });
+            return;
+        }
+        var item = e.target.closest("a.mosaic-item");
+        if (!item) return;
+        e.preventDefault();
+        var target = document.getElementById(item.getAttribute("href").slice(1));
+        if (!target) return;
+        var top2 = target.getBoundingClientRect().top + window.scrollY;
+        var hdr = document.querySelector(".sort-group-header");
+        var hdrOffset = hdr ? hdr.getBoundingClientRect().height : 0;
+        var mosaicEl = document.getElementById("results-mosaic");
+        var mosaicOffset = (mosaicEl && getComputedStyle(mosaicEl).display !== "none")
+            ? mosaicEl.getBoundingClientRect().height + 26 : 10;
+        window.scrollTo({ top: top2 - hdrOffset - mosaicOffset, behavior: "smooth" });
+    });
 })();
 
 (function() {
@@ -219,6 +348,8 @@
             hdr.style.display = vis ? "" : "none";
         });
     }
+    // Re-apply active filters to cards that stream in after a filter is set.
+    window._pcReapplyFilters = function() { if (active.size) filter(); };
 })();
 
 (function() {
@@ -359,4 +490,187 @@
         }).observe(invCount);
     }
     slideInMosaic();
+})();
+
+// --- Progressive loader: stream cards in as each scrape batch returns ---
+(function() {
+    var cfg = window.PC_PENDING;
+    if (!cfg || !cfg.seller) return;
+    var dataEl = document.getElementById("pc-pending-data");
+    var releases = [];
+    try { releases = JSON.parse(dataEl.textContent || "[]"); } catch (e) {}
+    if (!releases.length) return;
+
+    var unsorted = document.getElementById("pc-list-unsorted");
+    var sortedDiv = document.getElementById("pc-list-sorted");
+    var mosaic = document.getElementById("results-mosaic");
+    var spinner = document.getElementById("spinner");
+    var statusEl = document.getElementById("pc-load-status");
+    var timeWrap = document.getElementById("pc-load-time");
+    var timeVal = document.getElementById("pc-load-time-val");
+
+    var seller = cfg.seller;
+    var total = releases.length;
+    var startT = Date.now();
+    var cfBlocked = false;
+
+    // One batch in flight at a time: combined with the server's 5 scrape workers
+    // this reproduces the original single-session, ~5-concurrent request pattern,
+    // which Cloudflare tolerates far better than many parallel cold scrapers.
+    var BATCH = 8, MAX_INFLIGHT = 1, BATCH_TIMEOUT_MS = 60000;
+    var batches = [];
+    for (var i = 0; i < releases.length; i += BATCH) batches.push(releases.slice(i, i + BATCH));
+    var bi = 0, inflight = 0, batchesDone = 0;
+
+    // Releases that fail (Cloudflare block, timeout, network) are collected and
+    // retried in additional passes so a transient block doesn't leave permanent
+    // gaps in the inventory.
+    var releaseByIndex = {};
+    releases.forEach(function(r) { releaseByIndex[r.index] = r; });
+    var failed = [];
+    var addedCount = 0;
+    var retryPass = 0, MAX_RETRY_PASSES = 3, RETRY_DELAY_MS = 1500;
+
+    if (spinner) spinner.style.display = "block";
+
+    function insertOrdered(container, el, idx) {
+        var kids = container.children;
+        for (var j = 0; j < kids.length; j++) {
+            var ci = parseInt(kids[j].getAttribute("data-index") || "-1", 10);
+            if (ci > idx) { container.insertBefore(el, kids[j]); return; }
+        }
+        container.appendChild(el);
+    }
+
+    function addResult(res) {
+        if (res.error) return;
+        var tmp = document.createElement("div");
+        tmp.innerHTML = (res.card_html || "").trim();
+        var card = tmp.firstElementChild;
+        if (!card) return;
+        // Guard against a release arriving twice across retry passes.
+        if (document.getElementById(card.id)) return;
+        addedCount++;
+        card.setAttribute("data-index", res.index);
+        card.classList.add("pc-card-enter");
+        insertOrdered(unsorted, card, res.index);
+        requestAnimationFrame(function() {
+            requestAnimationFrame(function() { card.classList.add("pc-card-in"); });
+        });
+
+        if (res.thumb && mosaic) {
+            var a = document.createElement("a");
+            a.href = "#" + card.id;
+            a.className = "mosaic-item";
+            a.setAttribute("data-index", res.index);
+            var img = document.createElement("img");
+            img.className = "mosaic-thumb";
+            img.alt = "";
+            img.setAttribute("loading", "lazy");
+            // Play the fade-in animation once the image is actually ready.
+            var reveal = function() { img.classList.add("is-loaded"); };
+            img.addEventListener("load", reveal);
+            img.addEventListener("error", reveal);
+            img.src = res.thumb;
+            a.appendChild(img);
+            if (img.complete && img.naturalWidth > 0) reveal();
+            insertOrdered(mosaic, a, res.index);
+        }
+
+        if (window._pcInitWatchForCard) window._pcInitWatchForCard(card);
+        if (window._pcRegisterLoaded) window._pcRegisterLoaded({ index: res.index, place: res.place, el: card });
+    }
+
+    function updateProgress() {
+        if (!statusEl) return;
+        var label = "Loading " + Math.min(addedCount, total) + " of " + total + "…";
+        if (retryPass > 0 && failed.length) label = "Retrying " + failed.length + " of " + total + "…";
+        statusEl.textContent = label;
+    }
+
+    function finish() {
+        if (spinner) spinner.style.display = "none";
+        // The badge-count row only becomes meaningful once every release has
+        // been scraped, so it stays hidden until loading completes.
+        var badgeRow = document.querySelector(".badge-count");
+        if (badgeRow) badgeRow.style.display = "";
+        if (window._pcBuildSortedView && sortedDiv) window._pcBuildSortedView();
+        if (window._pcUpdateBadgeCounts) window._pcUpdateBadgeCounts();
+        if (window._pcReapplyFilters) window._pcReapplyFilters();
+
+        var missing = total - addedCount;
+        if (missing > 0 && statusEl) {
+            statusEl.textContent = missing + " of " + total + " could not be loaded (Cloudflare). Re-run the search to retry.";
+        } else if (statusEl) {
+            statusEl.style.display = "none";
+            if (timeWrap) {
+                if (timeVal) timeVal.textContent = ((Date.now() - startT) / 1000).toFixed(2);
+                timeWrap.style.display = "";
+            }
+        }
+    }
+
+    function markFailed(release) { if (release) failed.push(release); }
+
+    function handleBatch(d) {
+        if (d && d.cf_blocked) cfBlocked = true;
+        ((d && d.results) || []).forEach(function(res) {
+            if (res.error) markFailed(releaseByIndex[res.index]);
+            else addResult(res);
+        });
+        updateProgress();
+        if (window._pcUpdateBadgeCounts) window._pcUpdateBadgeCounts();
+        if (window._pcReapplyFilters) window._pcReapplyFilters();
+        if (sortedDiv && sortedDiv.style.display !== "none" && window._pcBuildSortedView) {
+            window._pcBuildSortedView();
+        }
+    }
+
+    function runBatch(batch) {
+        // AbortController guarantees the request settles even if the server
+        // hangs on a stalled scrape, so the loader can never freeze.
+        var ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
+        var timer = setTimeout(function() { if (ctrl) try { ctrl.abort(); } catch (e) {} }, BATCH_TIMEOUT_MS);
+        fetch("/scrape_batch", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({seller: seller, releases: batch}),
+            signal: ctrl ? ctrl.signal : undefined
+        })
+        .then(function(r) { return r.json(); })
+        .then(function(d) { clearTimeout(timer); handleBatch(d); })
+        .catch(function() { clearTimeout(timer); batch.forEach(markFailed); updateProgress(); })
+        .then(function() {
+            inflight--;
+            batchesDone++;
+            if (bi < batches.length) pump();
+            else if (batchesDone === batches.length) maybeRetryOrFinish();
+        });
+    }
+
+    function maybeRetryOrFinish() {
+        if (failed.length && retryPass < MAX_RETRY_PASSES) {
+            retryPass++;
+            var retryReleases = failed;
+            failed = [];
+            for (var i = 0; i < retryReleases.length; i += BATCH) {
+                batches.push(retryReleases.slice(i, i + BATCH));
+            }
+            updateProgress();
+            // Brief pause so Cloudflare clearance settles before retrying.
+            setTimeout(pump, RETRY_DELAY_MS);
+        } else {
+            finish();
+        }
+    }
+
+    function pump() {
+        while (inflight < MAX_INFLIGHT && bi < batches.length) {
+            inflight++;
+            runBatch(batches[bi++]);
+        }
+    }
+
+    updateProgress();
+    pump();
 })();

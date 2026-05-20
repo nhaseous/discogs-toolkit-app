@@ -57,7 +57,7 @@ def get_inventory_ids(username, scraper, auth=None):
     page = 1
 
     while True:
-        resp = scraper.get(API_URL, headers=_HEADERS, params={"page": page, "per_page": 100, "sort": "price", "sort_order": "asc", "status": "For Sale"}, auth=auth)
+        resp = scraper.get(API_URL, headers=_HEADERS, params={"page": page, "per_page": 100, "sort": "price", "sort_order": "asc", "status": "For Sale"}, auth=auth, timeout=20)
 
         if resp.status_code in (401, 403):
             print("get_inventory_ids: API access blocked (HTTP {0})".format(resp.status_code))
@@ -104,7 +104,7 @@ def get_listings(scraper, inventory_list, sorted_inventory_list, username, relea
     listings = []
 
     URL = "https://www.discogs.com/sell/release/{0}?ships_from=United+States&sort=price%2Casc".format(item_id)
-    _resp = scraper.get(URL)
+    _resp = scraper.get(URL, timeout=20)
     if _is_cf_blocked(_resp):
         raise CloudflareBlockedError()
     html = _resp.content

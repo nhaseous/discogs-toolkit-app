@@ -83,6 +83,32 @@
     display: block;
 }
 
+/* Smooth fade-in for Price Checker mosaic thumbnails as each lazy image
+   finishes loading (on initial paint and as they scroll into view). A keyframe
+   animation is used rather than a transition so it always plays when the image
+   becomes ready, independent of how close that is to the element's insertion. */
+#results-mosaic .mosaic-thumb {
+    opacity: 0;
+}
+#results-mosaic .mosaic-thumb.is-loaded {
+    opacity: 1;
+    animation: mosaicThumbIn 0.5s ease;
+}
+@keyframes mosaicThumbIn {
+    from { opacity: 0; transform: scale(1.04); }
+    to   { opacity: 1; transform: scale(1); }
+}
+@keyframes mosaicThumbFade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+    /* Keep the opacity fade (acceptable under reduced motion); drop the scale. */
+    #results-mosaic .mosaic-thumb.is-loaded {
+        animation-name: mosaicThumbFade;
+    }
+}
+
 /* =========================================================
    Result cards
    ========================================================= */
@@ -113,6 +139,30 @@
 }
 
 .sorted-results .result-card { scroll-margin-top: 56px; }
+
+/* Entry animation for cards streamed in by the progressive loader.
+   Only affects how a card appears (fades/rises into place); the resting
+   state is identical to a normally-rendered card. */
+.result-card.pc-card-enter {
+    opacity: 0;
+    transform: translateY(8px);
+}
+.result-card.pc-card-enter.pc-card-in {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+    /* Keep the gentle opacity fade, but drop the vertical movement. */
+    .result-card.pc-card-enter {
+        transform: none;
+    }
+    .result-card.pc-card-enter.pc-card-in {
+        opacity: 1;
+        transform: none;
+        transition: opacity 0.3s ease;
+    }
+}
 
 .card-inner {
     display: flex;

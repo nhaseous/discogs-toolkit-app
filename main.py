@@ -5,7 +5,7 @@ warnings.filterwarnings("ignore", message="urllib3 v2 only supports OpenSSL")
 from dotenv import load_dotenv
 load_dotenv()
 
-from flask import Flask, request, render_template, session, redirect, send_from_directory, jsonify
+from flask import Flask, request, render_template, render_template_string, session, redirect, send_from_directory, jsonify
 from helper import pricechecker, matcher, lookup as lookup_helper, records as records_helper, firestore_db as _firestore_db, insights as insights_helper, api as api_helper
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import cloudscraper, time, html as _html, os, requests as _requests, json as _json
@@ -110,6 +110,24 @@ def _is_price_checker_enabled():
         return False
     return is_frozen or is_local
 
+# A single long-lived cloudscraper shared across all Price Checker scrape
+# requests. Cloudflare clearance (the cf_clearance cookie) is solved once and
+# reused for every release, instead of re-solving on each batch — repeatedly
+# negotiating Cloudflare from one IP is what triggers blocks. This restores the
+# original behaviour where one scraper served the whole inventory scrape.
+import threading
+_pc_scraper = None
+_pc_scraper_lock = threading.Lock()
+
+def _get_pc_scraper():
+    global _pc_scraper
+    if _pc_scraper is None:
+        with _pc_scraper_lock:
+            if _pc_scraper is None:
+                _pc_scraper = cloudscraper.create_scraper(
+                    browser={'browser': 'chrome', 'platform': 'android', 'desktop': False})
+    return _pc_scraper
+
 @app.context_processor
 def _inject_globals():
     def _total_int(e):
@@ -213,55 +231,117 @@ def pricecheckerpage():
         return "Price Checker doesn't work when running on the cloud/web because webscraping gets blocked by Cloudflare. Contact curefortheitch if interested in a local solution."
 
     seller = request.args.get("seller", "")
-    loadtime, searched_at = "", ""
+    searched_at = ""
     show_platter = False
     inventory_count = 0
-    inventory_list = []
-    sorted_inventory_list = [[] for _ in range(10)]
+    pending_releases = []
     sort_active = request.args.get("sort", "") == "yes"
     error_output = ""
 
     if seller != "":
-        start_time = time.time()
+        # Only the inventory index is fetched server-side here (fast, a handful of
+        # API calls). The marketplace scraping for each release is driven from the
+        # browser via /scrape_batch so cards can stream in progressively.
         try:
-            scraper = cloudscraper.create_scraper(browser={'browser':'chrome','platform':'android','desktop':False})
-            release_titles_ids = pricechecker.get_inventory_ids(seller, scraper, auth=_oauth_auth())
+            scraper = _get_pc_scraper()
+            release_titles_ids = None
+            for attempt in range(2):
+                try:
+                    release_titles_ids = pricechecker.get_inventory_ids(seller, scraper, auth=_oauth_auth())
+                    break
+                except _requests.exceptions.RequestException:
+                    if attempt == 1:
+                        raise
+                    time.sleep(1)
             inventory_count = len(release_titles_ids)
-            inventory_list = [None] * inventory_count
-
-            with ThreadPoolExecutor(max_workers=5) as executor:
-                futures = [
-                    executor.submit(pricechecker.get_listings, scraper, inventory_list,
-                                    sorted_inventory_list, seller, release[0], release[1], release[2], release[3], i)
-                    for i, release in enumerate(release_titles_ids)
-                ]
-                for f in as_completed(futures):
-                    f.result()
-
+            pending_releases = [
+                {"index": i, "title": r[0], "release_id": r[1], "thumbnail": r[2], "listing_ids": r[3]}
+                for i, r in enumerate(release_titles_ids)
+            ]
             show_platter = True
-
-        except pricechecker.CloudflareBlockedError:
-            error_output = assets.CLOUDFLARE_NOTICE
+        except _requests.exceptions.RequestException:
+            error_output = "Could not reach Discogs (network error). Please try again."
         except AttributeError:
             error_output = "No user found."
 
-        end_time = time.time()
-        loadtime = round(end_time - start_time, 2)
         searched_at = datetime.now().astimezone().strftime("%-I:%M %p %Z · %-d %b %y")
 
     return render_template('pricechecker.html',
         seller=seller,
         inventory_count=inventory_count,
-        inventory_list=inventory_list,
-        sorted_inventory_list=sorted_inventory_list,
+        pending_releases=pending_releases,
         sort_active=sort_active,
-        loadtime=loadtime,
         searched_at=searched_at,
         error_output=error_output,
         content_class='has-results' if seller else '',
         show_platter=show_platter,
         title='Price Checker'
     )
+
+# Server-rendered Price Checker card, used by /scrape_batch so progressively
+# streamed cards are byte-identical to the original synchronous render.
+_PC_CARD_TEMPLATE = '{% from "macros.html" import pricechecker_card with context %}{{ pricechecker_card(entry, count) }}'
+
+@app.route("/scrape_batch", methods=["POST"])
+def scrape_batch():
+    if not _is_price_checker_enabled():
+        return jsonify({"error": "disabled"}), 403
+    data = request.get_json() or {}
+    seller = data.get("seller", "")
+    releases = data.get("releases", [])
+    if not seller or not releases:
+        return jsonify({"error": "missing params"}), 400
+
+    scraper = _get_pc_scraper()
+
+    # Scrape concurrently in worker threads, but render the card markup back on
+    # the main thread — Flask's template context is thread-local and is not
+    # available inside the executor workers.
+    def scrape_one(r):
+        idx = r.get("index", 0)
+        release_id = str(r.get("release_id", ""))
+        inventory_list = [None]
+        sorted_inventory_list = [[] for _ in range(10)]
+        try:
+            pricechecker.get_listings(scraper, inventory_list, sorted_inventory_list, seller,
+                                      r.get("title", ""), release_id, r.get("thumbnail", ""),
+                                      r.get("listing_ids", []), 0)
+        except pricechecker.CloudflareBlockedError:
+            return {"index": idx, "release_id": release_id, "error": "cf_blocked"}
+        except Exception:
+            # Network error, timeout, parse failure — fail just this card so the
+            # rest of the batch (and the page) keep loading.
+            return {"index": idx, "release_id": release_id, "error": "scrape_failed"}
+        entry = inventory_list[0]
+        if entry is None:
+            return {"index": idx, "release_id": release_id, "error": "scrape_failed"}
+        return {"index": idx, "release_id": release_id, "entry": entry}
+
+    scraped, cf_blocked = [], False
+    with ThreadPoolExecutor(max_workers=5) as executor:
+        for f in as_completed([executor.submit(scrape_one, r) for r in releases]):
+            scraped.append(f.result())
+
+    results = []
+    for s in scraped:
+        if s.get("error") == "cf_blocked":
+            cf_blocked = True
+            results.append({"index": s["index"], "release_id": s["release_id"], "error": "cf_blocked"})
+            continue
+        if s.get("error"):
+            results.append({"index": s["index"], "release_id": s["release_id"], "error": s["error"]})
+            continue
+        entry = s["entry"]
+        results.append({
+            "index": s["index"],
+            "release_id": s["release_id"],
+            "place": entry.place,
+            "badges": pricechecker._entry_badges(entry),
+            "card_html": render_template_string(_PC_CARD_TEMPLATE, entry=entry, count=s["index"] + 1),
+            "thumb": entry.imgUrl or "",
+        })
+
+    return jsonify({"results": results, "cf_blocked": cf_blocked})
 
 @app.route("/reprice", methods=["POST"])
 def repricepage():

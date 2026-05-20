@@ -6,8 +6,8 @@
 
 {% block extra_js %}
 <script>window.TOOLKIT_CONFIG = { session_user: {{ session_user | tojson }} };</script>
-<script src="/static/js/pricechecker.js"></script>
-<script src="/static/js/reprice.js"></script>
+<script src="/static/v{{ static_v }}/js/pricechecker.js"></script>
+<script src="/static/v{{ static_v }}/js/reprice.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -42,8 +42,8 @@
 {% if seller %}
     <div class="meta">
         <span><b>Seller: {{ seller }}</b> &nbsp;&middot;&nbsp; {{ inventory_count }} release{{ 's' if inventory_count != 1 else '' }}</span>
-        {% if loadtime %}
-            <span>Search time: {{ loadtime }} seconds &nbsp;&#124;&nbsp; {{ searched_at }}</span>
+        {% if inventory_count %}
+            <span><span id="pc-load-status">Loading 0 of {{ inventory_count }}&hellip;</span><span id="pc-load-time" style="display:none">Search time: <span id="pc-load-time-val"></span> seconds &nbsp;&#124;&nbsp; {{ searched_at }}</span></span>
         {% endif %}
     </div>
 

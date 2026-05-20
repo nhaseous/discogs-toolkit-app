@@ -28,7 +28,7 @@
     </div>
     {% if entry.imgUrl %}
     <a href="{{ entry.url }}" class="card-thumb-link">
-        <img class="card-thumb" src="{{ entry.imgUrl }}" alt="">
+        <img class="card-thumb" src="{{ entry.imgUrl }}" alt="" loading="lazy" decoding="async">
     </a>
     {% else %}
     <a href="{{ entry.url }}" class="card-thumb-link card-thumb-link--placeholder" aria-label="No cover image">
