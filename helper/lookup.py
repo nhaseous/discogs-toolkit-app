@@ -81,6 +81,7 @@ def get_collection(username, scraper, auth=None):
             "styles": info.get("styles") or [],
             "year": info.get("year", 0),
             "labels": labels,
+            "date_added": r.get("date_added", ""),
         })
 
     partial_warning = ""
