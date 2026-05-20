@@ -1,0 +1,107 @@
+/* =========================================================
+   mosaic.css — thumbnail mosaics (Price Checker sticky/results,
+   Matcher, Lookup collection/wantlist/list)
+   Loaded on: /pricechecker, /matcher, /lookup
+   ========================================================= */
+
+.sticky-mosaic-active #results-mosaic { display: none; }
+
+#sticky-mosaic {
+    position: fixed;
+    top: 0;
+    width: 220px;
+    max-height: 100vh;
+    overflow-y: auto;
+    display: flex;
+    flex-wrap: wrap;
+    align-content: flex-start;
+
+    .mosaic-item { width: calc(100% / 12); }
+
+    .badge-count {
+        flex-direction: column-reverse;
+        align-items: flex-start;
+        gap: 6px;
+        margin: 8px 0 0;
+        padding-top: 8px;
+        border-top: 1px solid var(--rule);
+        font-size: 12px;
+
+        > span:first-child {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 4px;
+            line-height: 1.8;
+        }
+    }
+}
+
+.lookup-mosaic-wrap {
+    position: relative;
+    overflow: hidden;
+}
+
+.lookup-mosaic--inactive {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    visibility: hidden;
+    pointer-events: none;
+}
+
+.mosaic {
+    display: flex;
+    flex-wrap: wrap;
+    width: 100%;
+    margin-bottom: 5px;
+    overflow: hidden;
+    contain: layout style;
+}
+
+.mosaic-item {
+    width: calc(100% / 50);
+    aspect-ratio: 1 / 1;
+    display: block;
+    flex-shrink: 0;
+
+    &:hover {
+        transform: scale(1.15);
+        z-index: 2;
+        filter: brightness(1.05) saturate(1.1);
+        position: relative;
+    }
+}
+
+.mosaic-thumb {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+/* Smooth fade-in for Price Checker mosaic thumbnails as each lazy image
+   finishes loading (on initial paint and as they scroll into view). A keyframe
+   animation is used rather than a transition so it always plays when the image
+   becomes ready, independent of how close that is to the element's insertion. */
+#results-mosaic .mosaic-thumb {
+    opacity: 0;
+}
+#results-mosaic .mosaic-thumb.is-loaded {
+    opacity: 1;
+    animation: mosaicThumbIn 0.5s ease;
+}
+@keyframes mosaicThumbIn {
+    from { opacity: 0; transform: scale(1.04); }
+    to   { opacity: 1; transform: scale(1); }
+}
+@keyframes mosaicThumbFade {
+    from { opacity: 0; }
+    to   { opacity: 1; }
+}
+@media (prefers-reduced-motion: reduce) {
+    /* Keep the opacity fade (acceptable under reduced motion); drop the scale. */
+    #results-mosaic .mosaic-thumb.is-loaded {
+        animation-name: mosaicThumbFade;
+    }
+}

@@ -21,6 +21,10 @@
     {% if request.path in ['/pricechecker', '/matcher', '/lookup', '/records'] %}
     <link rel="stylesheet" href="/static/v{{ static_v }}/css/results.css">
     {% endif %}
+    {% if request.path in ['/pricechecker', '/matcher', '/lookup'] %}
+    <link rel="stylesheet" href="/static/v{{ static_v }}/css/mosaic.css">
+    <link rel="stylesheet" href="/static/v{{ static_v }}/css/cards.css">
+    {% endif %}
     {% block extra_css %}{% endblock %}
 </head>
 <body>

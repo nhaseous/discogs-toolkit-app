@@ -1,0 +1,249 @@
+/* =========================================================
+   insights.css — Collection/Wantlist Insights Dashboard
+   Layout, charts, and slice/row interactivity unique to the
+   Lookup insights dashboards. Builds on the shared .rec-* base
+   in results.css (Lookup loads both).
+   Loaded on: /lookup
+   ========================================================= */
+
+#collection-insights-dash,
+#wantlist-insights-dash {
+    margin-top: 20px;
+    margin-bottom: 20px;
+    display: flex;
+    flex-direction: column;
+    gap: 20px;
+}
+
+#collection-insights-dash .rec-stat-grid {
+    margin-bottom: 0; /* Let the container gap handle it */
+}
+
+#collection-insights-dash .rec-breakdown,
+#wantlist-insights-dash .rec-breakdown {
+    grid-template-columns: repeat(3, 1fr);
+    margin-bottom: 0;
+}
+
+.insights-toggle-title,
+.rec-breakdown-title--row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 8px;
+}
+
+.rec-breakdown-title-text { min-width: 0; }
+
+.insights-toggle-switch {
+    color: var(--ink-muted);
+    font-size: 11px;
+    font-weight: 500;
+    cursor: pointer;
+    letter-spacing: 0.03em;
+
+    &:hover { color: var(--ink); }
+}
+
+.breakdown-expand {
+    color: var(--ink-muted);
+    font-size: 16px;
+    line-height: 1;
+    font-weight: 400;
+    cursor: pointer;
+    user-select: none;
+    padding: 0 4px;
+    flex-shrink: 0;
+    transition: color 0.12s ease;
+
+    &:hover { color: var(--ink); }
+}
+
+.rec-breakdown-row-extra { display: none; }
+
+.breakdown-expandable.is-expanded .rec-breakdown-row-extra { display: table-row; }
+
+.rec-breakdown-scroll { overflow: hidden; }
+
+.breakdown-expandable.is-expanded .rec-breakdown-scroll {
+    overflow-y: auto;
+    scrollbar-gutter: stable;
+}
+
+.insights-pies-row {
+    display: flex;
+    gap: 20px;
+    align-items: stretch;
+}
+
+.insights-pies-row > .rec-breakdown-section {
+    flex: 1;
+    min-width: 0;
+    display: flex;
+    flex-direction: column;
+}
+
+.insights-format-sub {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-muted);
+    margin-bottom: 8px;
+}
+
+.insights-format-sub--lower { margin-top: 14px; }
+
+.insights-bar-chart {
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    width: 100%;
+}
+
+.insights-bar-row {
+    display: grid;
+    grid-template-columns: minmax(0, 1.1fr) minmax(60px, 1.6fr) auto;
+    align-items: center;
+    column-gap: 10px;
+    font-size: 13px;
+}
+
+.insights-bar-label {
+    color: var(--ink);
+    white-space: nowrap;
+    min-width: 0;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    &::after { content: ''; flex: 1; height: 1px; background: var(--rule); }
+}
+
+.insights-bar-track {
+    height: 7px;
+    background: color-mix(in srgb, var(--ink) 7%, transparent);
+    border-radius: 4px;
+    overflow: hidden;
+}
+
+.insights-bar-fill {
+    height: 100%;
+    border-radius: 4px;
+    min-width: 2px;
+}
+
+.insights-bar-count {
+    color: var(--ink-muted);
+    font-variant-numeric: tabular-nums;
+    font-size: 12px;
+    white-space: nowrap;
+}
+
+.insights-pies-row > .insights-three-toggle {
+    display: grid;
+}
+.insights-three-toggle > .insights-panel {
+    grid-row: 1;
+    grid-column: 1;
+    min-width: 0;
+}
+
+.insights-format-panels-wrap {
+    display: grid;
+}
+.insights-format-panels-wrap > .insights-panel {
+    grid-row: 1;
+    grid-column: 1;
+    min-width: 0;
+}
+
+.insights-line-graph-svg {
+    width: 100%;
+    display: block;
+}
+
+.insights-line-graph-wrap {
+    margin-bottom: 10px;
+}
+
+.insights-added-scroll {
+    overflow: hidden;
+    scrollbar-gutter: stable;
+}
+
+.insights-filter-row {
+    cursor: pointer;
+    border-radius: 3px;
+    transition: background 0.12s ease;
+    &:hover { background: color-mix(in srgb, var(--rust) 8%, transparent); }
+}
+
+.insights-filter-row.insights-filter-active {
+    background: color-mix(in srgb, var(--rust) 14%, transparent);
+    .rec-sf-name, .rec-pie-name, .insights-bar-label { font-weight: 600; color: var(--rust); }
+    .rec-pie-name::after,
+    .insights-bar-label::after { background: color-mix(in srgb, var(--rust) 30%, var(--rule)); }
+}
+
+.insights-filters-disabled .insights-filter-row {
+    cursor: default;
+    pointer-events: none;
+}
+
+@keyframes insights-filter-flash {
+    from { background: color-mix(in srgb, var(--rust) 38%, transparent); }
+    to   { background: color-mix(in srgb, var(--rust) 14%, transparent); }
+}
+
+.insights-filter-row.insights-filter-flash {
+    animation: insights-filter-flash 0.35s ease-out forwards;
+}
+
+/* Cross-hover: row or legend item highlighted via JS when its pie slice is hovered */
+.insights-filter-row.insights-filter-hover {
+    background: color-mix(in srgb, var(--rust) 8%, transparent);
+}
+
+/* Pie path interactivity */
+.rec-pie-path { transition: opacity 0.12s ease, filter 0.12s ease; }
+
+.rec-pie-path.insights-filter-row { cursor: pointer; }
+
+.rec-pie-path.insights-filter-row:hover,
+.rec-pie-path.insights-filter-row.insights-filter-hover {
+    stroke-width: 3;
+    filter: brightness(1.14);
+}
+
+.rec-pie-path.insights-filter-active {
+    stroke-width: 4;
+    filter: brightness(1.1);
+}
+
+/* Dim neighboring slices on hover or when a slice is selected */
+.rec-pie-svg:has(.rec-pie-path.insights-filter-row:hover) .rec-pie-path:not(:hover),
+.rec-pie-svg:has(.rec-pie-path.insights-filter-hover) .rec-pie-path:not(.insights-filter-hover),
+.rec-pie-svg:has(.rec-pie-path.insights-filter-active) .rec-pie-path:not(.insights-filter-active) {
+    opacity: 0.45;
+}
+
+/* Keep the hovered slice fully opaque even when another slice is selected */
+.rec-pie-path.insights-filter-row:hover,
+.rec-pie-path.insights-filter-row.insights-filter-hover {
+    opacity: 1;
+}
+
+@keyframes insights-pie-flash {
+    from { filter: brightness(1.5); }
+    to   { filter: brightness(1.1); }
+}
+
+.rec-pie-path.insights-filter-flash {
+    animation: insights-pie-flash 0.35s ease-out forwards;
+}
+
+@media (max-width: 768px) {
+    #collection-insights-dash .rec-breakdown,
+    #wantlist-insights-dash .rec-breakdown { grid-template-columns: 1fr; }
+    .insights-pies-row { flex-direction: column; align-items: stretch; }
+}

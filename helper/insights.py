@@ -1,11 +1,8 @@
 import collections
 import html as _html
-import math
 
-_PIE_COLORS = [
-    '#e11d48', '#d97706', '#059669', '#2563eb', '#7c3aed',
-    '#db2777', '#4b5563', '#ea580c', '#65a30d', '#0891b2'
-]
+from helper import charts
+from helper.charts import PIE_COLORS as _PIE_COLORS
 
 def get_collection_insights(items, total_value=None):
     """
@@ -326,214 +323,6 @@ def render_insights_dashboard(insights, kind='collection'):
         script
     )
 
-def _pie_svg(segments, size=110, extra_class='', filter_field=None):
-    total = sum(s['value'] for s in segments)
-    if total == 0: return ''
-    cx, cy, r = size/2, size/2, size/2 - 2
-    paths = []
-    angle = -90
-    for seg in segments:
-        if seg['value'] == 0: continue
-        sweep = (seg['value'] / total) * 360
-        if sweep >= 360: sweep = 359.99
-        end_angle = angle + sweep
-        x1 = cx + r * math.cos(math.radians(angle))
-        y1 = cy + r * math.sin(math.radians(angle))
-        x2 = cx + r * math.cos(math.radians(end_angle))
-        y2 = cy + r * math.sin(math.radians(end_angle))
-        large_arc = 1 if sweep > 180 else 0
-        d = f"M {cx} {cy} L {x1} {y1} A {r} {r} 0 {large_arc} 1 {x2} {y2} Z"
-        path_cls = 'rec-pie-path'
-        ff = ''
-        if filter_field:
-            path_cls += ' insights-filter-row'
-            ff = (f' data-filter-field="{_html.escape(filter_field)}"'
-                  f' data-filter-value="{_html.escape(str(seg["name"] or ""))}"')
-        paths.append(f'<path class="{path_cls}" d="{d}" fill="{seg["color"]}" stroke="var(--paper)" stroke-width="2"{ff}/>')
-        angle = end_angle
-    svg_cls = f'rec-pie-svg{" " + extra_class if extra_class else ""}'
-    return f'<svg viewBox="0 0 {size} {size}" xmlns="http://www.w3.org/2000/svg" class="{svg_cls}">{"".join(paths)}</svg>'
-
-def _pie_legend_html(segments, filter_field=None):
-    total = sum(s['value'] for s in segments)
-    if total == 0: return ''
-    items = []
-    for seg in segments:
-        if seg['value'] <= 0: continue
-        cls = 'rec-pie-legend-item'
-        ff = ''
-        if filter_field:
-            cls += ' insights-filter-row'
-            ff = (f' data-filter-field="{_html.escape(filter_field)}"'
-                  f' data-filter-value="{_html.escape(str(seg["name"] or ""))}"')
-        items.append(
-            f'<div class="{cls}"{ff}>'
-            f'<span class="rec-pie-dot" style="background:{seg["color"]}"></span>'
-            f'<span class="rec-pie-name">{_html.escape(seg["name"] or "—")}</span>'
-            f'<span class="rec-pie-pct">{seg["value"] / total * 100:.0f}%</span>'
-            f'</div>'
-        )
-    return ''.join(items)
-
-def _bar_chart_html(segments, filter_field=None):
-    if not segments: return ''
-    max_val = max((s['value'] for s in segments if s['value'] > 0), default=0)
-    if max_val == 0: return ''
-    rows = []
-    for seg in segments:
-        if seg['value'] <= 0: continue
-        pct_of_max = seg['value'] / max_val * 100
-        cls = 'insights-bar-row'
-        ff = ''
-        if filter_field:
-            cls += ' insights-filter-row'
-            ff = (f' data-filter-field="{_html.escape(filter_field)}"'
-                  f' data-filter-value="{_html.escape(str(seg["name"] or ""))}"')
-        rows.append(
-            f'<div class="{cls}"{ff}>'
-            f'<div class="insights-bar-label">{_html.escape(seg["name"] or "—")}</div>'
-            f'<div class="insights-bar-track">'
-            f'<div class="insights-bar-fill" style="width:{pct_of_max:.1f}%;background:{seg["color"]}"></div>'
-            f'</div>'
-            f'<div class="insights-bar-count">{seg["value"]} items</div>'
-            f'</div>'
-        )
-    return f'<div class="insights-bar-chart">{"".join(rows)}</div>'
-
-def _pie_section(title, segments, filter_field=None):
-    if not segments or sum(s['value'] for s in segments) == 0: return ''
-    return (
-        f'<div class="rec-breakdown-section">'
-        f'<div class="rec-breakdown-title">{title}</div>'
-        f'<div class="rec-pie-wrap">'
-        f'{_pie_svg(segments, filter_field=filter_field)}'
-        f'<div class="rec-pie-legend">{_pie_legend_html(segments, filter_field)}</div>'
-        f'</div>'
-        f'</div>'
-    )
-
-def _line_graph_svg(year_data):
-    """SVG line graph for added-year history. year_data: [(year, count), ...] sorted ascending."""
-    if not year_data:
-        return ''
-    years  = [d[0] for d in year_data]
-    counts = [d[1] for d in year_data]
-    n = len(years)
-    raw_max = max(counts) if counts else 1
-
-    # Compute a nice step size so 5 equally-spaced labels land on round numbers:
-    # labels = [0, step, 2*step, 3*step, 4*step=nice_top], with 4*step >= raw_max.
-    if raw_max <= 0:
-        nice_step, nice_top = 1, 4
-    else:
-        _min_step = raw_max / 4
-        if _min_step < 1:
-            nice_step = 1
-        else:
-            _mag  = 10 ** math.floor(math.log10(_min_step))
-            _norm = _min_step / _mag
-            _cands = [1, 1.5, 2, 2.5, 5, 10]
-            _s = next(s for s in _cands if s >= _norm) * _mag
-            nice_step = int(_s) if _s == int(_s) else _s
-        nice_top = nice_step * 4
-    max_count = nice_top   # always >= raw_max by construction
-
-    # Chart height is driven by label count: each of the 5 y-axis labels gets ROW_H px,
-    # so the 4 inter-gridline intervals end up slightly larger than ROW_H.
-    NUM_LABELS = 5
-    ROW_H = 18
-    VW    = 260
-    PL_DATA   = 40
-    Y_LABEL_X = 20
-    GRID_X1   = Y_LABEL_X + 5   # gridlines start just after y-axis labels
-    PT, PB  = 12, 22
-
-    ch = (NUM_LABELS - 1) * ROW_H   # 4 intervals × 18 px = 72 px
-    VH = PT + ch + PB
-
-    # X-axis labels: computed before pts so we know whether the final year is
-    # dropped, which determines the right padding (PR_DATA).
-    max_labels = 7
-    if n <= max_labels:
-        label_indices = list(range(n))
-    else:
-        step = math.ceil((n - 1) / (max_labels - 1))
-        label_indices = list(range(0, n, step))
-        if label_indices[-1] != n - 1 and len(label_indices) < 3:
-            label_indices.append(n - 1)
-
-    # When the final year label is dropped, set PR_DATA=0 so xi(n-1) lands
-    # exactly at VW — the last point reaches the gridline edge at natural spacing.
-    # Otherwise keep the normal right inset so the last dot isn't flush with the edge.
-    dropped_final = n > max_labels and label_indices[-1] != n - 1
-    PR_DATA = 0 if dropped_final else 16
-
-    cw_data = VW - PL_DATA - PR_DATA  # chart data spans PL_DATA → VW-PR_DATA
-
-    def xi(i):
-        return PL_DATA + (i * cw_data / (n - 1) if n > 1 else cw_data / 2)
-
-    def yi(v):
-        return PT + ch * (1 - v / max_count) if max_count else PT + ch
-
-    pts     = [(xi(i), yi(counts[i])) for i in range(n)]
-    pts_str = ' '.join(f'{x:.1f},{y:.1f}' for x, y in pts)
-
-    # Filled area under the line
-    area_d = (
-        f'M {pts[0][0]:.1f},{PT + ch:.1f} '
-        + ' '.join(f'L {x:.1f},{y:.1f}' for x, y in pts)
-        + f' L {pts[-1][0]:.1f},{PT + ch:.1f} Z'
-    )
-
-    # Gridlines run from PL_DATA to VW (the chart data column, not the label gutter).
-    # Y-axis labels at x=2 (text-anchor="start") in the left gutter.
-    grid_parts = []
-    y_label_vals = [nice_top, nice_step * 3, nice_step * 2, nice_step, 0]
-    for gv in y_label_vals:
-        gy = yi(gv)
-        grid_parts.append(
-            f'<line x1="{GRID_X1}" y1="{gy:.1f}" x2="{VW}" y2="{gy:.1f}" '
-            f'stroke="var(--rule)" stroke-width="1"/>'
-        )
-        grid_parts.append(
-            f'<text x="{Y_LABEL_X}" y="{gy:.1f}" text-anchor="end" dominant-baseline="middle" '
-            f'font-size="9" fill="var(--ink-muted)">{gv}</text>'
-        )
-
-    label_parts = []
-    for pos, i in enumerate(label_indices):
-        is_last = pos == len(label_indices) - 1
-        if is_last and i == n - 1:
-            # Last label is the final data point: pin to right edge
-            x_pos = float(VW)
-            anchor = 'end'
-        else:
-            x_pos = xi(i)
-            anchor = 'middle'
-        label_parts.append(
-            f'<text x="{x_pos:.1f}" y="{VH - 4}" text-anchor="{anchor}" '
-            f'font-size="9" fill="var(--ink-muted)">{years[i]}</text>'
-        )
-
-    # Data point dots
-    dot_parts = [
-        f'<circle cx="{x:.1f}" cy="{y:.1f}" r="2.5" fill="var(--rust)"/>'
-        for x, y in pts
-    ]
-
-    return (
-        f'<svg viewBox="0 0 {VW} {VH}" xmlns="http://www.w3.org/2000/svg" '
-        f'class="insights-line-graph-svg" overflow="visible">'
-        f'<path d="{area_d}" fill="var(--rust)" opacity="0.12"/>'
-        + ''.join(grid_parts)
-        + f'<polyline points="{pts_str}" fill="none" stroke="var(--rust)" '
-        f'stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
-        + ''.join(dot_parts)
-        + ''.join(label_parts)
-        + '</svg>'
-    )
-
 
 def _genre_year_added_section(genre_pie, year_pie, added_year_data, added_year_table):
     """
@@ -556,16 +345,16 @@ def _genre_year_added_section(genre_pie, year_pie, added_year_data, added_year_t
 
     # Minimal degradation paths
     if not has_year and not has_added:
-        return _pie_section("Genre Breakdown", genre_pie, filter_field='genres')
+        return charts.pie_section("Genre Breakdown", genre_pie, filter_field='genres')
     if not has_genre and not has_added:
-        return _pie_section("Year Breakdown", year_pie, filter_field='decade')
+        return charts.pie_section("Year Breakdown", year_pie, filter_field='decade')
 
     # ── Panel 1: Year Breakdown ──────────────────────────────────────────────
     year_pie_html = (
         f'<div class="rec-pie-wrap">'
-        f'{_pie_svg(year_pie, filter_field="decade") if has_year else ""}'
+        f'{charts.pie_svg(year_pie, filter_field="decade") if has_year else ""}'
         f'<div class="rec-pie-legend">'
-        f'{_pie_legend_html(year_pie, filter_field="decade") if has_year else ""}'
+        f'{charts.pie_legend_html(year_pie, filter_field="decade") if has_year else ""}'
         f'</div>'
         f'</div>'
     )
@@ -588,7 +377,7 @@ def _genre_year_added_section(genre_pie, year_pie, added_year_data, added_year_t
     )
 
     # ── Panel 2: Added History ───────────────────────────────────────────────
-    line_graph = _line_graph_svg(added_year_data) if has_added else ''
+    line_graph = charts.line_graph_svg(added_year_data) if has_added else ''
     total_added = sum(c for _, c in added_year_table)
     year_rows = ''
     for yr, cnt in added_year_table:
@@ -623,9 +412,9 @@ def _genre_year_added_section(genre_pie, year_pie, added_year_data, added_year_t
     # ── Panel 3: Genre Breakdown ─────────────────────────────────────────────
     genre_pie_html = (
         f'<div class="rec-pie-wrap">'
-        f'{_pie_svg(genre_pie, filter_field="genres") if has_genre else ""}'
+        f'{charts.pie_svg(genre_pie, filter_field="genres") if has_genre else ""}'
         f'<div class="rec-pie-legend">'
-        f'{_pie_legend_html(genre_pie, filter_field="genres") if has_genre else ""}'
+        f'{charts.pie_legend_html(genre_pie, filter_field="genres") if has_genre else ""}'
         f'</div>'
         f'</div>'
     )
@@ -657,8 +446,8 @@ def _format_breakdown_section(format_pie, release_type_pie, edition_pie=None):
 
     def pie_block(segments, filter_field=None, reverse=False):
         if not segments: return ''
-        svg = _pie_svg(segments, size=80, extra_class='rec-pie-svg--sm', filter_field=filter_field)
-        legend = f'<div class="rec-pie-legend">{_pie_legend_html(segments, filter_field)}</div>'
+        svg = charts.pie_svg(segments, size=80, extra_class='rec-pie-svg--sm', filter_field=filter_field)
+        legend = f'<div class="rec-pie-legend">{charts.pie_legend_html(segments, filter_field)}</div>'
         cls = 'rec-pie-wrap rec-pie-wrap--reverse' if reverse else 'rec-pie-wrap'
         return f'<div class="{cls}">{svg}{legend}</div>'
 
@@ -671,7 +460,7 @@ def _format_breakdown_section(format_pie, release_type_pie, edition_pie=None):
             f'</div>'
         )
         panel_fmt = f'<div class="insights-panel">{pie_block(format_pie, filter_field="format")}</div>'
-        panel_edition = f'<div class="insights-panel" style="visibility:hidden;pointer-events:none">{_bar_chart_html(edition_pie, filter_field="format_tags")}</div>'
+        panel_edition = f'<div class="insights-panel" style="visibility:hidden;pointer-events:none">{charts.bar_chart_html(edition_pie, filter_field="format_tags")}</div>'
         panels_html = f'<div class="insights-format-panels-wrap">{panel_fmt}{panel_edition}</div>'
     else:
         toggle_cls = ''

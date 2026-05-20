@@ -1,8 +1,11 @@
-import base64, csv, html as _html, json, math as _math, os, re
+import base64, csv, html as _html, json, os, re
 
 import gspread
 from google.oauth2 import service_account
 import google.auth
+
+from helper import charts
+from helper.charts import PIE_COLORS as _PIE_COLORS
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
 
@@ -417,71 +420,6 @@ def _fmt_cost(raw, val):
         return _html.escape('${:,.2f}'.format(val))
     return _html.escape(raw)
 
-_PIE_COLORS = [
-    '#c47a50',  # rust
-    '#708a50',  # olive
-    '#5a7898',  # slate blue
-    '#b89858',  # tan/gold
-    '#886888',  # muted purple
-    '#508888',  # teal
-    '#c4a040',  # amber
-    '#6a8a70',  # sage
-]
-
-
-def _pie_svg(segments, size=130):
-    total = sum(s['value'] for s in segments)
-    if not segments or total == 0:
-        return ''
-    cx = cy = size / 2
-    r = size * 0.42
-    paths = []
-    angle = -_math.pi / 2
-    for seg in segments:
-        if seg['value'] <= 0:
-            continue
-        sweep = 2 * _math.pi * seg['value'] / total
-        end_angle = angle + sweep
-        x1 = cx + r * _math.cos(angle)
-        y1 = cy + r * _math.sin(angle)
-        x2 = cx + r * _math.cos(end_angle)
-        y2 = cy + r * _math.sin(end_angle)
-        large_arc = 1 if sweep > _math.pi else 0
-        d = 'M {:.2f} {:.2f} L {:.2f} {:.2f} A {:.2f} {:.2f} 0 {} 1 {:.2f} {:.2f} Z'.format(
-            cx, cy, x1, y1, r, r, large_arc, x2, y2)
-        paths.append('<path d="{}" fill="{}" stroke="var(--bg)" stroke-width="2"/>'.format(
-            d, seg['color']))
-        angle = end_angle
-    return ('<svg viewBox="0 0 {0} {0}" xmlns="http://www.w3.org/2000/svg"'
-            ' class="rec-pie-svg">{1}</svg>'.format(size, ''.join(paths)))
-
-
-def _pie_section(title, segments):
-    total = sum(s['value'] for s in segments)
-    if not segments or total == 0:
-        return ''
-    legend_items = ''.join(
-        '<div class="rec-pie-legend-item">'
-        '<span class="rec-pie-dot" style="background:{color}"></span>'
-        '<span class="rec-pie-name">{name}</span>'
-        '<span class="rec-pie-pct">{pct:.0f}%</span>'
-        '</div>'.format(
-            color=seg['color'],
-            name=_html.escape(seg['name'] or '—'),
-            pct=seg['value'] / total * 100,
-        )
-        for seg in segments if seg['value'] > 0
-    )
-    return (
-        '<div class="rec-breakdown-section">'
-        '<div class="rec-breakdown-title">' + title + '</div>'
-        '<div class="rec-pie-wrap">'
-        + _pie_svg(segments) +
-        '<div class="rec-pie-legend">' + legend_items + '</div>'
-        '</div>'
-        '</div>'
-    )
-
 
 def render_records_dashboard(stats):
     def stat_card(label, value, sub='', value_class=''):
@@ -559,10 +497,10 @@ def render_records_dashboard(stats):
         + '</div>'
         + '<div class="rec-breakdown">'
         + '<div class="rec-breakdown-pane" data-breakdown-pane="collection">'
-        + ((breakdown_section('Collection', col_breakdown_rows) + _pie_section('Breakdown', col_pie_segs)) if col_breakdown_rows else '')
+        + ((breakdown_section('Collection', col_breakdown_rows) + charts.pie_section('Breakdown', col_pie_segs, size=130, radius=130 * 0.42, stroke='var(--bg)', path_class='')) if col_breakdown_rows else '')
         + '</div>'
         + '<div class="rec-breakdown-pane" data-breakdown-pane="inventory" style="display:none;opacity:0">'
-        + ((breakdown_section('Inventory', inv_breakdown_rows) + _pie_section('Breakdown', inv_pie_segs)) if inv_breakdown_rows else '')
+        + ((breakdown_section('Inventory', inv_breakdown_rows) + charts.pie_section('Breakdown', inv_pie_segs, size=130, radius=130 * 0.42, stroke='var(--bg)', path_class='')) if inv_breakdown_rows else '')
         + '</div>'
         + '</div>'
         + '</div>'

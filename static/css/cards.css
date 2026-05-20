@@ -1,0 +1,351 @@
+/* =========================================================
+   cards.css — result cards + sorted view (Price Checker) and
+   match cards (Matcher, Lookup)
+   Loaded on: /pricechecker, /matcher, /lookup
+   ========================================================= */
+
+/* =========================================================
+   Result cards
+   ========================================================= */
+
+.result-card {
+    margin-top: 15px;
+    margin-bottom: 5px;
+    display: flex;
+    flex-direction: column;
+
+    &:hover {
+        border-color: var(--rule-strong);
+        box-shadow: var(--shadow-sm);
+    }
+
+    &:has(.card-thumb-link) {
+        display: grid;
+        grid-template-columns: 1fr 160px;
+        grid-template-rows: auto 1fr;
+        grid-template-areas: "number thumb" "content thumb";
+        gap: 0 22px;
+        min-height: 196px;
+
+        .card-number     { grid-area: number; }
+        .card-inner      { grid-area: content; }
+        .card-thumb-link { grid-area: thumb; }
+    }
+}
+
+.sorted-results .result-card { scroll-margin-top: 56px; }
+
+/* Entry animation for cards streamed in by the progressive loader.
+   Only affects how a card appears (fades/rises into place); the resting
+   state is identical to a normally-rendered card. */
+.result-card.pc-card-enter {
+    opacity: 0;
+    transform: translateY(8px);
+}
+.result-card.pc-card-enter.pc-card-in {
+    opacity: 1;
+    transform: translateY(0);
+    transition: opacity 0.3s ease, transform 0.3s ease;
+}
+@media (prefers-reduced-motion: reduce) {
+    /* Keep the gentle opacity fade, but drop the vertical movement. */
+    .result-card.pc-card-enter {
+        transform: none;
+    }
+    .result-card.pc-card-enter.pc-card-in {
+        opacity: 1;
+        transform: none;
+        transition: opacity 0.3s ease;
+    }
+}
+
+.card-inner {
+    display: flex;
+    flex-direction: column;
+    flex: 1;
+}
+
+.card-thumb-link, .card-thumb {
+    width: 160px;
+    height: 160px;
+    border-radius: 4px;
+    object-fit: cover;
+    display: block;
+}
+
+.card-thumb-link {
+    align-self: start;
+    overflow: hidden;
+}
+
+.card-thumb-link--placeholder {
+    background: var(--card-alt);
+    border: 1px solid var(--rule);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--ink-muted);
+}
+
+.card-thumb { border: 1px solid var(--rule); }
+
+.card-thumb-placeholder-icon {
+    width: 58px;
+    height: 58px;
+    opacity: 0.45;
+    animation: rotate 24s linear infinite;
+}
+
+.card-number, .card-total {
+    font-size: 12px;
+    color: var(--ink);
+    display: flex;
+    justify-content: space-between;
+    align-items: baseline;
+    letter-spacing: 0.02em;
+}
+
+.card-number { margin-bottom: 6px; }
+
+.card-title {
+    font-size: 18px;
+    font-weight: 500;
+    letter-spacing: -0.01em;
+    line-height: 1.25;
+    margin-bottom: 10px;
+
+    a {
+        color: var(--ink);
+        background: linear-gradient(to right, var(--rust), var(--rust)) 0 100% / 0% 1px no-repeat;
+        transition: background-size 0.2s ease, color 0.12s ease;
+        padding-bottom: 2px;
+    }
+}
+
+.card-title--label {
+    line-height: inherit;
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 8px;
+}
+
+.card-listings {
+    font-size: 13.5px;
+    line-height: 1.95;
+    font-variant-numeric: tabular-nums;
+}
+
+.card-total {
+    margin-top: auto;
+    padding-top: 14px;
+    border-top: 1px solid var(--rule);
+    gap: 10px;
+    flex-wrap: wrap;
+}
+
+/* =========================================================
+   Sorted view
+   ========================================================= */
+
+.sort-group-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    position: sticky;
+    top: 0;
+    background: var(--paper);
+    border-bottom: 1px solid var(--rule);
+    z-index: 10;
+    padding: 14px 2px 10px;
+    margin: 18px 0 10px;
+    font-size: 15px;
+    font-weight: 500;
+    color: var(--ink);
+    letter-spacing: -0.005em;
+}
+
+.place-nav-buttons { display: flex; gap: 6px; }
+
+.place-nav-btn {
+    font-size: 11px;
+    font-weight: 600;
+    color: var(--rust);
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    padding: 4px 10px;
+    border: 1px solid var(--rust-soft);
+    border-radius: 999px;
+    background: var(--card);
+
+    &:hover {
+        background: var(--rust-soft);
+        border-color: var(--rust);
+    }
+}
+
+.place-summary {
+    margin-bottom: 20px;
+    font-size: 13px;
+    color: var(--ink-soft);
+    line-height: 1.95;
+    font-variant-numeric: tabular-nums;
+}
+
+.place-summary-title { border-bottom: 1px solid var(--rule); margin-bottom: 8px; }
+
+.place-summary-link {
+    font-weight: 500;
+    &:hover { text-decoration: underline; text-underline-offset: 2px; }
+}
+
+/* =========================================================
+   Matcher — match grid and cards
+   ========================================================= */
+
+.match-grid {
+    display: flex;
+    gap: 14px;
+    margin-top: 20px;
+}
+
+.match-grid--expanded .match-card-body,
+.match-card--active .match-card-body {
+    max-height: 220px;
+    padding: 10px 12px 12px;
+}
+
+.match-column {
+    display: flex;
+    flex-direction: column;
+    gap: 14px;
+    flex: 1;
+    min-width: 0;
+}
+
+.match-card {
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    width: 100%;
+    padding: 0;
+
+    &:hover {
+        transform: translateY(-3px);
+        box-shadow: 0 6px 18px rgba(43, 29, 18, 0.12), 0 2px 4px rgba(43, 29, 18, 0.06);
+        border-color: var(--rule-strong);
+        .match-card-img { transform: scale(1.04); }
+    }
+}
+
+.match-card-art {
+    width: 100%;
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+    background: var(--rule);
+    position: relative;
+}
+
+.match-card-art-label {
+    position: absolute;
+    bottom: 0;
+    inset-inline: 0;
+    padding: 20px 10px 8px;
+    background: linear-gradient(to top, rgba(43,29,18,0.5), transparent);
+    color: var(--card-alt);
+    font-size: 12px;
+    font-weight: 500;
+    text-align: center;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.match-card-img {
+    width: 100%;
+    height: 100%;
+    object-fit: cover;
+    display: block;
+}
+
+.match-card-placeholder {
+    width: 100%;
+    height: 100%;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    color: var(--rule-strong);
+
+    svg { width: 52px; height: 52px; animation: rotate 20s linear infinite; }
+}
+
+.match-card-body {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    flex: 1;
+    max-height: 0;
+    overflow: hidden;
+    padding: 0;
+    transition: max-height 0.28s cubic-bezier(0.4,0,0.2,1), padding 0.28s cubic-bezier(0.4,0,0.2,1);
+}
+
+.match-card-title {
+    font-size: 15px;
+    font-weight: 500;
+    line-height: 1.3;
+}
+
+.match-card-artist { font-size: 12.5px; color: var(--ink-soft); line-height: 1.3; }
+
+.match-card-format { color: var(--rust); margin-top: auto; padding-top: 8px; }
+
+.match-card-format-desc { color: var(--ink); padding-top: 2px; font-weight: 400; }
+
+.match-card-format-text {
+    font-size: 12px;
+    font-style: oblique;
+    letter-spacing: 0.05em;
+    color: var(--rust);
+    padding-top: 2px;
+}
+
+.match-card-forsale {
+    font-size: 11.5px;
+    color: var(--olive);
+    text-decoration: underline;
+    text-underline-offset: 2px;
+    line-height: 1.4;
+    margin-top: 3px;
+
+    &:hover { color: var(--rust); }
+}
+
+.match-card-comment, .match-card-stats {
+    font-size: 11px;
+    margin-top: 5px;
+    padding-top: 5px;
+    border-top: 1px solid var(--rule);
+    line-height: 1.45;
+}
+
+.match-card-comment { font-style: italic; color: var(--ink-muted); }
+
+.match-card-stats {
+    font-size: 11.5px;
+    font-weight: 500;
+    color: var(--olive);
+    margin-top: auto;
+}
+
+.match-card--back .match-card-placeholder svg {
+    width: 36px;
+    height: 36px;
+    animation: none;
+    color: var(--ink-soft);
+}
+
+.match-empty {
+    color: var(--ink-muted);
+    font-style: italic;
+    font-size: 14px;
+    margin-top: 16px;
+}
