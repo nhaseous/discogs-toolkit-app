@@ -1,5 +1,6 @@
 import time
 import random
+import requests
 from bs4 import BeautifulSoup
 from datetime import date, datetime
 import threading
@@ -327,3 +328,95 @@ def _parse_price_float(listing):
         return float(re.sub(r'[^\d.]', '', price_text))
     except (AttributeError, ValueError):
         return None
+
+
+## Reprice ##
+
+def reprice_listings(listings, auth):
+    """Reprice a batch of the signed-in user's marketplace listings.
+
+    For each listing: fetch its current data, compute the new price (an explicit
+    ``custom_price`` if supplied, otherwise undercut the cheapest competitor),
+    then POST the update. Returns a per-listing result list. ``auth`` is the
+    caller's OAuth1 object; the route is responsible for authenticating the user.
+    """
+    results = []
+    headers = {"User-Agent": "DiscogsToolkitApp/1.0"}
+
+    def _throttle(resp):
+        try:
+            remaining = int(resp.headers.get("X-Discogs-Ratelimit-Remaining", 20))
+            if remaining < 10:
+                time.sleep(2)
+        except (ValueError, TypeError):
+            pass
+
+    for item in listings:
+        lid = str(item.get("id", ""))
+        seller_price = float(item.get("seller_price", 0))
+        cheapest_price = float(item.get("cheapest_price", 0))
+
+        if not lid:
+            results.append({"id": lid, "status": "error", "message": "Missing listing id"})
+            continue
+
+        custom_price_raw = item.get("custom_price")
+        if custom_price_raw is not None:
+            new_price = round(float(custom_price_raw), 2)
+        else:
+            pct = (seller_price - cheapest_price) / cheapest_price * 100 if cheapest_price > 0 else 0
+            new_price = seller_price * 0.9 if pct > 10 else cheapest_price - 0.5
+            new_price = round(new_price, 2)
+
+        base_url = "https://api.discogs.com/marketplace/listings/{}".format(lid)
+
+        get_resp = requests.get(base_url, headers=headers, auth=auth)
+        _throttle(get_resp)
+
+        if get_resp.status_code != 200:
+            results.append({"id": lid, "status": "error", "message": "GET failed: HTTP {}".format(get_resp.status_code)})
+            continue
+
+        ld = get_resp.json()
+        shipping = float((ld.get("shipping_price") or {}).get("value") or 0)
+        old_price = float((ld.get("price") or {}).get("value") or 0)
+
+        final_price = round(new_price - shipping, 2)
+        if final_price <= 0:
+            results.append({"id": lid, "status": "error", "message": "Price after shipping would be ${:.2f}".format(final_price)})
+            continue
+
+        release_id = (ld.get("release") or {}).get("id")
+        condition = ld.get("condition", "")
+        sleeve_condition = ld.get("sleeve_condition", "")
+        status = ld.get("status", "For Sale")
+        comments = ld.get("comments", "")
+        allow_offers = ld.get("allow_offers")
+        external_id = ld.get("external_id", "")
+        location = ld.get("location", "")
+
+        if not release_id or not condition:
+            results.append({"id": lid, "status": "error", "message": "Could not read listing fields"})
+            continue
+
+        post_body = {"release_id": release_id, "condition": condition, "price": final_price, "status": status}
+        if sleeve_condition:
+            post_body["sleeve_condition"] = sleeve_condition
+        if comments:
+            post_body["comments"] = comments
+        if allow_offers is not None:
+            post_body["allow_offers"] = allow_offers
+        if external_id:
+            post_body["external_id"] = external_id
+        if location:
+            post_body["location"] = location
+
+        post_resp = requests.post(base_url, headers=headers, auth=auth, json=post_body)
+        _throttle(post_resp)
+
+        if post_resp.status_code in (200, 204):
+            results.append({"id": lid, "status": "success", "old_price": old_price, "new_price": final_price, "shipping": shipping})
+        else:
+            results.append({"id": lid, "status": "error", "message": "POST failed: HTTP {} — {}".format(post_resp.status_code, post_resp.text[:200])})
+
+    return results

@@ -75,9 +75,9 @@ def get_collection_insights(items, total_value=None):
         if count > 0
     ]
 
-    # Added-year data: line graph uses year-ascending order; table uses count-descending
-    added_year_data  = sorted(added_year_counts.items())          # [(year, count), ...]
-    added_year_table = added_year_counts.most_common()            # [(year, count), ...]
+    # Added-year data: line graph uses year-ascending order; table uses year-descending
+    added_year_data  = sorted(added_year_counts.items())                       # [(year, count), ...]
+    added_year_table = sorted(added_year_counts.items(), reverse=True)         # [(year, count), ...]
 
     return {
         'all_genres': all_genres,

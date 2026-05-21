@@ -52,7 +52,14 @@
         {% endif %}
     </div>
 
-    {% if rate_limited %}
+    {% if cap_exceeded %}
+        <div class="lookup-notice lookup-notice--error">
+            Viewing <b>{{ username }}</b> needs more requests than Discogs allows for signed-out lookups
+            &mdash; each request fetches up to 100 items, capped at ~2,400. This user's collection
+            ({{ collection_total }} items) and wantlist ({{ wantlist_total }} items) are too large to load
+            without signing in. Log in with Discogs to raise your rate limit and view this user.
+        </div>
+    {% elif rate_limited %}
         {{ rate_limit_notice | safe }}
     {% elif user_not_found %}
         <div class="lookup-notice lookup-notice--error">

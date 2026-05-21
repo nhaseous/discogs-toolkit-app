@@ -37,13 +37,13 @@ def _extract_formats(formats_list):
             result.append(name)
     return result
 
-def get_collection(username, scraper, auth=None):
+def get_collection(username, scraper, auth=None, budget=None):
     url = "https://api.discogs.com/users/{0}/collection/folders/0/releases".format(username)
     params = {"sort": "artist", "sort_order": "asc"}
 
     results = []
     try:
-        releases, expected_total = fetch_all_pages(url, "releases", scraper, params=params, auth=auth, return_total=True)
+        releases, expected_total = fetch_all_pages(url, "releases", scraper, params=params, auth=auth, return_total=True, budget=budget)
     except UserNotFoundError: raise UserNotFoundError(username)
     except CollectionPrivateError: raise CollectionPrivateError(username)
 
@@ -88,15 +88,15 @@ def get_collection(username, scraper, auth=None):
     if expected_total and len(results) < expected_total:
         partial_warning = "Partial results: fetched {0} of {1} collection items. Some records may be missing due to a connection issue.".format(len(results), expected_total)
 
-    return results, partial_warning
+    return results, partial_warning, expected_total
 
-def get_wantlist(username, scraper, auth=None):
+def get_wantlist(username, scraper, auth=None, budget=None):
     url = "https://api.discogs.com/users/{0}/wants".format(username)
     params = {"sort": "artist", "sort_order": "asc"}
 
     results = []
     try:
-        wants, expected_total = fetch_all_pages(url, "wants", scraper, params=params, auth=auth, return_total=True)
+        wants, expected_total = fetch_all_pages(url, "wants", scraper, params=params, auth=auth, return_total=True, budget=budget)
     except UserNotFoundError: raise UserNotFoundError(username)
     except WantlistPrivateError: raise WantlistPrivateError(username)
 
@@ -140,22 +140,21 @@ def get_wantlist(username, scraper, auth=None):
     if expected_total and len(results) < expected_total:
         partial_warning = "Partial results: fetched {0} of {1} wantlist items. Some records may be missing due to a connection issue.".format(len(results), expected_total)
 
-    return results, partial_warning
+    return results, partial_warning, expected_total
 
-def get_lists(username, scraper, auth=None):
+def get_lists(username, scraper, auth=None, budget=None):
     url = "https://api.discogs.com/users/{0}/lists".format(username)
-    
+
     results = []
     try:
-        lists = fetch_all_pages(url, "lists", scraper, auth=auth)
+        lists = fetch_all_pages(url, "lists", scraper, auth=auth, budget=budget)
     except UserNotFoundError: raise UserNotFoundError(username)
     except ListPrivateError: raise ListPrivateError(username)
 
-    # As with collection/wantlist, private lists can come back as an empty 200.
-    # num_lists reflects the true count even when the lists are inaccessible.
-    if not lists and (get_user_profile(username, scraper, auth=auth).get("num_lists") or 0) > 0:
-        raise ListPrivateError(username)
-
+    # Lists are fetched with a single call. A private lists set that returns 401/403
+    # is still caught above; we deliberately skip the extra get_user_profile call that
+    # would only distinguish a private-but-empty-200 set from a genuinely empty one —
+    # it's a low-value distinction and the extra request risks the 25/min rate limit.
     for lst in lists:
         if not lst.get("public", True):
             continue

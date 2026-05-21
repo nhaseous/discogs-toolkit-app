@@ -1,11 +1,36 @@
 import time
 import random
 import re
+import threading
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from helper.common import API_HEADERS as _API_HEADERS
 
 _MAX_WORKERS = 5
+
+
+class RequestBudget:
+    """Thread-safe cap on how many Discogs requests a single lookup may fire.
+
+    Used to keep an unauthenticated lookup under Discogs' 25-requests/60s limit:
+    one budget is shared across the concurrent collection/wantlist/lists fetches,
+    so the combined burst can never exceed the cap regardless of how the pages
+    split between them. `exhausted` records whether the cap was ever hit, letting
+    the caller tell a truncated (capped) result apart from a complete one.
+    """
+    def __init__(self, limit):
+        self._remaining = limit
+        self._lock = threading.Lock()
+        self.exhausted = False
+
+    def take(self):
+        """Reserve one request. Returns False (and flags exhausted) if none left."""
+        with self._lock:
+            if self._remaining <= 0:
+                self.exhausted = True
+                return False
+            self._remaining -= 1
+            return True
 
 def make_api_session():
     """
@@ -82,14 +107,21 @@ def request_with_retry(scraper, method, url, max_retries=3, max_429_retries=1, *
         return resp
     return None  # unreachable
 
-def fetch_all_pages(url, items_key, scraper, params=None, auth=None, return_total=False):
+def fetch_all_pages(url, items_key, scraper, params=None, auth=None, return_total=False, budget=None):
     """
     Fetches all pages of a paginated Discogs API endpoint concurrently.
     If return_total=True, returns (results, total_items) instead of just results.
+
+    If a RequestBudget is passed, every page request reserves a token first and
+    page scheduling stops once the budget is spent. Skipped pages leave the result
+    short of total_items — callers detect that mismatch to surface a rate-limit cap.
     """
     if params is None:
         params = {}
     params = dict(params, per_page=100)
+
+    if budget is not None and not budget.take():
+        return ([], 0) if return_total else []
 
     first_resp = request_with_retry(scraper, "GET", url, params=dict(params, page=1), headers=_API_HEADERS, auth=auth)
 
@@ -131,10 +163,18 @@ def fetch_all_pages(url, items_key, scraper, params=None, auth=None, return_tota
 
     if total_pages > 1:
         rate_limited = False
+        # Reserve a budget token per extra page up front, stopping once the shared
+        # budget is spent so the burst stays within the rate limit. Pages left
+        # unscheduled make the result fall short of total_items (the cap signal).
+        pages = []
+        for p in range(2, total_pages + 1):
+            if budget is not None and not budget.take():
+                break
+            pages.append(p)
         with ThreadPoolExecutor(max_workers=_MAX_WORKERS) as executor:
             futures = {
                 executor.submit(request_with_retry, scraper, "GET", url, params=dict(params, page=p), headers=_API_HEADERS, auth=auth): p
-                for p in range(2, total_pages + 1)
+                for p in pages
             }
             for future in as_completed(futures):
                 try:
