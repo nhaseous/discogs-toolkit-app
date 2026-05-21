@@ -150,26 +150,39 @@ def line_graph_svg(year_data):
     n = len(years)
     raw_max = max(counts) if counts else 1
 
-    # Compute a nice step size so 5 equally-spaced labels land on round numbers:
-    # labels = [0, step, 2*step, 3*step, 4*step=nice_top], with 4*step >= raw_max.
-    if raw_max <= 0:
-        nice_step, nice_top = 1, 4
-    else:
-        _min_step = raw_max / 4
-        if _min_step < 1:
-            nice_step = 1
-        else:
-            _mag  = 10 ** math.floor(math.log10(_min_step))
-            _norm = _min_step / _mag
-            _cands = [1, 1.5, 2, 2.5, 5, 10]
-            _s = next(s for s in _cands if s >= _norm) * _mag
-            nice_step = int(_s) if _s == int(_s) else _s
-        nice_top = nice_step * 4
-    max_count = nice_top   # always >= raw_max by construction
+    # Always render the SAME number of evenly-spaced y labels and size the step to fit.
+    # Pick the "nice" integer step whose top gridline (intervals × step) sits closest to
+    # the max, choosing among a fairly fine ladder of round steps so the fit stays tight.
+    # When the chosen top rounds just below the max (e.g. 1047 → top 1000) the line pokes
+    # slightly above it; POKE_WEIGHT biases the choice toward covering the max so those
+    # pokes stay small rather than letting the line shoot well past the top gridline.
+    NUM_LABELS    = 5
+    NUM_INTERVALS = NUM_LABELS - 1
+    POKE_WEIGHT   = 1.6
+    _CANDS = (1, 1.5, 2, 2.5, 3, 4, 5, 6, 8)
 
-    # Chart height is driven by label count: each of the 5 y-axis labels gets ROW_H px,
-    # so the 4 inter-gridline intervals end up slightly larger than ROW_H.
-    NUM_LABELS = 5
+    if raw_max <= 0:
+        nice_step = 1
+    else:
+        _ideal = raw_max / NUM_INTERVALS
+        _mag   = 10 ** max(0, math.floor(math.log10(_ideal)))
+        # integer "nice" steps spanning a few magnitudes around the ideal step
+        _steps = sorted({int(b * m) for m in (_mag // 10 or 1, _mag, _mag * 10)
+                         for b in _CANDS if float(b * m).is_integer() and b * m >= 1})
+
+        def _cost(s):
+            top = s * NUM_INTERVALS
+            return (raw_max - top) * POKE_WEIGHT if top < raw_max else (top - raw_max)
+
+        nice_step = min(_steps, key=_cost)
+
+    nice_top = nice_step * NUM_INTERVALS
+    y_label_vals = [nice_step * k for k in range(NUM_INTERVALS, -1, -1)]
+    # Scale by the larger of the two so the peak reaches the top of the plot and pokes
+    # above the top gridline whenever nice_top rounded down below raw_max.
+    max_count = max(raw_max, nice_top)
+
+    # Chart height is driven by label count: each y-axis label gets ROW_H px.
     ROW_H = 18
     VW    = 260
     PL_DATA   = 40
@@ -218,7 +231,6 @@ def line_graph_svg(year_data):
     # Gridlines run from PL_DATA to VW (the chart data column, not the label gutter).
     # Y-axis labels at x=2 (text-anchor="start") in the left gutter.
     grid_parts = []
-    y_label_vals = [nice_top, nice_step * 3, nice_step * 2, nice_step, 0]
     for gv in y_label_vals:
         gy = yi(gv)
         grid_parts.append(
