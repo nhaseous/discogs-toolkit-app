@@ -6,6 +6,37 @@
 // ==========================================================
 
 (function() {
+    // Align thumbnails across columns when cards are collapsed. The art is a
+    // fixed square and the body is collapsed (height 0), so the only variable
+    // in a card's collapsed height is its info block (artist + title). Rather
+    // than inflate the info block — which would add space between the title and
+    // the body — we push the slack BELOW each card via margin-bottom, keeping
+    // the title→format gap constant. margin-bottom is measured from the info
+    // height, which never changes between collapsed/expanded, so this is safe
+    // to run in either state.
+    function equalizeCardRows(grid) {
+        var cols = Array.from(grid.querySelectorAll('.match-column'));
+        if (!cols.length) return;
+        var numRows = Math.max.apply(null, cols.map(function(c) { return c.children.length; }));
+        for (var row = 0; row < numRows; row++) {
+            var items = [];
+            cols.forEach(function(col) {
+                var card = col.children[row];
+                if (card) {
+                    card.style.marginBottom = '';
+                    var info = card.querySelector('.match-card-info');
+                    if (info) { info.style.minHeight = ''; items.push({ card: card, info: info }); }
+                }
+            });
+            if (!items.length) continue;
+            var maxH = Math.max.apply(null, items.map(function(o) { return o.info.offsetHeight; }));
+            items.forEach(function(o) {
+                var delta = maxH - o.info.offsetHeight;
+                o.card.style.marginBottom = delta ? delta + 'px' : '';
+            });
+        }
+    }
+
     function layoutMatchGrid(grid) {
         if (!grid.offsetParent) return;
         var allCards = Array.from(grid.querySelectorAll(".match-card"));
@@ -13,7 +44,10 @@
         var gap = 14, minWidth = 158;
         var numCols = Math.max(1, Math.floor((grid.offsetWidth + gap) / (minWidth + gap)));
         var existing = Array.from(grid.children);
-        if (existing.length === numCols && existing.every(function(c) { return c.classList.contains("match-column"); })) return;
+        if (existing.length === numCols && existing.every(function(c) { return c.classList.contains("match-column"); })) {
+            equalizeCardRows(grid);
+            return;
+        }
         grid.innerHTML = "";
         var cols = [];
         for (var i = 0; i < numCols; i++) {
@@ -23,6 +57,7 @@
             cols.push(col);
         }
         allCards.forEach(function(c, i) { cols[i % numCols].appendChild(c); });
+        equalizeCardRows(grid);
     }
     window._layoutMatchGrids = function() {
         document.querySelectorAll(".match-grid").forEach(layoutMatchGrid);

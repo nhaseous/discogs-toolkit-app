@@ -517,7 +517,7 @@
     // One batch in flight at a time: combined with the server's 5 scrape workers
     // this reproduces the original single-session, ~5-concurrent request pattern,
     // which Cloudflare tolerates far better than many parallel cold scrapers.
-    var BATCH = 8, MAX_INFLIGHT = 1, BATCH_TIMEOUT_MS = 60000;
+    var BATCH = 10, MAX_INFLIGHT = 1, BATCH_TIMEOUT_MS = 60000;
     var batches = [];
     for (var i = 0; i < releases.length; i += BATCH) batches.push(releases.slice(i, i + BATCH));
     var bi = 0, inflight = 0, batchesDone = 0;

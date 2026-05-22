@@ -79,14 +79,16 @@
                     <div class="match-card-placeholder">{{ vinyl_placeholder_svg | safe }}</div>
                 {% endif %}
             </div>
-            <div class="match-card-body">
-                <div class="match-card-title">{{ m.title }}</div>
+            <div class="match-card-info">
                 <div class="match-card-artist">{{ m.artist }}</div>
+                <div class="match-card-title">{{ m.title }}</div>
+            </div>
+            <div class="match-card-body">
                 {% if m.format %}<div class="match-card-format">{{ m.format }}</div>{% endif %}
                 {% if m.format_descriptions %}<div class="match-card-format-desc">{{ m.format_descriptions }}</div>{% endif %}
                 {% if m.format_text %}<div class="match-card-format-text">{{ m.format_text }}</div>{% endif %}
                 {% if m.for_sale and m.for_sale_url %}
-                    <div class="match-card-forsale" 
+                    <div class="match-card-forsale"
                          onclick="event.stopPropagation();event.preventDefault();window.open('{{ m.for_sale_url }}','_blank','noopener,noreferrer')">
                         {{ m.for_sale }}
                     </div>

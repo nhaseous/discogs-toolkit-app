@@ -189,9 +189,9 @@ function _withLookupScroll(action) {
         var art = imgSrc
             ? '<img src="' + _esc(imgSrc) + '" alt="" loading="lazy" class="match-card-img">'
             : '<div class="match-card-placeholder">' + VINYL_SVG + '</div>';
-        var body = '<div class="match-card-title">' + _esc(m.title) + '</div>'
-            + '<div class="match-card-artist">' + _esc(Array.isArray(m.artist) ? m.artist.join(' / ') : (m.artist || '')) + '</div>'
-            + (m.format && m.format.length ? '<div class="match-card-format">' + _esc(m.format.join(' / ')) + '</div>' : '')
+        var info = '<div class="match-card-artist">' + _esc(Array.isArray(m.artist) ? m.artist.join(' / ') : (m.artist || '')) + '</div>'
+            + '<div class="match-card-title">' + _esc(m.title) + '</div>';
+        var body = (m.format && m.format.length ? '<div class="match-card-format">' + _esc(m.format.join(' / ')) + '</div>' : '')
             + (m.format_descriptions ? '<div class="match-card-format-desc">' + _esc(m.format_descriptions) + '</div>' : '')
             + (m.format_text ? '<div class="match-card-format-text">' + _esc(m.format_text) + '</div>' : '')
             + (m.for_sale && m.for_sale_url ? '<div class="match-card-forsale" data-href="' + _esc(m.for_sale_url) + '" onclick="event.stopPropagation();event.preventDefault();window.open(this.dataset.href,\'_blank\',\'noopener,noreferrer\')">' + _esc(m.for_sale) + '</div>' : '')
@@ -199,6 +199,7 @@ function _withLookupScroll(action) {
             + (showStats && m.stats ? '<div class="match-card-stats">' + _esc(m.stats) + '</div>' : '');
         return '<a href="' + _esc(m.url || '#') + '" class="match-card" target="_blank" rel="noopener noreferrer">'
             + '<div class="match-card-art">' + art + '</div>'
+            + '<div class="match-card-info">' + info + '</div>'
             + '<div class="match-card-body">' + body + '</div>'
             + '</a>';
     }
