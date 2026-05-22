@@ -213,6 +213,15 @@
     padding: 6px 0 0;
 }
 
+/* The per-card margin-bottom slack (set inline by grid.js) only exists to align
+   thumbnails across columns while collapsed. Once a card expands, drop it so the
+   spacing below the card returns to the normal column gap. !important overrides
+   the inline style. */
+.match-grid--expanded .match-card,
+.match-card--active {
+    margin-bottom: 0 !important;
+}
+
 .match-column {
     display: flex;
     flex-direction: column;
@@ -228,6 +237,7 @@
     width: 100%;
     border-radius: 5px;
     padding: 0;
+    transition: margin-bottom 0.28s cubic-bezier(0.4,0,0.2,1);
 
     &:hover {
         text-decoration: none;
@@ -309,11 +319,12 @@
 
 .match-card-format { color: var(--rust); margin-top: auto; padding-top: 8px; }
 
-.match-card-format-desc { color: var(--ink); padding-top: 2px; font-weight: 400; }
+.match-card-format-desc { color: var(--ink); padding-top: 2px; font-weight: 425; }
 
 .match-card-format-text {
     font-size: 12px;
     font-style: oblique;
+    font-weight: 500;
     letter-spacing: 0.05em;
     color: var(--rust);
     padding-top: 2px;

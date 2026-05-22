@@ -281,10 +281,16 @@ def line_graph_svg(year_data, filter_field='added_year'):
                 f'<circle class="insights-line-dot" cx="{x:.1f}" cy="{y:.1f}" r="2.5" fill="var(--rust)"/>'
             )
 
+    # Pin the rendered height up front (matching the JS scaler's
+    # Math.round(VH * 13/9)) so the first paint is already at its final height.
+    # Without this the SVG sizes itself by its viewBox aspect ratio, stretching
+    # the align-items:stretch pies row until _scaleLineGraph snaps it back.
+    fixed_h = int(VH * 13 / 9 + 0.5)
+
     return (
         f'<svg viewBox="0 0 {VW} {VH}" preserveAspectRatio="none" '
         f'data-vw="{VW}" data-vh="{VH}" xmlns="http://www.w3.org/2000/svg" '
-        f'class="insights-line-graph-svg" overflow="visible">'
+        f'class="insights-line-graph-svg" style="height:{fixed_h}px" overflow="visible">'
         f'<path class="insights-line-area" d="{area_d}" fill="var(--rust)" opacity="0.12"/>'
         + ''.join(grid_parts)
         + f'<polyline class="insights-line-path" points="{pts_str}" fill="none" stroke="var(--rust)" '
