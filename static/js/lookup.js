@@ -166,8 +166,21 @@
 
     // Cross-hover: hovering any .insights-filter-row highlights matching peers
     function _clearCrossHover(d) {
-        d.querySelectorAll('.insights-filter-hover').forEach(function(r) {
-            r.classList.remove('insights-filter-hover');
+        d.querySelectorAll('.insights-filter-hover, .is-pt-hover').forEach(function(r) {
+            r.classList.remove('insights-filter-hover', 'is-pt-hover');
+        });
+    }
+
+    // A line graph dims everything but the focused point(s); the focus state is the
+    // presence of a hovered, cross-hovered, or selected point. Recompute it on each
+    // hover/select change rather than relying on :has()/<g>:hover.
+    function _refreshLineFocus(d) {
+        d.querySelectorAll('.insights-line-graph-svg').forEach(function(svg) {
+            var focused = svg.querySelector(
+                '.insights-line-pt.is-pt-hover,' +
+                '.insights-line-pt.insights-filter-hover,' +
+                '.insights-line-pt.insights-filter-active');
+            svg.classList.toggle('is-pt-focused', !!focused);
         });
     }
 
@@ -186,11 +199,30 @@
                     r.classList.add('insights-filter-hover');
                 }
             });
+
+            // Hovering an Added History line-graph point marks it as the hovered
+            // point (so the graph dims everything else) and scrolls the matching
+            // year row to the top of the (often single-row-tall) breakdown table,
+            // so the hovered year is the one visible in the scroll window.
+            if (row.closest('.insights-line-graph-wrap') && row.classList.contains('insights-line-pt')) {
+                row.classList.add('is-pt-hover');
+                var scrollEl = dash.querySelector('.insights-added-scroll');
+                var tr = scrollEl && scrollEl.querySelector(
+                    'tr.insights-filter-row[data-filter-field="' + field +
+                    '"][data-filter-value="' + value + '"]');
+                if (tr) {
+                    var top = scrollEl.scrollTop +
+                        (tr.getBoundingClientRect().top - scrollEl.getBoundingClientRect().top);
+                    scrollEl.scrollTo({ top: top, behavior: 'smooth' });
+                }
+            }
+            _refreshLineFocus(dash);
         });
         dash.addEventListener('mouseout', function(e) {
             var row = e.target.closest('.insights-filter-row');
             if (!row || row.contains(e.relatedTarget)) return;
             _clearCrossHover(dash);
+            _refreshLineFocus(dash);
         });
     });
 
@@ -262,6 +294,55 @@
                     row.classList.remove('insights-filter-flash');
                 }, { once: true });
             }
+
+            _refreshLineFocus(dash);
         });
     });
+
+    // Line graph visual scaling.
+    // The SVG uses preserveAspectRatio="none" so the line reflows to the available
+    // width while text labels and dots stay non-distorted. We pin the SVG height to
+    // VH * (13/9) so that:
+    //   • y-scale = 13/9 → font-size 9 SVG units renders at exactly 13px CSS
+    //     (matching rec-sf-name in the adjacent breakdown table)
+    //   • ROW_H 18 SVG units renders at 18 * 13/9 = 26px CSS, matching the table
+    //     row height so gridlines align with rows
+    // An inverse x-scale transform is applied to text and circle elements to undo
+    // the horizontal stretch introduced by preserveAspectRatio="none".
+    (function() {
+        function _scaleLineGraph(svg) {
+            var VW = parseFloat(svg.dataset.vw || '312');
+            var VH = parseFloat(svg.dataset.vh || '106');
+            var svgW = svg.getBoundingClientRect().width;
+            if (!svgW) return;
+
+            // Fixed height: keeps labels at 13px and gridlines at 26px regardless
+            // of the graph's container width.
+            var fixedH = Math.round(VH * 13 / 9);
+            svg.style.height = fixedH + 'px';
+
+            // Undo the horizontal stretch so labels and dots stay non-distorted.
+            var xCorr = (fixedH / VH) / (svgW / VW);  // yScale / xScale
+
+            svg.querySelectorAll(':scope > text').forEach(function(el) {
+                var x = parseFloat(el.getAttribute('x')) || 0;
+                el.setAttribute('transform',
+                    'translate(' + x + ',0) scale(' + xCorr + ',1) translate(' + (-x) + ',0)');
+            });
+
+            svg.querySelectorAll(':scope > .insights-line-pt, :scope > circle.insights-line-dot').forEach(function(el) {
+                var c = el.tagName.toLowerCase() === 'circle' ? el : el.querySelector('circle');
+                var xref = c ? (parseFloat(c.getAttribute('cx')) || 0) : 0;
+                el.setAttribute('transform',
+                    'translate(' + xref + ',0) scale(' + xCorr + ',1) translate(' + (-xref) + ',0)');
+            });
+        }
+
+        var lineSvgs = document.querySelectorAll('.insights-line-graph-svg[data-vw]');
+        if (!lineSvgs.length || !window.ResizeObserver) return;
+        var ro = new ResizeObserver(function(entries) {
+            entries.forEach(function(e) { _scaleLineGraph(e.target); });
+        });
+        lineSvgs.forEach(function(svg) { ro.observe(svg); });
+    })();
 })();

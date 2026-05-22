@@ -141,8 +141,12 @@ def bar_chart_html(segments, filter_field=''):
     return f'<div class="insights-bar-chart">{"".join(rows)}</div>'
 
 
-def line_graph_svg(year_data):
-    """SVG line graph for added-year history. year_data: [(year, count), ...] sorted ascending."""
+def line_graph_svg(year_data, filter_field='added_year'):
+    """SVG line graph for added-year history. year_data: [(year, count), ...] sorted ascending.
+
+    filter_field, when set, marks each data point as an interactive `insights-filter-row`
+    carrying data-filter-field/value attributes, so the points behave like pie slices
+    (cross-hover highlight + click-to-toggle the matching year filter)."""
     if not year_data:
         return ''
     years  = [d[0] for d in year_data]
@@ -184,7 +188,7 @@ def line_graph_svg(year_data):
 
     # Chart height is driven by label count: each y-axis label gets ROW_H px.
     ROW_H = 18
-    VW    = 260
+    VW    = 312  # scaled from 260 to match the 60/50 card-width ratio (genre card: 50%→60%)
     PL_DATA   = 40
     Y_LABEL_X = 20
     GRID_X1   = Y_LABEL_X + 5   # gridlines start just after y-axis labels
@@ -257,18 +261,33 @@ def line_graph_svg(year_data):
             f'font-size="9" fill="var(--ink-muted)">{years[i]}</text>'
         )
 
-    # Data point dots
-    dot_parts = [
-        f'<circle cx="{x:.1f}" cy="{y:.1f}" r="2.5" fill="var(--rust)"/>'
-        for x, y in pts
-    ]
+    # Data point dots. When filter_field is set each dot is wrapped in an interactive
+    # group (a transparent r=7 hit-circle gives a comfortable hover/click target around
+    # the small visible dot) carrying the filter attributes, so it behaves like a pie
+    # slice: cross-hover highlights the matching year row and click toggles its filter.
+    dot_parts = []
+    for i, (x, y) in enumerate(pts):
+        if filter_field:
+            ff = (f' data-filter-field="{_html.escape(filter_field)}"'
+                  f' data-filter-value="{_html.escape(str(years[i]))}"')
+            dot_parts.append(
+                f'<g class="insights-line-pt insights-filter-row"{ff}>'
+                f'<circle cx="{x:.1f}" cy="{y:.1f}" r="7" fill="transparent"/>'
+                f'<circle class="insights-line-dot" cx="{x:.1f}" cy="{y:.1f}" r="2.5" fill="var(--rust)"/>'
+                f'</g>'
+            )
+        else:
+            dot_parts.append(
+                f'<circle class="insights-line-dot" cx="{x:.1f}" cy="{y:.1f}" r="2.5" fill="var(--rust)"/>'
+            )
 
     return (
-        f'<svg viewBox="0 0 {VW} {VH}" xmlns="http://www.w3.org/2000/svg" '
+        f'<svg viewBox="0 0 {VW} {VH}" preserveAspectRatio="none" '
+        f'data-vw="{VW}" data-vh="{VH}" xmlns="http://www.w3.org/2000/svg" '
         f'class="insights-line-graph-svg" overflow="visible">'
-        f'<path d="{area_d}" fill="var(--rust)" opacity="0.12"/>'
+        f'<path class="insights-line-area" d="{area_d}" fill="var(--rust)" opacity="0.12"/>'
         + ''.join(grid_parts)
-        + f'<polyline points="{pts_str}" fill="none" stroke="var(--rust)" '
+        + f'<polyline class="insights-line-path" points="{pts_str}" fill="none" stroke="var(--rust)" '
         f'stroke-width="2" stroke-linejoin="round" stroke-linecap="round"/>'
         + ''.join(dot_parts)
         + ''.join(label_parts)

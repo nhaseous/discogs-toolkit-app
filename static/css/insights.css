@@ -77,10 +77,14 @@
 }
 
 .insights-pies-row > .rec-breakdown-section {
-    flex: 1;
+    flex: 2;
     min-width: 0;
     display: flex;
     flex-direction: column;
+}
+
+.insights-pies-row > .insights-three-toggle {
+    flex: 3;
 }
 
 .insights-format-sub {
@@ -92,7 +96,23 @@
     margin-bottom: 8px;
 }
 
-.insights-format-sub--lower { margin-top: 14px; }
+.insights-format-sub--lower { margin-top: 14px; margin-bottom: 3px; }
+
+/* Merged Year panel: flex column so Added History section can be pushed to the bottom.
+   Reset flex:1 on .rec-pie-wrap (from results.css) or it fills the stretched panel
+   height and inflates yPieH, collapsing the tryMerge() available-space calculation. */
+.insights-three-toggle > [data-panel="year"] {
+    display: flex;
+    flex-direction: column;
+}
+
+.insights-three-toggle > [data-panel="year"] .rec-pie-wrap {
+    flex: none;
+}
+
+.insights-three-toggle > [data-panel="year"] .insights-format-sub--lower {
+    margin-top: auto;
+}
 
 .insights-bar-chart {
     display: flex;
@@ -103,7 +123,7 @@
 
 .insights-bar-row {
     display: grid;
-    grid-template-columns: minmax(0, 1.1fr) minmax(60px, 1.6fr) auto;
+    grid-template-columns: minmax(0, 1.4fr) minmax(60px, 1.6fr) auto;
     align-items: center;
     column-gap: 10px;
     font-size: 13px;
@@ -169,6 +189,36 @@
 .insights-added-scroll {
     overflow: hidden;
     scrollbar-gutter: stable;
+}
+
+/* Merged state: graph (flex:1) + slim table side by side */
+.insights-added-body {
+    display: flex;
+    gap: 12px;
+    align-items: flex-start;
+}
+.insights-added-body > .insights-line-graph-wrap {
+    flex: 1;
+    min-width: 0;
+    margin-bottom: 0;
+}
+.insights-added-body > .insights-added-scroll {
+    flex: none;
+    max-height: 153px; /* VH (106) × 13/9: matches fixed graph height */
+    overflow-y: auto;
+}
+.insights-added-body .rec-breakdown-table {
+    width: auto;
+}
+.insights-added-body .rec-sf-name {
+    width: auto;
+    white-space: nowrap;
+}
+.insights-added-body .rec-sf-money {
+    width: auto;
+}
+.insights-added-body .rec-breakdown-table td {
+    padding-left: 4px;
 }
 
 .insights-filter-row {
@@ -240,6 +290,53 @@
 
 .rec-pie-path.insights-filter-flash {
     animation: insights-pie-flash 0.35s ease-out forwards;
+}
+
+/* Line-graph point interactivity (mirrors pie-slice behavior).
+   Focus state is driven by JS (`.is-pt-focused` on the svg, `.is-pt-hover` on the
+   hovered point) rather than `:has()`/`<g>:hover`, which behaved inconsistently. */
+.insights-line-pt.insights-filter-row { cursor: pointer; }
+
+.insights-line-dot { transition: r 0.12s ease, opacity 0.12s ease, filter 0.12s ease; }
+.insights-line-path,
+.insights-line-area { transition: opacity 0.12s ease; }
+
+.insights-line-pt.is-pt-hover .insights-line-dot,
+.insights-line-pt.insights-filter-hover .insights-line-dot {
+    r: 4;
+    filter: brightness(1.14);
+}
+
+/* Selected point: enlarged with a dark high-contrast ring and a rust glow so it
+   reads clearly against the line and the cream background. */
+.insights-line-pt.insights-filter-active .insights-line-dot {
+    r: 5;
+    stroke: var(--rust);
+    stroke-width: 1.5;
+    filter: drop-shadow(0 0 3px color-mix(in srgb, var(--rust) 65%, transparent));
+}
+
+/* Dim the rest of the graph (line, area, other dots) while a point is
+   hovered/cross-hovered/selected, so only the focused point stands out — same
+   intent as the pie's sibling-slice dimming. */
+.insights-line-graph-svg.is-pt-focused .insights-line-path { opacity: 0.25; }
+.insights-line-graph-svg.is-pt-focused .insights-line-area { opacity: 0.04; }
+.insights-line-graph-svg.is-pt-focused .insights-line-dot  { opacity: 0.28; }
+
+/* Keep the focused point(s) fully opaque */
+.insights-line-graph-svg.is-pt-focused .insights-line-pt.is-pt-hover .insights-line-dot,
+.insights-line-graph-svg.is-pt-focused .insights-line-pt.insights-filter-hover .insights-line-dot,
+.insights-line-graph-svg.is-pt-focused .insights-line-pt.insights-filter-active .insights-line-dot {
+    opacity: 1;
+}
+
+@keyframes insights-line-pt-flash {
+    from { filter: brightness(1.6); }
+    to   { filter: brightness(1); }
+}
+
+.insights-line-pt.insights-filter-flash .insights-line-dot {
+    animation: insights-line-pt-flash 0.35s ease-out forwards;
 }
 
 @media (max-width: 768px) {

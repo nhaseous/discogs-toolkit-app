@@ -266,7 +266,10 @@ def render_insights_dashboard(insights, kind='collection'):
         'var firstRow=scrollEl?scrollEl.querySelector("tr"):null;'
         'var yTitleH=yTitle?yTitle.offsetHeight:34;'
         'var yPieH=yPieWrap?yPieWrap.offsetHeight:0;'
-        'var graphH=gWrap?gWrap.offsetHeight+10:92;'
+        'var gSvg=gWrap?gWrap.querySelector("[data-vh]"):null;'
+'var gVH=gSvg?parseFloat(gSvg.dataset.vh||"106"):106;'
+'var fixedH=Math.round(gVH*13/9);'
+'var graphH=gWrap?Math.min(gWrap.offsetHeight,fixedH):fixedH;'
         'var rowH=firstRow?firstRow.offsetHeight:30;'
         # Measure the card height with the Added panel pulled OUT of the grid, so the
         # full table no longer dictates the card size. The card then reflects the year
@@ -277,10 +280,10 @@ def render_insights_dashboard(insights, kind='collection'):
         'var cardH=wrap.offsetHeight;'
         'addedPanel.style.display="";'
         'var available=cardH-yTitleH-yPieH;'
-        # HEAD = subheader block (~36 incl its 22px margins) + the title's 10px
-        # bottom margin, none of which show up in the offsetHeight readings above.
-        # Folding them in keeps the merged panel from overflowing and growing the card.
-        'var HEAD=46;'
+        # HEAD = title's 10px bottom margin + sub-label height (~14px) + sub-label
+        # margin-bottom (3px). Sub-label margin-top is `auto` in the flex-column year
+        # panel (resolves to 0 at minimum), so it no longer adds to the minimum HEAD.
+        'var HEAD=27;'
         # Require room for the subheader + graph. The scroll always shows at least one
         # row (Math.max(rowH,...) below); when the slack is just short of one row the
         # card grows by at most one row height. With more slack we show more rows and
@@ -291,17 +294,22 @@ def render_insights_dashboard(insights, kind='collection'):
         'sub.className="insights-format-sub insights-format-sub--lower";'
         'sub.textContent="Added History";'
         'yearPanel.appendChild(sub);'
-        'if(gWrap)yearPanel.appendChild(gWrap);'
-        'if(scrollEl)yearPanel.appendChild(scrollEl);'
+        'var body=document.createElement("div");'
+        'body.className="insights-added-body";'
+        'if(gWrap)body.appendChild(gWrap);'
+        'if(scrollEl)body.appendChild(scrollEl);'
+        'yearPanel.appendChild(body);'
         'if(addedPanel.parentNode)addedPanel.parentNode.removeChild(addedPanel);'
         'var addedBtn=yearPanel.querySelector(".insights-toggle-switch[data-goto=\'added\']");'
         'if(addedBtn&&addedBtn.parentNode)addedBtn.parentNode.removeChild(addedBtn);'
         # Genre Breakdown stays the default-open panel (server-rendered default); the
         # merged Year+Added panel is reached via its "/ Year" toggle.
-        'if(scrollEl){'
-        'scrollEl.style.maxHeight=Math.max(rowH,available-HEAD-graphH)+"px";'
-        'scrollEl.style.overflow="";scrollEl.style.overflowY="auto";'
-        '}'
+        # Clear any inline overflow/maxHeight set by sizeScroll() so the CSS rules
+        # for .insights-added-body > .insights-added-scroll take over (max-height and
+        # overflow-y are set there to match the fixed graph height).
+        'requestAnimationFrame(function(){'
+        'if(scrollEl){scrollEl.style.maxHeight="";scrollEl.style.overflow="";scrollEl.style.overflowY="";}'
+        '});'
         'wrap._locked=true;wrap._merged=true;'
         '})();'
         'wrap.querySelectorAll(".insights-toggle-switch").forEach(function(btn){'
