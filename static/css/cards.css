@@ -213,11 +213,12 @@
     padding: 6px 0 0;
 }
 
-/* The per-card margin-bottom slack (set inline by grid.js) only exists to align
-   thumbnails across columns while collapsed. Once a card expands, drop it so the
-   spacing below the card returns to the normal column gap. !important overrides
+/* grid.js sets per-card margin-bottom slack inline: while collapsed it aligns
+   thumbnails across columns; while expanded it pads each card up to the tallest
+   card's height so thumbnails stay aligned everywhere. Hovering a collapsed card
+   drops its slack so it can lift cleanly — but only on hover, which never happens
+   in expanded mode, so the expanded slack is left intact. !important overrides
    the inline style. */
-.match-grid--expanded .match-card,
 .match-card--active {
     margin-bottom: 0 !important;
 }

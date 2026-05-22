@@ -426,5 +426,14 @@ function _withLookupScroll(action) {
                 g.classList.toggle("match-grid--expanded", on);
             });
         });
+        // Card heights settle once the body expand/collapse transition (~0.28s)
+        // finishes; re-run the layout then to set the alignment slack from the final
+        // heights. A second, later pass corrects any cards whose height settles a bit
+        // later (e.g. lazy images / web fonts) — the margin transition keeps it smooth.
+        [320, 800].forEach(function(delay) {
+            setTimeout(function() {
+                if (window._layoutMatchGrids) window._layoutMatchGrids();
+            }, delay);
+        });
     });
 })();

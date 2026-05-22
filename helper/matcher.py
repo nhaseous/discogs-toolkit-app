@@ -7,7 +7,7 @@ import re
 # Discogs Collection Matcher Module
 # Compares a user's collection against another user's wantlist via the Discogs REST API.
 
-from helper.api import fetch_all_pages, clean_artist, RateLimitError
+from helper.api import fetch_all_pages, clean_artist, clean_format_descriptions, RateLimitError
 
 ## Get ##
 
@@ -39,7 +39,7 @@ def get_collection(username, scraper, auth=None):
             "artist":           artist,
             "title":            title,
             "format":           fmt,
-            "format_descriptions": fmt_descriptions,
+            "format_descriptions": clean_format_descriptions(fmt_info.get("descriptions")),
             "format_text":      fmt_text,
             "thumb":            info.get("thumb", ""),
             "cover_image":      info.get("cover_image", ""),

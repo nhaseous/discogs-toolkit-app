@@ -219,3 +219,31 @@ def get_user_profile(username, scraper, auth=None):
 def clean_artist(artist_info):
     name = artist_info.get("anv") or artist_info.get("name", "")
     return re.sub(r'\s*\(\d+\)$', '', name).strip()
+
+# Format descriptors that add noise rather than identify a release; dropped when
+# we render an item's format-desc.
+_FORMAT_DESC_OMIT = {"mono", "stereo"}
+
+# Display-only abbreviations for verbose descriptors, keyed by the lower-cased
+# descriptor. These shorten the string shown on match-cards only — the raw
+# descriptions (format_tags) keep their full text so the Insights Dashboard still
+# aggregates and filters on e.g. "Limited Edition".
+_FORMAT_DESC_ABBREV = {
+    "limited edition": "Ltd",
+    "special edition": "S/Edition",
+    "white label":     "W/Lbl",
+    "picture disc":    "Pic Disc",
+    "deluxe edition":  "Deluxe",
+}
+
+def clean_format_descriptions(descriptions):
+    """Join a release's format descriptions for match-card display: omit noise
+    tags like "Mono"/"Stereo" and abbreviate verbose descriptors. Display only —
+    the source list is left untouched for Insights/filtering."""
+    out = []
+    for d in (descriptions or []):
+        key = d.strip().lower()
+        if key in _FORMAT_DESC_OMIT:
+            continue
+        out.append(_FORMAT_DESC_ABBREV.get(key, d))
+    return ", ".join(out)

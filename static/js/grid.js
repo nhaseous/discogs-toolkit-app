@@ -14,7 +14,43 @@
     // the title→format gap constant. margin-bottom is measured from the info
     // height, which never changes between collapsed/expanded, so this is safe
     // to run in either state.
+    // When "expand all cards" is on, every card body is open and a card's height
+    // varies with how much content it has. Pad the space below each card up to the
+    // tallest card IN THE SAME ROW so the next row's thumbnails line up across all
+    // columns — without touching anything inside the card. Equalizing per row (not
+    // per page) keeps one unusually tall card from adding a big gap below every
+    // other card.
+    function equalizeExpandedCards(grid) {
+        var cols = Array.from(grid.querySelectorAll('.match-column'));
+        if (!cols.length) return;
+        var numRows = Math.max.apply(null, cols.map(function(c) { return c.children.length; }));
+        for (var row = 0; row < numRows; row++) {
+            // Measure with getBoundingClientRect().height (sub-pixel) rather than
+            // offsetHeight (rounded to whole px) so the per-card padding sums to the
+            // exact row height — integer rounding here would otherwise accumulate
+            // into visibly drifting thumbnails further down the page.
+            var items = [];
+            cols.forEach(function(col) {
+                var card = col.children[row];
+                if (card) {
+                    card.style.marginBottom = '';
+                    items.push({ card: card, h: card.getBoundingClientRect().height });
+                }
+            });
+            if (!items.length) continue;
+            var maxH = Math.max.apply(null, items.map(function(o) { return o.h; }));
+            items.forEach(function(o) {
+                var delta = maxH - o.h;
+                o.card.style.marginBottom = delta ? delta.toFixed(2) + 'px' : '';
+            });
+        }
+    }
+
     function equalizeCardRows(grid) {
+        if (grid.classList.contains('match-grid--expanded')) {
+            equalizeExpandedCards(grid);
+            return;
+        }
         var cols = Array.from(grid.querySelectorAll('.match-column'));
         if (!cols.length) return;
         var numRows = Math.max.apply(null, cols.map(function(c) { return c.children.length; }));

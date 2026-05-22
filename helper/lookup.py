@@ -8,6 +8,7 @@ import html as _html, json, math, os, re
 
 from helper.api import (
     fetch_all_pages, request_with_retry, get_user_profile, make_api_session, clean_artist,
+    clean_format_descriptions,
     UserNotFoundError, CollectionPrivateError, WantlistPrivateError, ListPrivateError,
     RateLimitError, CloudflareBlockedError
 )
@@ -60,7 +61,7 @@ def get_collection(username, scraper, auth=None, budget=None):
         title = info.get("title", "")
         fmt_info = info["formats"][0] if info.get("formats") else {}
         fmt = _extract_formats(info.get("formats"))
-        fmt_descriptions = ", ".join(fmt_info.get("descriptions") or [])
+        fmt_descriptions = clean_format_descriptions(fmt_info.get("descriptions"))
         fmt_text = fmt_info.get("text", "")
         release_id = info.get("id", "")
 
@@ -114,7 +115,7 @@ def get_wantlist(username, scraper, auth=None, budget=None):
         title = info.get("title", "")
         fmt_info = info["formats"][0] if info.get("formats") else {}
         fmt = _extract_formats(info.get("formats"))
-        fmt_descriptions = ", ".join(fmt_info.get("descriptions") or [])
+        fmt_descriptions = clean_format_descriptions(fmt_info.get("descriptions"))
         fmt_text = fmt_info.get("text", "")
         release_id = info.get("id", "")
 
