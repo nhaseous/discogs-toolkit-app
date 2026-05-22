@@ -250,6 +250,8 @@ def render_insights_dashboard(insights, kind='collection'):
         'if(wh>0){'
         'if(sc){sc.style.maxHeight=Math.max(60,wh-th-gh)+"px";sc.style.overflow="";sc.style.overflowY="auto";}'
         'wrap._locked=true;'
+        'var yp=wrap.querySelector(":scope>[data-panel=\'year\']");'
+        'if(yp)yp.classList.add("year-pie-centered");'
         '}'
         '};'
         '(function tryMerge(){'

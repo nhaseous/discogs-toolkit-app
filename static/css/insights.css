@@ -83,10 +83,6 @@
     flex-direction: column;
 }
 
-.insights-pies-row > .insights-three-toggle {
-    flex: 3;
-}
-
 .insights-format-sub {
     font-size: 11px;
     font-weight: 600;
@@ -96,21 +92,33 @@
     margin-bottom: 8px;
 }
 
-.insights-format-sub--lower { margin-top: 14px; margin-bottom: 3px; }
+.insights-format-sub--lower { margin-top: 10px; margin-bottom: 10px; }
 
-/* Merged Year panel: flex column so Added History section can be pushed to the bottom.
-   Reset flex:1 on .rec-pie-wrap (from results.css) or it fills the stretched panel
-   height and inflates yPieH, collapsing the tryMerge() available-space calculation. */
-.insights-three-toggle > [data-panel="year"] {
+/* Genre and Year panels: flex column so the pie can be centered vertically. */
+.insights-three-toggle > [data-panel="year"],
+.insights-three-toggle > [data-panel="genre"] {
     display: flex;
     flex-direction: column;
 }
 
+/* Year panel: keep pie at natural height so tryMerge() measures yPieH accurately.
+   JS adds .year-pie-centered (in sizeScroll) when merge is skipped, enabling centering. */
 .insights-three-toggle > [data-panel="year"] .rec-pie-wrap {
     flex: none;
 }
 
-.insights-three-toggle > [data-panel="year"] .insights-format-sub--lower {
+/* Year panel (non-merged): center pie vertically. */
+.insights-three-toggle > [data-panel="year"].year-pie-centered .rec-pie-wrap {
+    flex: 1;
+}
+
+/* Format Breakdown card: prevent its pie wraps from stretching in the flex-column card. */
+.insights-pies-row > .rec-breakdown-section:not(.insights-three-toggle) .rec-pie-wrap {
+    flex: none;
+}
+
+.insights-three-toggle > [data-panel="year"] .insights-format-sub--lower,
+.insights-pies-row > .rec-breakdown-section .insights-format-sub--lower {
     margin-top: auto;
 }
 
@@ -160,6 +168,7 @@
 }
 
 .insights-pies-row > .insights-three-toggle {
+    flex: 3;
     display: grid;
 }
 .insights-three-toggle > .insights-panel {
@@ -170,6 +179,7 @@
 
 .insights-format-panels-wrap {
     display: grid;
+    margin-bottom: 10px;
 }
 .insights-format-panels-wrap > .insights-panel {
     grid-row: 1;

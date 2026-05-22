@@ -87,8 +87,6 @@
     background: color-mix(in srgb, var(--ink) 6%, transparent);
 }
 
-.sidebar-user {  }
-
 .sidebar-avatar {
     width: 28px;
     height: 28px;
