@@ -32,17 +32,38 @@ class RequestBudget:
             self._remaining -= 1
             return True
 
+def _build_api_session():
+    s = requests.Session()
+    adapter = requests.adapters.HTTPAdapter(pool_connections=20, pool_maxsize=20)
+    s.mount("https://", adapter)
+    s.mount("http://", adapter)
+    return s
+
+# Module-level session shared across all REST API callers. requests.Session is
+# safe for concurrent reads from its connection pool; we never set per-user state
+# on it (auth is passed per-call via OAuth1 tuples, and Discogs's API doesn't
+# use cookies). Sharing one session across requests keeps TLS/TCP connections
+# warm between lookups so subsequent lookups skip the handshake.
+_API_SESSION = _build_api_session()
+
+
 def make_api_session():
     """
-    Returns a plain requests.Session for Discogs REST API calls (api.discogs.com).
+    Returns the shared requests.Session for Discogs REST API calls (api.discogs.com).
 
     The REST API is NOT behind Cloudflare, so there's no reason to route these
     calls through cloudscraper: it only adds Cloudflare challenge-solving overhead
     (and an extra TLS fingerprinting layer) for endpoints that never challenge.
     cloudscraper is reserved for the HTML-scraping endpoints on www.discogs.com,
     which is the only place a Cloudflare interstitial actually appears.
+
+    The HTTPAdapter caps the connection pool at 20. A lookup fans out 4 top-level
+    fetches, each with its own 5-worker pool — combined burst exceeds the default
+    10, so urllib3 would discard sockets and force fresh TLS handshakes. The
+    pool is now also long-lived across requests, so the second-and-later lookup
+    by a given process reuses already-established connections.
     """
-    return requests.Session()
+    return _API_SESSION
 
 class UserNotFoundError(Exception):
     pass

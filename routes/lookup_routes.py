@@ -81,9 +81,11 @@ def lookuppage():
             insights = insights_helper.get_collection_insights(collection, total_value=total_value)
             insights_html = insights_helper.render_insights_dashboard(insights)
 
-        if wantlist and not user_not_found and not cap_exceeded:
-            wantlist_insights = insights_helper.get_collection_insights(wantlist)
-            wantlist_insights_html = insights_helper.render_insights_dashboard(wantlist_insights, kind='wantlist')
+        # Wantlist insights are rendered lazily on first wantlist tab click via the
+        # /lookup/insights endpoint, so a viewer who never opens that tab pays no
+        # cost for aggregating + rendering them. The wantlist JSON is already on
+        # the page (the lookup-data script block), so the lazy fetch sends that
+        # back rather than refetching the wantlist from Discogs.
 
         if list_id and not user_not_found and not rate_limited and not cap_exceeded:
             try:
@@ -127,6 +129,21 @@ def lookuppage():
         show_platter=has_results,
         title='User Lookup'
     )
+
+
+@lookup_bp.route("/lookup/insights", methods=["POST"])
+def lookup_insights():
+    # Lazy-render endpoint for wantlist insights — the page POSTs back the
+    # already-shipped wantlist items (from the lookup-data script block) and
+    # gets HTML in return. Avoids re-fetching the wantlist from Discogs.
+    data = request.get_json(silent=True) or {}
+    items = data.get("items") or []
+    kind = data.get("kind", "wantlist")
+    if not items:
+        return jsonify({"html": ""})
+    insights = insights_helper.get_collection_insights(items)
+    html = insights_helper.render_insights_dashboard(insights, kind=kind)
+    return jsonify({"html": html})
 
 
 @lookup_bp.route("/lookup/list")

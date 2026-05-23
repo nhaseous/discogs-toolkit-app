@@ -131,7 +131,47 @@
     var wantDash = document.getElementById('wantlist-insights-dash');
     var dashes = [collDash, wantDash].filter(Boolean);
 
+    // Wantlist insights are rendered lazily on first tab activation — fetch once,
+    // inject right after the collection dashboard, then treat as a normal wantDash.
+    var wantlistFetchState = 'idle';  // idle | loading | done
+    function _ensureWantlistInsights(onReady) {
+        if (wantlistFetchState === 'done') { if (onReady) onReady(); return; }
+        if (wantlistFetchState === 'loading') return;
+        var dataEl = document.querySelector('.lookup-data[data-tab="wantlist"]');
+        if (!dataEl) return;
+        var items;
+        try { items = JSON.parse(dataEl.textContent); } catch (e) { return; }
+        if (!items || !items.length) { wantlistFetchState = 'done'; return; }
+        wantlistFetchState = 'loading';
+        fetch('/lookup/insights', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ items: items, kind: 'wantlist' })
+        }).then(function(r) { return r.json(); }).then(function(d) {
+            if (d && d.html) {
+                var anchor = collDash || document.querySelector('.lookup-mosaic-wrap');
+                if (anchor && anchor.parentNode) {
+                    anchor.insertAdjacentHTML('afterend', d.html);
+                    wantDash = document.getElementById('wantlist-insights-dash');
+                    if (wantDash && dashes.indexOf(wantDash) === -1) {
+                        dashes.push(wantDash);
+                        if (typeof _bindDashListeners === 'function') _bindDashListeners(wantDash);
+                    }
+                }
+            }
+            wantlistFetchState = 'done';
+            if (onReady) onReady();
+        }).catch(function() {
+            wantlistFetchState = 'idle';  // allow retry on next tab activation
+        });
+    }
+
     window._onLookupTabChange = function(tabName) {
+        if (tabName === 'wantlist' && wantlistFetchState !== 'done') {
+            _ensureWantlistInsights(function() {
+                if (window._onLookupTabChange) window._onLookupTabChange(tabName);
+            });
+        }
         if (collDash) {
             collDash.style.display = (tabName === 'wantlist') ? 'none' : '';
             collDash.classList.toggle('insights-filters-disabled', tabName !== 'collection');
@@ -184,7 +224,9 @@
         });
     }
 
-    dashes.forEach(function(dash) {
+    function _bindDashListeners(dash) {
+        if (!dash || dash._listenersBound) return;
+        dash._listenersBound = true;
         dash.addEventListener('mouseover', function(e) {
             var row = e.target.closest('.insights-filter-row');
             if (!row || row.contains(e.relatedTarget)) return;
@@ -224,9 +266,11 @@
             _clearCrossHover(dash);
             _refreshLineFocus(dash);
         });
-    });
+        _bindDashClick(dash);
+    }
+    window._bindDashListeners = _bindDashListeners;
 
-    dashes.forEach(function(dash) {
+    function _bindDashClick(dash) {
         var dashTab = (dash === wantDash) ? 'wantlist' : 'collection';
         dash.addEventListener('click', function(e) {
             var expandBtn = e.target.closest('.breakdown-expand');
@@ -297,7 +341,9 @@
 
             _refreshLineFocus(dash);
         });
-    });
+    }
+
+    dashes.forEach(_bindDashListeners);
 
     // Line graph visual scaling.
     // The SVG uses preserveAspectRatio="none" so the line reflows to the available

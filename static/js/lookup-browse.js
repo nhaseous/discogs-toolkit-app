@@ -342,12 +342,13 @@ function _withLookupScroll(action) {
         syncControls(tabName);
         if (window._layoutMatchGrids) window._layoutMatchGrids();
     };
-    pagTabs.forEach(function(tab) {
-        applyPage(tab.getAttribute("data-tab"), 1);
-    });
+    // Only paginate the active tab on initial load — hidden tabs (wantlist, lists)
+    // get their first applyPage() lazily on tab activation via _applyTabPage().
+    // Saves the HTML build + DOM insertion for ~50 cards in tabs the user may never open.
     var initTab = document.querySelector(".lookup-tab.active");
     if (initTab) {
         var initName = initTab.getAttribute("data-tab");
+        applyPage(initName, 1);
         syncControls(initName);
         if (window._layoutMatchGrids) window._layoutMatchGrids();
     }
