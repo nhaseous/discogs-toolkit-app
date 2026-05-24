@@ -14,27 +14,6 @@
     padding: 30px 0 0;
     display: flex;
     flex-direction: column;
-
-    a:not(.sidebar-brand) {
-        display: flex;
-        align-items: center;
-        padding: 9px 22px;
-        color: var(--ink-soft);
-        font-weight: 500;
-        border-left: 3px solid transparent;
-
-        &:hover {
-            background: color-mix(in srgb, var(--rust) 6%, transparent);
-            color: var(--rust);
-            text-decoration: none;
-        }
-
-        &.active {
-            border-left-color: var(--rust);
-            color: var(--rust);
-            background: color-mix(in srgb, var(--rust) 8%, transparent);
-        }
-    }
 }
 
 .sidebar-brand {
@@ -42,61 +21,108 @@
     align-items: center;
     gap: 12px;
     padding: 0 22px 22px;
-    margin-bottom: 8px;
+    margin-bottom: 4px;
     border-bottom: 1px solid var(--rule);
     color: var(--ink) !important;
     text-decoration: none !important;
 }
 
+/* ---- Nav sections ---- */
+
+.sidebar-nav {
+    flex: 1 1 0;
+}
+
+.sidebar-section {
+    margin-bottom: 2px;
+}
+
 .sidebar-label {
-    font-size: 10px;
-    font-weight: 600;
+    font-size: 9.5px;
+    font-weight: 700;
     color: var(--ink-muted);
     text-transform: uppercase;
-    letter-spacing: 0.14em;
-    padding: 14px 22px 8px;
+    letter-spacing: 0.16em;
+    padding: 14px 22px 4px;
 }
+
+.sidebar-nav a {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 2px 10px;
+    padding: 7px 12px;
+    color: var(--ink-soft);
+    font-size: 13.5px;
+    font-weight: 500;
+    border-radius: 8px;
+    background: var(--paper-alt);
+    border: 1px solid var(--rule);
+    box-shadow: 0 2.5px 0 var(--rule-strong);
+    text-decoration: none;
+    transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+
+    &:hover {
+        color: var(--ink);
+        background: color-mix(in srgb, var(--ink) 5%, var(--paper-alt));
+        transform: translateY(-1px);
+        box-shadow: 0 3.5px 0 var(--rule-strong);
+        text-decoration: none;
+    }
+
+    &.active {
+        color: var(--ink);
+        background: var(--focus-ring-amber);
+        border-color: var(--rule-strong);
+        box-shadow: 0 2.5px 0 color-mix(in srgb, var(--ink) 18%, var(--rule-strong));
+    }
+}
+
+.nav-icon {
+    width: 14px;
+    height: 14px;
+    flex-shrink: 0;
+    opacity: 0.6;
+    transition: opacity 0.12s ease;
+}
+
+.sidebar-nav a:hover .nav-icon,
+.sidebar-nav a.active .nav-icon {
+    opacity: 1;
+}
+
+/* ---- Auth section ---- */
 
 .sidebar-auth {
     margin-top: auto;
-    padding: 14px 0 0;
+    padding: 12px 0 0;
     border-top: 1px solid var(--rule);
 }
 
-.sidebar-auth-link {
-    display: block;
-    font-size: 0.78rem;
-    font-weight: 500;
-    letter-spacing: 0.04em;
-    padding: 7px 20px;
-    border-left: 2px solid transparent;
-    color: var(--ink-soft);
-    text-decoration: none;
+.sidebar-user {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    padding: 10px 20px 14px;
 }
 
-.sidebar-login-link {
-    color: var(--rust);
-    border-left-color: var(--rust);
-    background: color-mix(in srgb, var(--rust) 6%, transparent);
-}
-
-.sidebar-login-link:hover { background: color-mix(in srgb, var(--rust) 12%, transparent); }
-
-.sidebar-logout-link:hover {
-    color: var(--ink);
-    background: color-mix(in srgb, var(--ink) 6%, transparent);
+.sidebar-user-info {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+    min-width: 0;
 }
 
 .sidebar-avatar {
-    width: 28px;
-    height: 28px;
+    width: 32px;
+    height: 32px;
     border-radius: 50%;
     object-fit: cover;
     flex-shrink: 0;
 }
 
 .sidebar-username {
-    font-size: 0.8rem;
+    font-size: 13px;
     font-weight: 600;
     color: var(--ink);
     white-space: nowrap;
@@ -106,6 +132,47 @@
 
     &:hover { text-decoration: underline; text-underline-offset: 3px; }
 }
+
+.sidebar-logout-link {
+    font-size: 11px;
+    color: var(--ink-muted);
+    text-decoration: none;
+
+    &:hover {
+        color: var(--ink-soft);
+        text-decoration: underline;
+        text-underline-offset: 2px;
+    }
+}
+
+.sidebar-login-link {
+    display: flex;
+    align-items: center;
+    gap: 9px;
+    margin: 2px 10px 14px;
+    padding: 7px 12px;
+    font-size: 13.5px;
+    font-weight: 500;
+    border-radius: 8px;
+    color: var(--rust);
+    background: color-mix(in srgb, var(--rust) 10%, var(--card));
+    border: 1px solid color-mix(in srgb, var(--rust) 35%, var(--rule));
+    box-shadow: 0 2.5px 0 color-mix(in srgb, var(--rust) 30%, var(--rule-strong));
+    text-decoration: none;
+    transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.12s ease;
+
+    &:hover {
+        background: color-mix(in srgb, var(--rust) 15%, var(--card));
+        transform: translateY(-1px);
+        box-shadow: 0 3.5px 0 color-mix(in srgb, var(--rust) 30%, var(--rule-strong));
+        text-decoration: none;
+    }
+
+    .nav-icon { opacity: 0.75; }
+    &:hover .nav-icon { opacity: 1; }
+}
+
+/* ---- Sidebar art ---- */
 
 .sidebar-art {
     border-top: 1px solid var(--rule);
@@ -127,6 +194,8 @@
     .sidebar { display: none; }
 }
 
+/* ---- Platter ---- */
+
 .sidebar-platter {
     position: absolute;
     width: 73px;
@@ -139,6 +208,8 @@
 }
 
 .sidebar-platter.spinning { animation: rotate 3s linear infinite; }
+
+/* ---- Brand ---- */
 
 .brand-icon {
     width: 34px;
