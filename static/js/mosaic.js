@@ -124,7 +124,7 @@
                 outgoing.style.transform = "";
                 outgoing.style.opacity = "";
                 if (!incoming) wrap.style.minHeight = "";
-            }, { once: true });
+            });
         }
 
         if (incoming) {
@@ -144,7 +144,7 @@
                         incoming.style.transform = "";
                         incoming.style.opacity = "";
                         wrap.style.minHeight = "";
-                    }, { once: true });
+                    });
                 });
             });
         } else if (!outgoing) {
