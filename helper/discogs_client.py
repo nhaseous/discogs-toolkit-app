@@ -6,6 +6,57 @@ import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from helper.common import API_HEADERS as _API_HEADERS
 
+# Given a seller username, returns a list of the releases in their inventory and their item ids.
+def get_inventory_ids(username, scraper, auth=None):
+
+    API_URL = "https://api.discogs.com/users/{0}/inventory".format(username)
+
+    new_list = []
+    seen_ids = {}  # release_id -> index in new_list
+    page = 1
+
+    while True:
+        resp = scraper.get(API_URL, headers=_API_HEADERS, params={"page": page, "per_page": 100, "sort": "price", "sort_order": "asc", "status": "For Sale"}, auth=auth, timeout=20)
+
+        if resp.status_code in (401, 403):
+            print("get_inventory_ids: API access blocked (HTTP {0})".format(resp.status_code))
+            return new_list
+
+        data = resp.json()
+
+        for listing in data.get("listings", []):
+            release = listing.get("release", {})
+            release_id = str(release.get("id", ""))
+            listing_id = str(listing.get("id", ""))
+            title = release.get("title", "")
+            artist = release.get("artist", "")
+            fmt = release.get("format", "")
+            thumbnail_url = release.get("thumbnail", "")
+
+            if artist and fmt:
+                display_title = "{0} - {1} ({2})".format(artist, title, fmt)
+            elif artist:
+                display_title = "{0} - {1}".format(artist, title)
+            elif fmt:
+                display_title = "{0} ({1})".format(title, fmt)
+            else:
+                display_title = title
+
+            if release_id:
+                if release_id not in seen_ids:
+                    seen_ids[release_id] = len(new_list)
+                    new_list.append([display_title, release_id, thumbnail_url, [listing_id]])
+                else:
+                    new_list[seen_ids[release_id]][3].append(listing_id)
+
+        pagination = data.get("pagination", {})
+        if page >= pagination.get("pages", 1):
+            break
+        page += 1
+
+    return new_list
+
+
 _MAX_WORKERS = 5
 
 
@@ -82,6 +133,21 @@ class RateLimitError(Exception):
 
 class CloudflareBlockedError(Exception):
     pass
+
+def is_cf_blocked(resp):
+    """Detect a Cloudflare interstitial in a marketplace HTML response.
+
+    Cloudflare returns 403/503 with a cloudflare-branded page when the request
+    is challenged, and occasionally a 200 with the challenge body inline; both
+    cases need to abort the scrape so the loader can retry rather than parse
+    a useless body.
+    """
+    if resp.status_code in (403, 503):
+        return 'cloudflare' in resp.text.lower()
+    if resp.status_code == 200:
+        text = resp.text.lower()
+        return 'cloudflare' in text and any(m in text for m in ('cf-browser-verification', 'just a moment', 'sorry, you have been blocked'))
+    return False
 
 def _safe_json(resp):
     try:
@@ -236,6 +302,85 @@ def get_user_profile(username, scraper, auth=None):
     if resp and resp.status_code == 200:
         return _safe_json(resp) or {}
     return {}
+
+def reprice_listings(listings, auth):
+    """Reprice a batch of the signed-in user's marketplace listings.
+
+    For each listing: fetch its current data, compute the new price (an explicit
+    ``custom_price`` if supplied, otherwise undercut the cheapest competitor),
+    then POST the update. Returns a per-listing result list. ``auth`` is the
+    caller's OAuth1 object; the route is responsible for authenticating the user.
+    """
+    results = []
+    scraper = make_api_session()
+
+    for item in listings:
+        lid = str(item.get("id", ""))
+        seller_price = float(item.get("seller_price", 0))
+        cheapest_price = float(item.get("cheapest_price", 0))
+
+        if not lid:
+            results.append({"id": lid, "status": "error", "message": "Missing listing id"})
+            continue
+
+        custom_price_raw = item.get("custom_price")
+        if custom_price_raw is not None:
+            new_price = round(float(custom_price_raw), 2)
+        else:
+            pct = (seller_price - cheapest_price) / cheapest_price * 100 if cheapest_price > 0 else 0
+            new_price = seller_price * 0.9 if pct > 10 else cheapest_price - 0.5
+            new_price = round(new_price, 2)
+
+        base_url = "https://api.discogs.com/marketplace/listings/{}".format(lid)
+
+        get_resp = request_with_retry(scraper, "GET", base_url, headers=_API_HEADERS, auth=auth)
+        if get_resp is None or get_resp.status_code != 200:
+            status = "HTTP {}".format(get_resp.status_code) if get_resp is not None else "no response"
+            results.append({"id": lid, "status": "error", "message": "GET failed: {}".format(status)})
+            continue
+
+        ld = _safe_json(get_resp) or {}
+        shipping = float((ld.get("shipping_price") or {}).get("value") or 0)
+        old_price = float((ld.get("price") or {}).get("value") or 0)
+
+        final_price = round(new_price - shipping, 2)
+        if final_price <= 0:
+            results.append({"id": lid, "status": "error", "message": "Price after shipping would be ${:.2f}".format(final_price)})
+            continue
+
+        release_id = (ld.get("release") or {}).get("id")
+        condition = ld.get("condition", "")
+        sleeve_condition = ld.get("sleeve_condition", "")
+        status = ld.get("status", "For Sale")
+        comments = ld.get("comments", "")
+        allow_offers = ld.get("allow_offers")
+        external_id = ld.get("external_id", "")
+        location = ld.get("location", "")
+
+        if not release_id or not condition:
+            results.append({"id": lid, "status": "error", "message": "Could not read listing fields"})
+            continue
+
+        post_body = {"release_id": release_id, "condition": condition, "price": final_price, "status": status}
+        if sleeve_condition:
+            post_body["sleeve_condition"] = sleeve_condition
+        if comments:
+            post_body["comments"] = comments
+        if allow_offers is not None:
+            post_body["allow_offers"] = allow_offers
+        if external_id:
+            post_body["external_id"] = external_id
+        if location:
+            post_body["location"] = location
+
+        post_resp = request_with_retry(scraper, "POST", base_url, headers=_API_HEADERS, auth=auth, json=post_body)
+        if post_resp is not None and post_resp.status_code in (200, 204):
+            results.append({"id": lid, "status": "success", "old_price": old_price, "new_price": final_price, "shipping": shipping})
+        else:
+            status = "HTTP {} — {}".format(post_resp.status_code, post_resp.text[:200]) if post_resp is not None else "no response"
+            results.append({"id": lid, "status": "error", "message": "POST failed: {}".format(status)})
+
+    return results
 
 def clean_artist(artist_info):
     name = artist_info.get("anv") or artist_info.get("name", "")

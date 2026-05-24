@@ -51,13 +51,13 @@
     cursor: pointer;
     &:hover {
         border-color: color-mix(in srgb, var(--red) 38%, transparent);
-        box-shadow: 0 0 0 3px rgba(200, 32, 32, 0.08);
+        box-shadow: 0 0 0 3px var(--focus-ring-danger);
     }
 }
 
 .result-card.reprice-selected {
     border-color: var(--red);
-    box-shadow: 0 0 0 3px rgba(200, 32, 32, 0.14);
+    box-shadow: 0 0 0 3px var(--focus-ring-danger-strong);
     position: relative;
 }
 
@@ -66,7 +66,7 @@
 #reprice-overlay {
     position: fixed;
     inset: 0;
-    background: rgba(0, 0, 0, 0.42);
+    background: var(--scrim);
     z-index: 100;
     pointer-events: none;
 }
@@ -113,7 +113,7 @@ a.reprice-new { color: var(--green-text); font-weight: 600; }
 
     &:focus {
         border-color: var(--amber);
-        box-shadow: 0 0 0 2px rgba(165, 121, 28, 0.18);
+        box-shadow: 0 0 0 2px var(--focus-ring-amber);
     }
 
     &::-webkit-inner-spin-button, &::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }

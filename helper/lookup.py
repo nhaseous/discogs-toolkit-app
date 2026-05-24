@@ -1,7 +1,7 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import html as _html, json, re
 
-from helper.api import (
+from helper.discogs_client import (
     fetch_all_pages, request_with_retry, get_user_profile, make_api_session, clean_artist,
     clean_format_descriptions,
     UserNotFoundError, CollectionPrivateError, WantlistPrivateError, ListPrivateError,
@@ -31,6 +31,31 @@ def _extract_formats(formats_list):
             result.append(name)
     return result
 
+def _release_dict(info, date_added=None):
+    """Build the match-grid release dict from a Discogs `basic_information` block.
+    date_added is collection-only; pass None to omit it (used for wantlist/list)."""
+    fmt_info = info["formats"][0] if info.get("formats") else {}
+    release_id = info.get("id", "")
+    out = {
+        "artist": _extract_artists(info.get("artists")),
+        "title": info.get("title", ""),
+        "format": _extract_formats(info.get("formats")),
+        "format_descriptions": clean_format_descriptions(fmt_info.get("descriptions")),
+        "format_text": fmt_info.get("text", ""),
+        "format_tags": fmt_info.get("descriptions") or [],
+        "thumb": info.get("thumb", ""),
+        "cover_image": info.get("cover_image", ""),
+        "url": "https://www.discogs.com/release/{0}".format(release_id) if release_id else "",
+        "stats": "",
+        "genres": info.get("genres") or [],
+        "styles": info.get("styles") or [],
+        "year": info.get("year", 0),
+        "labels": [l.get("name", "") for l in (info.get("labels") or []) if l.get("name")],
+    }
+    if date_added is not None:
+        out["date_added"] = date_added
+    return out
+
 def get_collection(username, scraper, auth=None, budget=None):
     url = "https://api.discogs.com/users/{0}/collection/folders/0/releases".format(username)
     params = {"sort": "artist", "sort_order": "asc"}
@@ -49,34 +74,7 @@ def get_collection(username, scraper, auth=None, budget=None):
         raise CollectionPrivateError(username)
 
     for r in releases:
-        info = r["basic_information"]
-        artists = _extract_artists(info.get("artists"))
-        title = info.get("title", "")
-        fmt_info = info["formats"][0] if info.get("formats") else {}
-        fmt = _extract_formats(info.get("formats"))
-        fmt_descriptions = clean_format_descriptions(fmt_info.get("descriptions"))
-        fmt_text = fmt_info.get("text", "")
-        release_id = info.get("id", "")
-
-        # Metadata for aggregation in the Insights Dashboard.
-        labels = [l.get("name", "") for l in (info.get("labels") or []) if l.get("name")]
-        results.append({
-            "artist": artists,
-            "title": title,
-            "format": fmt,
-            "format_descriptions": fmt_descriptions,
-            "format_text": fmt_text,
-            "format_tags": fmt_info.get("descriptions") or [],
-            "thumb": info.get("thumb", ""),
-            "cover_image": info.get("cover_image", ""),
-            "url": "https://www.discogs.com/release/{0}".format(release_id) if release_id else "",
-            "stats": "",
-            "genres": info.get("genres") or [],
-            "styles": info.get("styles") or [],
-            "year": info.get("year", 0),
-            "labels": labels,
-            "date_added": r.get("date_added", ""),
-        })
+        results.append(_release_dict(r["basic_information"], date_added=r.get("date_added", "")))
 
     partial_warning = ""
     if expected_total and len(results) < expected_total:
@@ -103,32 +101,7 @@ def get_wantlist(username, scraper, auth=None, budget=None):
         raise WantlistPrivateError(username)
 
     for w in wants:
-        info = w["basic_information"]
-        artists = _extract_artists(info.get("artists"))
-        title = info.get("title", "")
-        fmt_info = info["formats"][0] if info.get("formats") else {}
-        fmt = _extract_formats(info.get("formats"))
-        fmt_descriptions = clean_format_descriptions(fmt_info.get("descriptions"))
-        fmt_text = fmt_info.get("text", "")
-        release_id = info.get("id", "")
-
-        labels = [l.get("name", "") for l in (info.get("labels") or []) if l.get("name")]
-        results.append({
-            "artist": artists,
-            "title": title,
-            "format": fmt,
-            "format_descriptions": fmt_descriptions,
-            "format_text": fmt_text,
-            "format_tags": fmt_info.get("descriptions") or [],
-            "thumb": info.get("thumb", ""),
-            "cover_image": info.get("cover_image", ""),
-            "url": "https://www.discogs.com/release/{0}".format(release_id) if release_id else "",
-            "stats": "",
-            "genres": info.get("genres") or [],
-            "styles": info.get("styles") or [],
-            "year": info.get("year", 0),
-            "labels": labels,
-        })
+        results.append(_release_dict(w["basic_information"]))
 
     partial_warning = ""
     if expected_total and len(results) < expected_total:
@@ -156,6 +129,7 @@ def get_lists(username, scraper, auth=None, budget=None):
             "id": lst.get("id", ""),
             "name": lst.get("name", ""),
             "description": lst.get("description", ""),
+            "url": lst.get("uri", ""),
         })
     return results
 
@@ -173,7 +147,7 @@ def _get_list_releases_api(list_id, scraper, auth=None):
 
     base = []
     for item in items:
-        if item.get("type") != "release":
+        if item.get("type") not in ("release", "master"):
             continue
 
         display_title = item.get("display_title", "")

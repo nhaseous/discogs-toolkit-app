@@ -6,6 +6,7 @@
 
 {% block extra_js %}
 <script>window.TOOLKIT_CONFIG = { session_user: {{ session_user | tojson }} };</script>
+<script src="/static/v{{ static_v }}/js/mosaic.js"></script>
 <script src="/static/v{{ static_v }}/js/pricechecker.js"></script>
 <script src="/static/v{{ static_v }}/js/reprice.js"></script>
 {% endblock %}

@@ -340,16 +340,8 @@
                 var releaseId = card.id.replace("card-", "");
                 var listingIds = [];
                 try { listingIds = JSON.parse(card.getAttribute("data-listing-ids") || "[]"); } catch(e) {}
-                fetch("/refresh_card", {
-                    method: "POST",
-                    headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({
-                        seller: seller, release_id: releaseId, listing_ids: listingIds,
-                        title: card.getAttribute("data-title") || "",
-                        thumbnail: card.getAttribute("data-thumb") || ""
-                    })
-                })
-                .then(function(r) { return r.json(); })
+                
+                ToolkitAPI.refreshCard(seller, releaseId, listingIds, card.getAttribute("data-title") || "", card.getAttribute("data-thumb") || "")
                 .then(function(d) {
                     if (d.inner_html) {
                         var numRight = card.querySelector(".card-number-right");
@@ -393,14 +385,8 @@
                 return;
             }
             submitBtn.textContent = "Updating " + (i + 1) + " of " + total + "…";
-            fetch("/reprice", {
-                method: "POST",
-                headers: {"Content-Type": "application/json"},
-                body: JSON.stringify({listings: [listings[i]], seller: _seller})
-            })
-            .then(function(r) {
-                return r.json().then(function(data) { return {ok: r.ok, status: r.status, data: data}; });
-            })
+            
+            ToolkitAPI.reprice(_seller, [listings[i]])
             .then(function(res) {
                 if (!res.ok) {
                     submitBtn.disabled = false;

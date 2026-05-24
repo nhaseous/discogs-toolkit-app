@@ -358,7 +358,7 @@
     letter-spacing: 0.06em;
     text-transform: uppercase;
     white-space: nowrap;
-    box-shadow: 0 3px 10px rgba(43, 29, 18, 0.22);
+    box-shadow: var(--shadow-pop);
     transform: translate(14px, 14px);
 }
 

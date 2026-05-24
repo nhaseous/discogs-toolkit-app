@@ -11,6 +11,7 @@
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap">
     <link rel="stylesheet" href="/static/v{{ static_v }}/css/vars.css">
+    <link rel="stylesheet" href="/static/v{{ static_v }}/css/main.css">
     <link rel="stylesheet" href="/static/v{{ static_v }}/css/sidebar.css">
     {% if request.path == '/' %}
     <link rel="stylesheet" href="/static/v{{ static_v }}/css/tools.css">
@@ -70,6 +71,8 @@
     </main>
 </div>
 <div id="badge-tooltip"></div>
+<script src="/static/v{{ static_v }}/js/app-client.js"></script>
+<script src="/static/v{{ static_v }}/js/utils.js"></script>
 <script src="/static/v{{ static_v }}/js/main.js"></script>
 {% block extra_js %}{% endblock %}
 </body>

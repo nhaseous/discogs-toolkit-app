@@ -7,3 +7,315 @@
 {% block extra_js %}
 <script src="/static/v{{ static_v }}/js/records.js"></script>
 {% endblock %}
+
+{% block content %}
+
+{# ── Helpers ──────────────────────────────────────────────────────────────────── #}
+
+{% macro stat_card(label, value, sub='', value_class='') %}
+<div class="rec-stat-card">
+  <div class="rec-stat-label">{{ label | safe }}</div>
+  <div class="rec-stat-value{{ (' ' + value_class) if value_class else '' }}">{{ value | safe }}</div>
+  {% if sub %}<div class="rec-stat-sub">{{ sub | safe }}</div>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro fmt_money(val) -%}
+  {%- if val is not none and val != '' -%}${{ '{:,.2f}'.format(val) }}{%- endif -%}
+{%- endmacro %}
+
+{% macro fmt_cost(raw, val) -%}
+  {%- set s = (raw | string).strip() -%}
+  {%- if not s or s == '---' -%}
+    <span class="rec-free">Free</span>
+  {%- elif val is not none -%}
+    ${{ '{:,.2f}'.format(val) }}
+  {%- else -%}
+    {{ raw }}
+  {%- endif -%}
+{%- endmacro %}
+
+{% macro sf_tabs(tab_id, subfolders) %}
+<div class="rec-sf-tabs" id="rec-sf-tabs-{{ tab_id }}">
+  <button class="rec-sf-tab active" data-sf="__all__">All</button>
+  {%- for sf in subfolders if sf.records -%}
+    <button class="rec-sf-tab" data-sf="{{ sf.name }}">{{ sf.name }}</button>
+  {%- endfor %}
+</div>
+{% endmacro %}
+
+{% macro toolbar(tab_id) %}
+<div class="rec-toolbar">
+  <input type="text" class="rec-search" placeholder="Search artist or album&hellip;" id="rec-search-{{ tab_id }}" autocomplete="off">
+  <span class="rec-count" id="rec-count-{{ tab_id }}"></span>
+</div>
+{% endmacro %}
+
+{# ── Page header ──────────────────────────────────────────────────────────────── #}
+
+<div class="page-header">
+  <div class="page-eyebrow">Vault</div>
+  <h2>My <em>Records</em></h2>
+</div>
+
+{# ── Dashboard ────────────────────────────────────────────────────────────────── #}
+
+<div class="rec-dashboard">
+
+  {# Collection + Inventory group #}
+  <div class="rec-dash-group" data-tab-group="col-inv">
+    <div class="rec-stat-grid">
+      {{ stat_card('Collection Value',       fmt_money(stats.col_median_total), stats.col_count ~ ' records') }}
+      {{ stat_card('Collection &middot; Spent', fmt_money(stats.col_cost_total),   stats.col_count ~ ' records') }}
+      {{ stat_card('Inventory &middot; Spent',  fmt_money(stats.inv_total_total),  stats.inv_count ~ ' records') }}
+    </div>
+    <div class="rec-breakdown">
+
+      <div class="rec-breakdown-pane" data-breakdown-pane="collection">
+        {%- if stats.col_sf_stats | selectattr('count') | list %}
+        <div class="rec-breakdown-section">
+          <div class="rec-breakdown-title">Collection</div>
+          <table class="rec-breakdown-table"><tbody>
+            {%- for s in stats.col_sf_stats if s.count %}
+            <tr>
+              <td class="rec-sf-name">{{ s.name or '—' }}</td>
+              <td class="rec-sf-count">{{ s.count }}</td>
+              <td class="rec-sf-money">{{ fmt_money(s.median_total) }}</td>
+              <td class="rec-sf-label">median</td>
+              <td class="rec-sf-money">{{ fmt_money(s.cost_total) }}</td>
+              <td class="rec-sf-label">spent</td>
+            </tr>
+            {%- endfor %}
+          </tbody></table>
+        </div>
+        {{ charts_pie_section('Breakdown', stats.col_pie_segs, size=130, radius=130 * 0.42, stroke='var(--bg)', path_class='') | safe }}
+        {%- endif %}
+      </div>
+
+      <div class="rec-breakdown-pane" data-breakdown-pane="inventory" style="display:none;opacity:0">
+        {%- if stats.inv_sf_stats | selectattr('count') | list %}
+        <div class="rec-breakdown-section">
+          <div class="rec-breakdown-title">Inventory</div>
+          <table class="rec-breakdown-table"><tbody>
+            {%- for s in stats.inv_sf_stats if s.count %}
+            <tr>
+              <td class="rec-sf-name">{{ s.name or '—' }}</td>
+              <td class="rec-sf-count">{{ s.count }}</td>
+              <td class="rec-sf-money">{{ fmt_money(s.total_total) }}</td>
+              <td class="rec-sf-label">spent</td>
+            </tr>
+            {%- endfor %}
+          </tbody></table>
+        </div>
+        {{ charts_pie_section('Breakdown', stats.inv_pie_segs, size=130, radius=130 * 0.42, stroke='var(--bg)', path_class='') | safe }}
+        {%- endif %}
+      </div>
+
+    </div>
+  </div>
+
+  {# Sold group #}
+  <div class="rec-dash-group" data-tab-group="sold" style="display:none;opacity:0">
+    {%- set net = stats.net %}
+    <div class="rec-stat-grid">
+      {{ stat_card('Net Sales',              fmt_money(stats.sold_for_total), stats.sold_count ~ ' sold') }}
+      {{ stat_card('Sold &middot; Gross',    fmt_money(net), value_class=('rec-stat-value--pos' if net >= 0 else 'rec-stat-value--neg')) }}
+      {{ stat_card('Sold &middot; Spent',    fmt_money(stats.sold_cost_total), stats.sold_count ~ ' records') }}
+    </div>
+    {%- if stats.sold_sf_stats | selectattr('count') | list %}
+    <div class="rec-breakdown">
+      <div class="rec-breakdown-section rec-breakdown-section--wide">
+        <div class="rec-breakdown-title">Sold by Year</div>
+        <table class="rec-breakdown-table"><tbody>
+          {%- for s in stats.sold_sf_stats if s.count %}
+          <tr>
+            <td class="rec-sf-name">{{ s.name or '—' }}</td>
+            <td class="rec-sf-count">{{ s.count }}</td>
+            <td class="rec-sf-money">{{ fmt_money(s.sold_for_total) }}</td>
+            <td class="rec-sf-label">made</td>
+            <td class="rec-sf-money">{{ fmt_money(s.cost_total) }}</td>
+            <td class="rec-sf-label">spent</td>
+            <td class="rec-sf-money {{ 'rec-stat-value--pos' if s.net >= 0 else 'rec-stat-value--neg' }}">{{ fmt_money(s.net) }}</td>
+            <td class="rec-sf-label">net</td>
+          </tr>
+          {%- endfor %}
+        </tbody></table>
+      </div>
+    </div>
+    {%- endif %}
+  </div>
+
+</div>{# /rec-dashboard #}
+
+{# ── Tabs ─────────────────────────────────────────────────────────────────────── #}
+
+<div class="rec-tabs-row">
+  <div class="rec-tabs">
+    <button class="rec-tab active" data-tab="collection">Collection ({{ col_count }})</button>
+    <button class="rec-tab" data-tab="inventory">Inventory ({{ inv_count }})</button>
+    <button class="rec-tab" data-tab="sold">Sold ({{ sol_count }})</button>
+  </div>
+</div>
+
+{# ── Collection panel ─────────────────────────────────────────────────────────── #}
+
+<div id="rec-panel-collection" class="rec-panel">
+  {%- if not collection %}
+  <div class="rec-empty">No collection data found.</div>
+  {%- else %}
+  {{ sf_tabs('collection', collection) }}
+  {{ toolbar('collection') }}
+  <div class="rec-table-wrap">
+    <table class="rec-table" id="rec-table-collection">
+      <thead><tr>
+        <th class="sortable" data-col="artist">Artist</th>
+        <th class="sortable" data-col="album">Album</th>
+        <th class="sortable" data-col="cost">Cost</th>
+        <th class="sortable" data-col="median">Median</th>
+        <th class="sortable" data-col="acquired">Acquired</th>
+        <th>Color</th>
+        <th>Type</th>
+        <th>#</th>
+        <th>Note</th>
+      </tr></thead>
+      <tbody>
+        {%- set ns = namespace(idx=0) -%}
+        {%- for sf in collection if sf.records -%}
+          <tr class="rec-sf-header" data-sf="{{ sf.name }}"><td colspan="9">{{ sf.name or '—' }}</td></tr>
+          {%- for r in sf.records -%}
+            <tr data-sf="{{ sf.name }}"
+                data-artist="{{ r.artist.lower() }}"
+                data-album="{{ r.album.lower() }}"
+                data-cost="{{ r.cost_val if r.cost_val is not none else '' }}"
+                data-median="{{ r.median_val if r.median_val is not none else '' }}"
+                data-acquired="{{ r.acquired }}"
+                data-idx="{{ ns.idx }}">
+              <td>{{ r.artist }}</td>
+              <td>{{ r.album }}</td>
+              <td>{{ fmt_cost(r.cost, r.cost_val) }}</td>
+              <td>{{ fmt_cost(r.median, r.median_val) }}</td>
+              <td>{{ r.acquired }}</td>
+              <td>{{ r.color }}</td>
+              <td>{{ r.type }}</td>
+              <td>{{ r.number }}</td>
+              <td class="rec-comment">{{ r.comment }}</td>
+            </tr>
+            {%- set ns.idx = ns.idx + 1 -%}
+          {%- endfor -%}
+        {%- endfor %}
+      </tbody>
+    </table>
+  </div>
+  {%- endif %}
+</div>
+
+{# ── Inventory panel ──────────────────────────────────────────────────────────── #}
+
+<div id="rec-panel-inventory" class="rec-panel" style="display:none">
+  {%- if not inventory %}
+  <div class="rec-empty">No inventory data found.</div>
+  {%- else %}
+  {{ sf_tabs('inventory', inventory) }}
+  {{ toolbar('inventory') }}
+  <div class="rec-table-wrap">
+    <table class="rec-table" id="rec-table-inventory">
+      <thead><tr>
+        <th class="sortable" data-col="artist">Artist</th>
+        <th class="sortable" data-col="album">Album</th>
+        <th class="sortable" data-col="cost">Cost</th>
+        <th class="sortable" data-col="total">Total</th>
+        <th>Type</th>
+        <th>Copies</th>
+        <th>Listed</th>
+        <th>Note</th>
+      </tr></thead>
+      <tbody>
+        {%- set ns = namespace(idx=0) -%}
+        {%- for sf in inventory if sf.records -%}
+          <tr class="rec-sf-header" data-sf="{{ sf.name }}"><td colspan="8">{{ sf.name or '—' }}</td></tr>
+          {%- for r in sf.records -%}
+            {%- set copies_s = (r.copies | string).strip() -%}
+            <tr data-sf="{{ sf.name }}"
+                data-artist="{{ r.artist.lower() }}"
+                data-album="{{ r.album.lower() }}"
+                data-cost="{{ r.cost_val if r.cost_val is not none else '' }}"
+                data-total="{{ r.total_val if r.total_val is not none else '' }}"
+                data-idx="{{ ns.idx }}">
+              <td>{{ r.artist }}</td>
+              <td>{{ r.album }}</td>
+              <td>{{ fmt_cost(r.cost, r.cost_val) }}</td>
+              <td>{{ fmt_cost(r.total, r.total_val) }}</td>
+              <td>{{ r.type }}</td>
+              <td>
+                {%- if copies_s.lower() == 'sealed' -%}
+                  <span class="rec-badge rec-badge--sealed">Sealed</span>
+                {%- elif copies_s -%}
+                  {%- if copies_s.isdigit() -%}&times;{{ copies_s | int }}{%- else -%}{{ copies_s }}{%- endif -%}
+                {%- endif -%}
+              </td>
+              <td>{% if r.listed %}<span class="rec-badge rec-badge--listed">Listed</span>{% endif %}</td>
+              <td class="rec-comment">{{ r.comment }}</td>
+            </tr>
+            {%- set ns.idx = ns.idx + 1 -%}
+          {%- endfor -%}
+        {%- endfor %}
+      </tbody>
+    </table>
+  </div>
+  {%- endif %}
+</div>
+
+{# ── Sold panel ───────────────────────────────────────────────────────────────── #}
+
+<div id="rec-panel-sold" class="rec-panel" style="display:none">
+  {%- if not sold %}
+  <div class="rec-empty">No sold records found.</div>
+  {%- else %}
+  {{ sf_tabs('sold', sold) }}
+  {{ toolbar('sold') }}
+  <div class="rec-table-wrap">
+    <table class="rec-table" id="rec-table-sold">
+      <thead><tr>
+        <th class="sortable" data-col="artist">Artist</th>
+        <th class="sortable" data-col="album">Album</th>
+        <th class="sortable" data-col="cost">Bought For</th>
+        <th class="sortable" data-col="sold-for">Sold For</th>
+        <th class="sortable" data-col="sold-for">Profit</th>
+        <th class="sortable" data-col="date">Date</th>
+        <th>Location</th>
+      </tr></thead>
+      <tbody>
+        {%- set ns = namespace(idx=0) -%}
+        {%- for sf in sold if sf.records -%}
+          <tr class="rec-sf-header" data-sf="{{ sf.name }}"><td colspan="7">{{ sf.name or '—' }}</td></tr>
+          {%- for r in sf.records -%}
+            <tr data-sf="{{ sf.name }}"
+                data-artist="{{ r.artist.lower() }}"
+                data-album="{{ r.album.lower() }}"
+                data-cost="{{ r.cost_val if r.cost_val is not none else '' }}"
+                data-sold-for="{{ r.sold_for_val if r.sold_for_val is not none else '' }}"
+                data-date="{{ r.sold_date }}"
+                data-idx="{{ ns.idx }}">
+              <td>{{ r.artist }}</td>
+              <td>{{ r.album }}</td>
+              <td>{{ fmt_cost(r.cost, r.cost_val) }}</td>
+              <td>{{ fmt_cost(r.sold_for, r.sold_for_val) }}</td>
+              {%- if r.sold_for_val is not none and r.cost_val is not none -%}
+                {%- set profit = r.sold_for_val - r.cost_val -%}
+                <td class="{{ 'rec-profit--pos' if profit >= 0 else 'rec-profit--neg' }}">${{ '{:,.2f}'.format(profit) }}</td>
+              {%- else -%}
+                <td></td>
+              {%- endif -%}
+              <td>{{ r.sold_date }}</td>
+              <td>{{ r.sold_location }}</td>
+            </tr>
+            {%- set ns.idx = ns.idx + 1 -%}
+          {%- endfor -%}
+        {%- endfor %}
+      </tbody>
+    </table>
+  </div>
+  {%- endif %}
+</div>
+
+{% endblock %}

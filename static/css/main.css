@@ -1,0 +1,154 @@
+/* =========================================================
+   main.css — global layout, typography, and shared patterns
+   ========================================================= */
+
+/* Shared Patterns (DRY Utilities) */
+
+/* Base Card Style */
+.search-bar,
+.result-card,
+.tool-card,
+.place-summary,
+.lookup-notice,
+.rec-stat-card,
+.rec-breakdown-section {
+    background: var(--card);
+    border: 1px solid var(--rule);
+    border-radius: 5px;
+    padding: 16px 20px;
+}
+
+/* Base Label / Eyebrow / Badge Style */
+.page-eyebrow,
+.hero-eyebrow,
+.card-title--label,
+.search-bar-label,
+.place-summary-title,
+.match-card-format,
+.match-card-format-desc,
+.rec-stat-label,
+.rec-breakdown-title,
+.rec-sf-header td,
+.reprice-btn,
+.reprice-action-btn,
+.reprice-spread-label,
+.isrecent-badge,
+.card-recency-badge,
+.card-low-badge,
+.card-old-badge,
+.card-high-badge,
+.card-cheapest-badge,
+.card-overpriced-badge,
+.card-watch-badge {
+    font-size: 11px;
+    font-weight: 700;
+    text-transform: uppercase;
+    letter-spacing: 0.1em;
+    color: var(--ink-muted);
+}
+
+/* Shared Transitions */
+.sidebar a,
+.sidebar-auth-link,
+.search-bar,
+.search-bar-submit,
+.inv-count-badge,
+.tool-card,
+.result-card,
+.match-card,
+.match-card-img,
+.place-nav-btn,
+.lookup-tab,
+.pag-btn,
+.pag-expand-btn,
+.rec-tab,
+.rec-sf-tab,
+.reprice-btn,
+.reprice-action-btn,
+.reprice-spread-input {
+    transition: all 0.15s ease;
+}
+
+/* Layout & Global containers */
+.layout {
+    display: flex;
+    min-height: 100vh;
+}
+
+.content {
+    margin-left: 220px;
+    padding: 40px 48px 64px;
+    max-width: 1040px;
+    width: 100%;
+
+    &.has-results { 
+        padding-top: 30px; 
+    }
+}
+
+.page-header {
+    padding-bottom: 20px;
+
+    h1, h2 {
+        font-weight: 550;
+        font-size: 34px;
+        color: var(--ink);
+        letter-spacing: -0.015em;
+        line-height: 1.1;
+
+        em {
+            color: var(--rust);
+            font-weight: 550;
+            font-style: oblique;
+        }
+    }
+}
+
+.page-eyebrow,
+.hero-eyebrow {
+    font-size: 11px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.16em;
+    color: var(--rust);
+    margin-bottom: 8px;
+}
+
+/* Responsive */
+@media (max-width: 900px) {
+    .content { margin-left: 0; padding: 24px 20px 48px; }
+}
+
+/* Print */
+@media print {
+    .sidebar, #badge-tooltip, #spinner, #lookup-pagination, .lookup-pagination { display: none !important; }
+    body { background: var(--paper) !important; }
+    .layout { display: block !important; min-height: 0 !important; }
+    .content {
+        margin-left: 0 !important;
+        padding: 0 !important;
+        max-width: none !important;
+        width: 100% !important;
+    }
+    #content-main { margin: 0 !important; padding: 0 !important; }
+    * {
+        -webkit-print-color-adjust: exact !important;
+        print-color-adjust: exact !important;
+    }
+    .match-card,
+    .rec-stat-card,
+    .rec-breakdown-section,
+    .tool-card,
+    .result-card,
+    .place-summary,
+    .lookup-notice {
+        break-inside: avoid;
+        page-break-inside: avoid;
+    }
+    .rec-breakdown-scroll {
+        overflow: visible !important;
+        max-height: none !important;
+    }
+    .breakdown-expandable .rec-breakdown-row-extra { display: table-row !important; }
+    .breakdown-expand { display: none !important; }
+}

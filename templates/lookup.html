@@ -8,6 +8,7 @@
 
 {% block extra_js %}
 <script src="/static/v{{ static_v }}/js/grid.js"></script>
+<script src="/static/v{{ static_v }}/js/mosaic.js"></script>
 <script src="/static/v{{ static_v }}/js/lookup-browse.js"></script>
 <script src="/static/v{{ static_v }}/js/records.js"></script>
 <script src="/static/v{{ static_v }}/js/lookup.js"></script>
@@ -67,8 +68,7 @@
             User <b>{{ username }}</b> was not found on Discogs. Check the username and try again.
         </div>
     {% else %}
-        {{ insights_html | safe }}
-        {{ wantlist_insights_html | safe }}
+        {%- if insights %}{% with kind = insights_kind %}{% include '_insights_fragment.html' %}{% endwith %}{% endif %}
 
         <div class="lookup-mosaic-wrap">
             <div id="lookup-mosaic-collection" class="lookup-mosaic mosaic{{ ' lookup-mosaic--inactive' if list_id else '' }}">
@@ -91,10 +91,10 @@
 
         <div class="lookup-tabs-row">
             <div class="lookup-tabs">
-                <button class="lookup-tab{{ '' if list_id else ' active' }}" data-tab="collection" data-count-text="Collection: {{ collection | length }} item{{ 's' if collection|length != 1 else '' }}">Collection ({{ collection | length }})</button>
-                <button class="lookup-tab" data-tab="wantlist" data-count-text="Wantlist: {{ wantlist | length }} item{{ 's' if wantlist|length != 1 else '' }}">Wantlist ({{ wantlist | length }})</button>
+                <button class="lookup-tab{{ '' if list_id else ' active' }}" data-tab="collection" {% if defer_collection_wantlist %}data-deferred="1" data-count-text="Collection"{% else %}data-count-text="Collection: {{ collection | length }} item{{ 's' if collection|length != 1 else '' }}"{% endif %}>Collection{% if not defer_collection_wantlist %} ({{ collection | length }}){% endif %}</button>
+                <button class="lookup-tab" data-tab="wantlist" {% if defer_collection_wantlist %}data-deferred="1" data-count-text="Wantlist"{% else %}data-count-text="Wantlist: {{ wantlist | length }} item{{ 's' if wantlist|length != 1 else '' }}"{% endif %}>Wantlist{% if not defer_collection_wantlist %} ({{ wantlist | length }}){% endif %}</button>
                 <button class="lookup-tab" data-tab="lists" data-count-text="Lists: {{ lists | length }} list{{ 's' if lists|length != 1 else '' }}">Lists ({{ lists | length }})</button>
-                {% if list_id %}<button class="lookup-tab active" data-tab="list" data-count-text="{{ list_name or 'List' }}: {{ list_releases | length }} release{{ 's' if list_releases|length != 1 else '' }}">{{ list_name or 'List' }} ({{ list_releases | length }})</button>{% endif %}
+                {% if list_id %}<button class="lookup-tab active" data-tab="list" data-count-text="{{ list_name or 'List' }}: {{ list_releases | length }} release{{ 's' if list_releases|length != 1 else '' }}" data-count-url="{{ list_url }}">{{ list_name or 'List' }} ({{ list_releases | length }})</button>{% endif %}
             </div>
             <div class="lookup-pagination" id="lookup-pagination">
                 <button class="pag-expand-btn" id="pag-expand-btn" type="button" title="Expand all cards">
@@ -121,7 +121,10 @@
         </div>
 
         <div id="lookup-panel-collection" class="lookup-panel">
-            {% if collection_error %}
+            {% if defer_collection_wantlist %}
+                <div class="match-grid"></div>
+                <script type="application/json" class="lookup-data" data-tab="collection" data-show-stats="0" data-total="0" data-deferred="1">[]</script>
+            {% elif collection_error %}
                 <div class="lookup-notice">{{ collection_error }}</div>
             {% elif collection %}
                 {% if collection_partial %}<div class="lookup-notice lookup-notice--warning">{{ collection_partial }}</div>{% endif %}
@@ -133,7 +136,10 @@
         </div>
 
         <div id="lookup-panel-wantlist" class="lookup-panel" style="display:none">
-            {% if wantlist_error %}
+            {% if defer_collection_wantlist %}
+                <div class="match-grid"></div>
+                <script type="application/json" class="lookup-data" data-tab="wantlist" data-show-stats="1" data-total="0" data-deferred="1">[]</script>
+            {% elif wantlist_error %}
                 <div class="lookup-notice">{{ wantlist_error }}</div>
             {% elif wantlist %}
                 {% if wantlist_partial %}<div class="lookup-notice lookup-notice--warning">{{ wantlist_partial }}</div>{% endif %}

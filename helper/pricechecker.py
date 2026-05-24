@@ -1,102 +1,19 @@
-import time
-import random
-import requests
 from bs4 import BeautifulSoup
 from datetime import date, datetime
 import threading
 import collections
 import re
-import json
-import html as _html
 collections.Callable = collections.abc.Callable
 
 _list_lock = threading.Lock()
-from helper.common import API_HEADERS as _HEADERS
 
 # Discogs Price Checker Module
 # Takes a public Discogs store inventory and returns pricing information on other listings on the market.
 
 ## Classes ##
 
-class CloudflareBlockedError(Exception):
-    pass
-
-def _is_cf_blocked(resp):
-    if resp.status_code in (403, 503):
-        return 'cloudflare' in resp.text.lower()
-    if resp.status_code == 200:
-        text = resp.text.lower()
-        return 'cloudflare' in text and any(m in text for m in ('cf-browser-verification', 'just a moment', 'sorry, you have been blocked'))
-    return False
-
-class FormattedEntry: # Formatted marketplace entry for a single release and its listings
-
-    def __init__(self,title,url,imgUrl,listings,place,total,lastSold,daysAgo,yearsAgo=None,index=0,price_badges="",listing_ids=None,reprice_data=None):
-        self.title = title
-        self.url = url
-        self.imgUrl = imgUrl
-        self.listings = listings
-        self.place = place
-        self.total = total
-        self.lastSold = lastSold
-        self.daysAgo = daysAgo
-        self.yearsAgo = yearsAgo
-        self.index = index
-        self.price_badges = price_badges
-        self.listing_ids = listing_ids if listing_ids is not None else []
-        self.reprice_data = reprice_data if reprice_data is not None else []
-
-## Get ##
-
-# Given a seller username, returns a list of the releases in their inventory and their item ids.
-def get_inventory_ids(username, scraper, auth=None):
-
-    API_URL = "https://api.discogs.com/users/{0}/inventory".format(username)
-
-    new_list = []
-    seen_ids = {}  # release_id -> index in new_list
-    page = 1
-
-    while True:
-        resp = scraper.get(API_URL, headers=_HEADERS, params={"page": page, "per_page": 100, "sort": "price", "sort_order": "asc", "status": "For Sale"}, auth=auth, timeout=20)
-
-        if resp.status_code in (401, 403):
-            print("get_inventory_ids: API access blocked (HTTP {0})".format(resp.status_code))
-            return new_list
-
-        data = resp.json()
-
-        for listing in data.get("listings", []):
-            release = listing.get("release", {})
-            release_id = str(release.get("id", ""))
-            listing_id = str(listing.get("id", ""))
-            title = release.get("title", "")
-            artist = release.get("artist", "")
-            fmt = release.get("format", "")
-            thumbnail_url = release.get("thumbnail", "")
-
-            if artist and fmt:
-                display_title = "{0} - {1} ({2})".format(artist, title, fmt)
-            elif artist:
-                display_title = "{0} - {1}".format(artist, title)
-            elif fmt:
-                display_title = "{0} ({1})".format(title, fmt)
-            else:
-                display_title = title
-
-            if release_id:
-                if release_id not in seen_ids:
-                    seen_ids[release_id] = len(new_list)
-                    new_list.append([display_title, release_id, thumbnail_url, [listing_id]])
-                else:
-                    new_list[seen_ids[release_id]][3].append(listing_id)
-
-        pagination = data.get("pagination", {})
-        if page >= pagination.get("pages", 1):
-            break
-        page += 1
-
-    return new_list
+from helper.models import FormattedEntry
+from helper.discogs_client import get_inventory_ids, reprice_listings, CloudflareBlockedError, is_cf_blocked as _is_cf_blocked
 
 # Given username and item_id, scrapes marketplace for listings and stores them in provided list.
 def get_listings(scraper, inventory_list, sorted_inventory_list, username, release_title, item_id, thumbnail_url, listing_ids, index):
@@ -328,95 +245,3 @@ def _parse_price_float(listing):
         return float(re.sub(r'[^\d.]', '', price_text))
     except (AttributeError, ValueError):
         return None
-
-
-## Reprice ##
-
-def reprice_listings(listings, auth):
-    """Reprice a batch of the signed-in user's marketplace listings.
-
-    For each listing: fetch its current data, compute the new price (an explicit
-    ``custom_price`` if supplied, otherwise undercut the cheapest competitor),
-    then POST the update. Returns a per-listing result list. ``auth`` is the
-    caller's OAuth1 object; the route is responsible for authenticating the user.
-    """
-    results = []
-    headers = {"User-Agent": "DiscogsToolkitApp/1.0"}
-
-    def _throttle(resp):
-        try:
-            remaining = int(resp.headers.get("X-Discogs-Ratelimit-Remaining", 20))
-            if remaining < 10:
-                time.sleep(2)
-        except (ValueError, TypeError):
-            pass
-
-    for item in listings:
-        lid = str(item.get("id", ""))
-        seller_price = float(item.get("seller_price", 0))
-        cheapest_price = float(item.get("cheapest_price", 0))
-
-        if not lid:
-            results.append({"id": lid, "status": "error", "message": "Missing listing id"})
-            continue
-
-        custom_price_raw = item.get("custom_price")
-        if custom_price_raw is not None:
-            new_price = round(float(custom_price_raw), 2)
-        else:
-            pct = (seller_price - cheapest_price) / cheapest_price * 100 if cheapest_price > 0 else 0
-            new_price = seller_price * 0.9 if pct > 10 else cheapest_price - 0.5
-            new_price = round(new_price, 2)
-
-        base_url = "https://api.discogs.com/marketplace/listings/{}".format(lid)
-
-        get_resp = requests.get(base_url, headers=headers, auth=auth)
-        _throttle(get_resp)
-
-        if get_resp.status_code != 200:
-            results.append({"id": lid, "status": "error", "message": "GET failed: HTTP {}".format(get_resp.status_code)})
-            continue
-
-        ld = get_resp.json()
-        shipping = float((ld.get("shipping_price") or {}).get("value") or 0)
-        old_price = float((ld.get("price") or {}).get("value") or 0)
-
-        final_price = round(new_price - shipping, 2)
-        if final_price <= 0:
-            results.append({"id": lid, "status": "error", "message": "Price after shipping would be ${:.2f}".format(final_price)})
-            continue
-
-        release_id = (ld.get("release") or {}).get("id")
-        condition = ld.get("condition", "")
-        sleeve_condition = ld.get("sleeve_condition", "")
-        status = ld.get("status", "For Sale")
-        comments = ld.get("comments", "")
-        allow_offers = ld.get("allow_offers")
-        external_id = ld.get("external_id", "")
-        location = ld.get("location", "")
-
-        if not release_id or not condition:
-            results.append({"id": lid, "status": "error", "message": "Could not read listing fields"})
-            continue
-
-        post_body = {"release_id": release_id, "condition": condition, "price": final_price, "status": status}
-        if sleeve_condition:
-            post_body["sleeve_condition"] = sleeve_condition
-        if comments:
-            post_body["comments"] = comments
-        if allow_offers is not None:
-            post_body["allow_offers"] = allow_offers
-        if external_id:
-            post_body["external_id"] = external_id
-        if location:
-            post_body["location"] = location
-
-        post_resp = requests.post(base_url, headers=headers, auth=auth, json=post_body)
-        _throttle(post_resp)
-
-        if post_resp.status_code in (200, 204):
-            results.append({"id": lid, "status": "success", "old_price": old_price, "new_price": final_price, "shipping": shipping})
-        else:
-            results.append({"id": lid, "status": "error", "message": "POST failed: HTTP {} — {}".format(post_resp.status_code, post_resp.text[:200])})
-
-    return results

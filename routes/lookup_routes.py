@@ -2,7 +2,7 @@ from flask import Blueprint, request, render_template, session, jsonify
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 from datetime import datetime
-from helper import lookup as lookup_helper, api as api_helper, insights as insights_helper, lookup_cache
+from helper import lookup as lookup_helper, discogs_client as api_helper, insights as insights_helper, lookup_cache
 from web_common import oauth_auth
 
 lookup_bp = Blueprint('lookup', __name__)
@@ -26,9 +26,14 @@ def lookuppage():
     collection_partial, wantlist_partial = "", ""
     loadtime, searched_at = "", ""
     list_name = ""
+    list_url = ""
     has_results = bool(username)
-    insights_html = ""
-    wantlist_insights_html = ""
+    insights = None
+
+    # When opening a specific list, defer collection + wantlist fetches until
+    # the user actually clicks those tabs. Saves several API calls (and the
+    # insights aggregation) per list view.
+    defer_collection_wantlist = bool(list_id)
 
     if username:
         start_time = time.time()
@@ -44,14 +49,16 @@ def lookuppage():
         budget = api_helper.RequestBudget(25) if auth is None else None
 
         _fetch_tasks = {
-            'collection': lambda: lookup_helper.get_collection(username, scraper, auth=auth, budget=budget),
-            'wantlist':   lambda: lookup_helper.get_wantlist(username, scraper, auth=auth, budget=budget),
             'lists':      lambda: lookup_helper.get_lists(username, scraper, auth=auth, budget=budget),
         }
+        if not defer_collection_wantlist:
+            _fetch_tasks['collection'] = lambda: lookup_helper.get_collection(username, scraper, auth=auth, budget=budget)
+            _fetch_tasks['wantlist']   = lambda: lookup_helper.get_wantlist(username, scraper, auth=auth, budget=budget)
 
-        # New: If looking at self, fetch collection value (1 extra call)
+        # New: If looking at self, fetch collection value (1 extra call). Skip
+        # when deferring — value is only used by collection insights.
         total_value = None
-        if session.get('discogs_username') and session['discogs_username'].lower() == username.lower():
+        if not defer_collection_wantlist and session.get('discogs_username') and session['discogs_username'].lower() == username.lower():
             _fetch_tasks['value'] = lambda: api_helper.get_collection_value(username, scraper, auth=auth)
 
         with ThreadPoolExecutor(max_workers=4) as _ex:
@@ -84,7 +91,6 @@ def lookuppage():
 
         if collection and not user_not_found and not cap_exceeded:
             insights = insights_helper.get_collection_insights(collection, total_value=total_value)
-            insights_html = insights_helper.render_insights_dashboard(insights)
 
         # Wantlist insights are rendered lazily on first wantlist tab click via the
         # /lookup/insights endpoint, so a viewer who never opens that tab pays no
@@ -101,6 +107,7 @@ def lookuppage():
                 cf_blocked_list = True
 
         list_name = next((l['name'] for l in lists if str(l['id']) == str(list_id)), "") if list_id else ""
+        list_url = next((l['url'] for l in lists if str(l['id']) == str(list_id)), "") if list_id else ""
 
         end_time = time.time()
         loadtime = round(end_time - start_time, 2)
@@ -131,6 +138,7 @@ def lookuppage():
         username=username,
         list_id=list_id,
         list_name=list_name,
+        list_url=list_url,
         collection=collection,
         wantlist=wantlist,
         lists=lists,
@@ -139,6 +147,7 @@ def lookuppage():
         wantlist_inline=wantlist_inline,
         list_releases_inline=list_releases_inline,
         needs_hydration=needs_hydration,
+        defer_collection_wantlist=defer_collection_wantlist,
         user_not_found=user_not_found,
         rate_limited=rate_limited,
         cap_exceeded=cap_exceeded,
@@ -153,8 +162,8 @@ def lookuppage():
         loadtime=loadtime,
         searched_at=searched_at,
         has_results=has_results,
-        insights_html=insights_html,
-        wantlist_insights_html=wantlist_insights_html,
+        insights=insights,
+        insights_kind='collection',
         content_class='has-results' if has_results else '',
         show_platter=has_results,
         title='User Lookup'
@@ -172,7 +181,7 @@ def lookup_insights():
     if not items:
         return jsonify({"html": ""})
     insights = insights_helper.get_collection_insights(items)
-    html = insights_helper.render_insights_dashboard(insights, kind=kind)
+    html = render_template('_insights_fragment.html', insights=insights, kind=kind)
     return jsonify({"html": html})
 
 
@@ -196,6 +205,56 @@ def lookup_data():
         return jsonify({"error": "expired"}), 410
     key_map = {"collection": "collection", "wantlist": "wantlist", "list": "list_releases"}
     return jsonify({"items": cached.get(key_map[tab], [])})
+
+
+@lookup_bp.route("/lookup/load-tab")
+def lookup_load_tab():
+    """
+    Lazy-load endpoint for the collection or wantlist tabs when the page was
+    initially rendered with a list_id (which defers those fetches). Returns
+    the items array plus the rendered insights dashboard HTML so the client
+    can populate cards + inject the dashboard in one round trip.
+    """
+    username = request.args.get("username", "")
+    tab = request.args.get("tab", "")
+    if not username or tab not in ("collection", "wantlist"):
+        return jsonify({"error": "bad_request"}), 400
+
+    scraper = api_helper.make_api_session()
+    auth = oauth_auth()
+    budget = api_helper.RequestBudget(25) if auth is None else None
+
+    try:
+        if tab == "collection":
+            items, partial, _total = lookup_helper.get_collection(username, scraper, auth=auth, budget=budget)
+        else:
+            items, partial, _total = lookup_helper.get_wantlist(username, scraper, auth=auth, budget=budget)
+    except lookup_helper.UserNotFoundError:
+        return jsonify({"error": "user_not_found"}), 404
+    except lookup_helper.CollectionPrivateError:
+        return jsonify({"error": "collection_private"}), 403
+    except lookup_helper.WantlistPrivateError:
+        return jsonify({"error": "wantlist_private"}), 403
+    except lookup_helper.RateLimitError:
+        return jsonify({"error": "rate_limited"}), 429
+
+    total_value = None
+    if tab == "collection" and session.get('discogs_username') and session['discogs_username'].lower() == username.lower():
+        try:
+            total_value = api_helper.get_collection_value(username, scraper, auth=auth)
+        except Exception:
+            total_value = None
+
+    insights_html = ""
+    if items:
+        insights = insights_helper.get_collection_insights(items, total_value=total_value)
+        insights_html = render_template('_insights_fragment.html', insights=insights, kind=tab)
+
+    return jsonify({
+        "items": items,
+        "partial": partial or "",
+        "insights_html": insights_html,
+    })
 
 
 @lookup_bp.route("/lookup/list")

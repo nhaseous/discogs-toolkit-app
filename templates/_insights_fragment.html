@@ -1,0 +1,222 @@
+{# Insights dashboard fragment.
+   Context: insights (dict from get_collection_insights), kind ('collection'|'wantlist') #}
+
+{# ── Macros ──────────────────────────────────────────────────────────────────── #}
+
+{% macro stat_card(label, value, sub='', value_class='') %}
+<div class="rec-stat-card">
+  <div class="rec-stat-label">{{ label | safe }}</div>
+  <div class="rec-stat-value{{ (' ' + value_class) if value_class else '' }}">{{ value | safe }}</div>
+  {% if sub %}<div class="rec-stat-sub">{{ sub | safe }}</div>{% endif %}
+</div>
+{% endmacro %}
+
+{% macro expand_toggle() %}<span class="breakdown-expand" title="Show all">+</span>{% endmacro %}
+
+{% macro make_rows(data, total, filter_field='', primary=5) %}
+  {%- for name, val in data -%}
+    {%- set pct = (val / total * 100) if total else 0 -%}
+    {%- set is_extra = loop.index0 >= primary -%}
+    {%- set tr_class = [] -%}
+    {%- if filter_field -%}{%- set tr_class = tr_class + ['insights-filter-row'] -%}{%- endif -%}
+    {%- if is_extra -%}{%- set tr_class = tr_class + ['rec-breakdown-row-extra'] -%}{%- endif -%}
+    <tr{% if tr_class %} class="{{ tr_class | join(' ') }}"{% endif %}{% if filter_field %} data-filter-field="{{ filter_field }}" data-filter-value="{{ name }}"{% endif %}>
+      <td class="rec-sf-name">{{ name }}</td>
+      <td class="rec-sf-money">{{ val }} items<span style="color:var(--ink-muted);margin-left:6px">{{ pct | round | int }}%</span></td>
+    </tr>
+  {%- endfor -%}
+{% endmacro %}
+
+{% macro top_table(title, data, total, filter_field='', expandable=True) %}
+  {%- set has_extras = expandable and data | length > 5 -%}
+  <div class="rec-breakdown-section{{ ' breakdown-expandable' if has_extras else '' }}">
+    <div class="rec-breakdown-title{{ ' rec-breakdown-title--row' if has_extras else '' }}">
+      <span class="rec-breakdown-title-text">{{ title }}</span>
+      {%- if has_extras %}{{ expand_toggle() }}{% endif %}
+    </div>
+    <div class="rec-breakdown-scroll">
+      <table class="rec-breakdown-table"><tbody>{{ make_rows(data, total, filter_field=filter_field) }}</tbody></table>
+    </div>
+  </div>
+{% endmacro %}
+
+{% macro pie_block(segments, filter_field='', reverse=False) %}
+  {%- if segments -%}
+  <div class="rec-pie-wrap{{ ' rec-pie-wrap--reverse' if reverse else '' }}">
+    {{ charts_pie_svg(segments, size=80, extra_class='rec-pie-svg--sm', filter_field=filter_field) | safe }}
+    <div class="rec-pie-legend">{{ charts_pie_legend_html(segments, filter_field) | safe }}</div>
+  </div>
+  {%- endif -%}
+{% endmacro %}
+
+{# ── 3-state year / genre / added panel ─────────────────────────────────────── #}
+
+{% macro genre_year_added_section(genre_pie, decade_pie, added_year_data, added_year_table, total_added) %}
+  {%- set has_genre = genre_pie | length > 0 -%}
+  {%- set has_year  = decade_pie | length > 0 -%}
+  {%- set has_added = added_year_data | length > 0 -%}
+
+  {%- if not has_genre and not has_year and not has_added -%}
+  {%- elif not has_year and not has_added -%}
+    {{ charts_pie_section("Genre Breakdown", genre_pie, filter_field='genres') | safe }}
+  {%- elif not has_genre and not has_added -%}
+    {{ charts_pie_section("Year Breakdown", decade_pie, filter_field='decade') | safe }}
+  {%- else -%}
+  <div class="rec-breakdown-section insights-three-toggle">
+
+    {# Panel 1: Year Breakdown (initially hidden — genre is default) #}
+    <div class="insights-panel" data-panel="year" style="visibility:hidden;pointer-events:none">
+      <div class="rec-breakdown-title insights-toggle-title">
+        <span class="rec-breakdown-title-text">Year Breakdown {% if has_genre %}<span class="insights-toggle-switch" data-goto="genre">/ Genre</span>{% endif %}</span>
+        {%- if has_added %}<span class="insights-toggle-switch" data-goto="added">Added</span>{% endif %}
+      </div>
+      {%- if has_year %}
+      <div class="rec-pie-wrap">
+        {{ charts_pie_svg(decade_pie, filter_field='decade') | safe }}
+        <div class="rec-pie-legend">{{ charts_pie_legend_html(decade_pie, filter_field='decade') | safe }}</div>
+      </div>
+      {%- endif %}
+    </div>
+
+    {# Panel 2: Added History (initially hidden) #}
+    <div class="insights-panel" data-panel="added" style="visibility:hidden;pointer-events:none">
+      <div class="rec-breakdown-title insights-toggle-title">
+        <span class="rec-breakdown-title-text">Added History {% if has_genre %}<span class="insights-toggle-switch" data-goto="genre">/ Genre</span>{% endif %}</span>
+        <span class="insights-toggle-switch" data-goto="year">Released</span>
+      </div>
+      {%- if has_added %}
+      <div class="insights-line-graph-wrap">{{ charts_line_graph_svg(added_year_data) | safe }}</div>
+      <div class="insights-added-scroll">
+        <table class="rec-breakdown-table"><tbody>
+          {%- for yr, cnt in added_year_table -%}
+            {%- set pct = (cnt / total_added * 100) if total_added else 0 -%}
+            <tr class="insights-filter-row" data-filter-field="added_year" data-filter-value="{{ yr }}">
+              <td class="rec-sf-name">{{ yr }}</td>
+              <td class="rec-sf-money">{{ cnt }} items<span style="color:var(--ink-muted);margin-left:6px">{{ pct | round | int }}%</span></td>
+            </tr>
+          {%- endfor -%}
+        </tbody></table>
+      </div>
+      {%- endif %}
+    </div>
+
+    {# Panel 3: Genre Breakdown (active by default) #}
+    <div class="insights-panel insights-panel--active" data-panel="genre">
+      <div class="rec-breakdown-title insights-toggle-title">
+        {# Genre back-toggle defaults to "/ Year"; JS updates text+data-goto based on prior panel #}
+        <span class="rec-breakdown-title-text">Genre Breakdown {% if has_year or has_added %}<span class="insights-toggle-switch insights-genre-back" data-goto="year">/ Year</span>{% endif %}</span>
+      </div>
+      {%- if has_genre %}
+      <div class="rec-pie-wrap">
+        {{ charts_pie_svg(genre_pie, filter_field='genres') | safe }}
+        <div class="rec-pie-legend">{{ charts_pie_legend_html(genre_pie, filter_field='genres') | safe }}</div>
+      </div>
+      {%- endif %}
+    </div>
+
+  </div>
+  {%- endif %}
+{% endmacro %}
+
+{# ── Format breakdown section ─────────────────────────────────────────────────── #}
+
+{% macro format_breakdown_section(format_pie, release_type_pie, edition_pie) %}
+  {%- if format_pie or release_type_pie -%}
+  {%- if edition_pie -%}
+  <div class="rec-breakdown-section insights-format-toggle">
+    <div class="rec-breakdown-title insights-toggle-title">
+      Format Breakdown<span class="insights-toggle-switch">More</span>
+    </div>
+    <div class="insights-format-panels-wrap">
+      <div class="insights-panel">{{ pie_block(format_pie, filter_field='format') }}</div>
+      <div class="insights-panel" style="visibility:hidden;pointer-events:none">{{ charts_bar_chart_html(edition_pie, filter_field='format_tags') | safe }}</div>
+    </div>
+    <div class="insights-format-sub insights-format-sub--lower">Type</div>
+    {{ pie_block(release_type_pie, filter_field='format_tags', reverse=True) }}
+  </div>
+  {%- else -%}
+  <div class="rec-breakdown-section">
+    <div class="rec-breakdown-title">Format Breakdown</div>
+    {{ pie_block(format_pie, filter_field='format') }}
+    <div class="insights-format-sub insights-format-sub--lower">Type</div>
+    {{ pie_block(release_type_pie, filter_field='format_tags', reverse=True) }}
+  </div>
+  {%- endif -%}
+  {%- endif %}
+{% endmacro %}
+
+{# ── Genre toggle section (sub-genres vs genres) ─────────────────────────────── #}
+
+{% macro genre_toggle_section(all_subgenres, all_genres, style_total, genre_total) %}
+  {%- set sub_has_extras   = all_subgenres | length > 5 -%}
+  {%- set genre_has_extras = all_genres    | length > 5 -%}
+  <div class="rec-breakdown-section insights-genre-toggle">
+    {# Sub-Genres panel (active) #}
+    <div class="insights-panel insights-panel--active{{ ' breakdown-expandable' if sub_has_extras else '' }}">
+      <div class="rec-breakdown-title rec-breakdown-title--row insights-toggle-title">
+        <span class="rec-breakdown-title-text">Top Sub-Genres <span class="insights-toggle-switch">/ Genres</span></span>
+        {%- if sub_has_extras %}{{ expand_toggle() }}{% endif %}
+      </div>
+      <div class="rec-breakdown-scroll">
+        <table class="rec-breakdown-table"><tbody>{{ make_rows(all_subgenres, style_total, filter_field='styles') }}</tbody></table>
+      </div>
+    </div>
+    {# Genres panel (hidden) #}
+    <div class="insights-panel{{ ' breakdown-expandable' if genre_has_extras else '' }}" style="display:none">
+      <div class="rec-breakdown-title rec-breakdown-title--row insights-toggle-title">
+        <span class="rec-breakdown-title-text">Top Genres <span class="insights-toggle-switch">/ Sub-Genres</span></span>
+        {%- if genre_has_extras %}{{ expand_toggle() }}{% endif %}
+      </div>
+      <div class="rec-breakdown-scroll">
+        <table class="rec-breakdown-table"><tbody>{{ make_rows(all_genres, genre_total, filter_field='genres') }}</tbody></table>
+      </div>
+    </div>
+  </div>
+{% endmacro %}
+
+{# ── Main render ──────────────────────────────────────────────────────────────── #}
+
+{%- set is_wantlist = kind == 'wantlist' -%}
+<div class="rec-dash-group" id="{{ 'wantlist-insights-dash' if is_wantlist else 'collection-insights-dash' }}"{% if is_wantlist %} style="display:none"{% endif %}>
+
+  {%- if not is_wantlist -%}
+    {# Value Banner #}
+    {%- set tv = insights.total_value -%}
+    {%- if tv %}
+    <div class="rec-stat-grid">
+      {{ stat_card("Minimum Value", tv.minimum or '—') }}
+      {{ stat_card("Median Value",  tv.median  or '—', value_class="rec-stat-value--pos") }}
+      {{ stat_card("Maximum Value", tv.maximum or '—') }}
+    </div>
+    {%- endif %}
+
+    {# Pies row #}
+    <div class="insights-pies-row">
+      {{ genre_year_added_section(
+          insights.genre_pie,
+          insights.decade_pie,
+          insights.added_year_data,
+          insights.added_year_table,
+          insights.total_added
+      ) }}
+      {{ format_breakdown_section(
+          insights.format_pie,
+          insights.release_type_pie,
+          insights.edition_pie
+      ) }}
+    </div>
+  {%- endif %}
+
+  {# Breakdown (rendered for both collection and wantlist) #}
+  <div class="rec-breakdown">
+    {{ genre_toggle_section(
+        insights.all_subgenres,
+        insights.all_genres,
+        insights.style_total,
+        insights.genre_total
+    ) }}
+    {{ top_table("Top Artists", insights.all_artists, insights.artist_total, filter_field='artist') }}
+    {{ top_table("Top Labels",  insights.all_labels,  insights.label_total,  filter_field='labels') }}
+  </div>
+
+</div>

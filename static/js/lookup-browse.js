@@ -37,47 +37,20 @@ function _lookupGetFilteredItems(items, tabName) {
 }
 
 function _withLookupScroll(action) {
-    var tabsRow = document.querySelector(".lookup-tabs-row");
-    var contentMain = document.getElementById("content-main");
-    var mosaicWrap = document.querySelector(".lookup-mosaic-wrap");
-    var currentY = window.pageYOffset;
-
-    if (contentMain) {
-        // Guard total page height to prevent scrollbar jumping.
-        contentMain.style.minHeight = (currentY + window.innerHeight) + "px";
-    }
-    
-    if (action) action();
-
-    if (tabsRow) {
-        // Measure target position in the final layout state.
-        var oldPos = tabsRow.style.position;
-        tabsRow.style.position = "static";
-        
-        // Remove any temporary height guards from switchMosaics to measure the true final offset.
-        // We do NOT restore this, so the viewport target and the actual elements stay aligned.
-        if (mosaicWrap) mosaicWrap.style.minHeight = "";
-        
-        var targetY = 0;
-        var curr = tabsRow;
-        while (curr && curr !== document.body) {
-            targetY += curr.offsetTop;
-            curr = curr.offsetParent;
-        }
-        
-        tabsRow.style.position = oldPos;
-        window.scrollTo({ top: targetY, behavior: "smooth" });
-    }
-
-    setTimeout(function() {
-        if (contentMain) contentMain.style.minHeight = "";
-    }, 600);
+    ToolkitUtils.withScrollGuard(action, ".lookup-tabs-row");
 }
 
 (function() {
     var tabsContainer = document.querySelector(".lookup-tabs");
     if (!tabsContainer || !tabsContainer.querySelector(".lookup-tab")) return;
-    var EASE = "transform 0.35s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease";
+
+    // True when the user's session originated from a specific user list (either
+    // the page loaded with list_id in the URL, or the user opened a list via AJAX).
+    // When true, clicking Collection or Wantlist redirects to the URL without
+    // list_id so those tabs load cleanly without the (expensive) list items.
+    var _listEntryActive = (new URLSearchParams(window.location.search)).has('list_id');
+    window._markListEntry = function() { _listEntryActive = true; };
+
     function switchMosaics(target) {
         // Lazy mosaics: wantlist + list ship empty in the HTML. Populate the
         // incoming mosaic from its tab's item list right before the animation
@@ -87,70 +60,44 @@ function _withLookupScroll(action) {
         var all = Array.from(document.querySelectorAll(".lookup-mosaic"));
         var incoming = document.getElementById("lookup-mosaic-" + target);
         var outgoing = all.find(function(m) { return m !== incoming && !m.classList.contains("lookup-mosaic--inactive"); });
-
-        var wrap = document.querySelector(".lookup-mosaic-wrap");
-        if (!wrap) return;
-        var w = wrap.offsetWidth;
-
-        if (outgoing) {
-            // Set min-height guard only if we have an incoming mosaic to show.
-            // For the Lists tab (no mosaic), we collapse immediately to prevent ghost space.
-            if (incoming) wrap.style.minHeight = outgoing.offsetHeight + "px";
-            else wrap.style.minHeight = "";
-
-            outgoing.classList.add("lookup-mosaic--inactive");
-            outgoing.style.visibility = "visible";
-            outgoing.style.transition = EASE;
-            outgoing.style.transform = "translateX(-" + w + "px)";
-            outgoing.style.opacity = "0";
-            outgoing.addEventListener("transitionend", function cleanup(e) {
-                if (e.propertyName !== "transform") return;
-                outgoing.removeEventListener("transitionend", cleanup);
-                outgoing.style.visibility = "";
-                outgoing.style.transition = "";
-                outgoing.style.transform = "";
-                outgoing.style.opacity = "";
-                if (!incoming) wrap.style.minHeight = "";
-            }, { once: true });
-        }
-
-        if (incoming) {
-            incoming.classList.remove("lookup-mosaic--inactive");
-            incoming.style.transition = "none";
-            incoming.style.transform = "translateX(-" + w + "px)";
-            incoming.style.opacity = "0";
-            requestAnimationFrame(function() {
-                requestAnimationFrame(function() {
-                    incoming.style.transition = EASE;
-                    incoming.style.transform = "translateX(0)";
-                    incoming.style.opacity = "1";
-                    incoming.addEventListener("transitionend", function done(e) {
-                        if (e.propertyName !== "transform") return;
-                        incoming.removeEventListener("transitionend", done);
-                        incoming.style.transition = "";
-                        incoming.style.transform = "";
-                        incoming.style.opacity = "";
-                        wrap.style.minHeight = "";
-                    }, { once: true });
-                });
-            });
-        } else if (!outgoing) {
-            wrap.style.minHeight = "";
-        }
+        Mosaic.switchMosaics({
+            incoming: incoming,
+            outgoing: outgoing,
+            wrap: document.querySelector(".lookup-mosaic-wrap"),
+            inactiveClass: "lookup-mosaic--inactive",
+        });
     }
     var countEl = document.getElementById("lookup-count");
+    function setCountEl(el, text, url) {
+        if (!el) return;
+        if (url) {
+            el.innerHTML = '<a href="' + url + '" target="_blank" rel="noopener noreferrer" class="meta-user-link">' + text + '</a>';
+        } else {
+            el.textContent = text;
+        }
+    }
     function doTabSwitch(target) {
-        var countText = '';
+        if (_listEntryActive && (target === 'collection' || target === 'wantlist')) {
+            var params = new URLSearchParams(window.location.search);
+            params.delete('list_id');
+            var cleanUrl = window.location.pathname + (params.toString() ? '?' + params.toString() : '');
+            window.location.replace(cleanUrl);
+            return;
+        }
+        var countText = '', countUrl = '';
         document.querySelectorAll(".lookup-tab").forEach(function(t) {
             var isTarget = t.getAttribute("data-tab") === target;
             t.classList.toggle("active", isTarget);
-            if (isTarget) countText = t.getAttribute("data-count-text") || '';
+            if (isTarget) {
+                countText = t.getAttribute("data-count-text") || '';
+                countUrl = t.getAttribute("data-count-url") || '';
+            }
         });
         document.querySelectorAll(".lookup-panel").forEach(function(panel) {
             panel.style.display = panel.id === "lookup-panel-" + target ? "" : "none";
         });
         switchMosaics(target);
-        if (countEl && countText) countEl.textContent = countText;
+        if (countText) setCountEl(countEl, countText, countUrl);
         if (window._resetMatchCardHover) window._resetMatchCardHover();
         if (window._applyTabPage) window._applyTabPage(target);
         if (window._layoutMatchGrids) window._layoutMatchGrids();
@@ -165,7 +112,7 @@ function _withLookupScroll(action) {
         _withLookupScroll(function() { doTabSwitch(target); });
     };
     var initTab = document.querySelector(".lookup-tab.active");
-    if (countEl && initTab) countEl.textContent = initTab.getAttribute("data-count-text") || '';
+    if (initTab) setCountEl(countEl, initTab.getAttribute("data-count-text") || '', initTab.getAttribute("data-count-url") || '');
     if (initTab) {
         var initName = initTab.getAttribute("data-tab");
         document.querySelectorAll(".lookup-panel").forEach(function(panel) {
@@ -220,7 +167,7 @@ function _withLookupScroll(action) {
         var backCard = grid ? grid.querySelector(".match-card--back") : null;
         var dataEl = document.querySelector('.lookup-data[data-tab="' + name + '"]');
         var items = null, cards = null, showStats = false;
-        var totalItems = 0, needsHydration = false;
+        var totalItems = 0, needsHydration = false, deferred = false;
         if (dataEl) {
             items = JSON.parse(dataEl.textContent);
             showStats = dataEl.getAttribute("data-show-stats") === "1";
@@ -230,6 +177,10 @@ function _withLookupScroll(action) {
             var declaredTotal = parseInt(dataEl.getAttribute("data-total"), 10);
             totalItems = isNaN(declaredTotal) ? items.length : declaredTotal;
             needsHydration = dataEl.getAttribute("data-needs-hydration") === "1";
+            // Deferred tabs ship with no items at all — first activation fetches
+            // them from /lookup/load-tab. Different from needsHydration (which
+            // means "we have the first page; fetch the rest").
+            deferred = dataEl.getAttribute("data-deferred") === "1";
         } else {
             cards = grid ? Array.from(grid.querySelectorAll(".match-card:not(.match-card--back)")) : [];
             totalItems = cards ? cards.length : 0;
@@ -239,8 +190,61 @@ function _withLookupScroll(action) {
             page: 1, total: total, items: items, cards: cards,
             showStats: showStats, backCard: backCard, ready: false,
             needsHydration: needsHydration, totalItems: totalItems,
+            deferred: deferred,
         };
     });
+
+    // Deferred load: when the page was opened with a list_id, collection and
+    // wantlist start with no items at all. First tab activation fetches the
+    // items + insights HTML in a single call to /lookup/load-tab.
+    var _loadPromises = {};
+    function _loadDeferredTab(tabName) {
+        var s = state[tabName];
+        if (!s || !s.deferred) return Promise.resolve(s ? s.items : null);
+        if (_loadPromises[tabName]) return _loadPromises[tabName];
+
+        var qs = new URLSearchParams(window.location.search);
+        var username = qs.get('username') || '';
+        
+        var p = ToolkitAPI.loadLookupTab(username, tabName)
+            .then(function(data) {
+                var items = (data && data.items) || [];
+                s.items = items;
+                s.totalItems = items.length;
+                s.total = Math.max(1, Math.ceil(items.length / PAGE_SIZE));
+                s.deferred = false;
+                s.ready = false;
+
+                if (data && data.insights_html) {
+                    _injectInsights(tabName, data.insights_html);
+                }
+                if (window._onTabHydrated) window._onTabHydrated(tabName);
+                return items;
+            })
+            .catch(function() {
+                _loadPromises[tabName] = null;
+                return s.items || [];
+            });
+        _loadPromises[tabName] = p;
+        return p;
+    }
+
+    function _injectInsights(tabName, html) {
+        var existingId = tabName === 'wantlist' ? 'wantlist-insights-dash' : 'collection-insights-dash';
+        if (document.getElementById(existingId)) return;
+        var anchor = document.querySelector('.lookup-mosaic-wrap');
+        if (!anchor || !anchor.parentNode) return;
+        // Collection dashboard goes above the mosaic; wantlist sits after the
+        // collection dashboard (matching the server-side ordering).
+        if (tabName === 'collection') {
+            anchor.insertAdjacentHTML('beforebegin', html);
+        } else {
+            var collDash = document.getElementById('collection-insights-dash');
+            (collDash || anchor).insertAdjacentHTML(collDash ? 'afterend' : 'beforebegin', html);
+        }
+        if (window._registerLookupDash) window._registerLookupDash(tabName);
+    }
+    window._lookupLoadDeferredTab = _loadDeferredTab;
 
     // Lazy hydration: pull the full items array from /lookup/data after first
     // paint so the initial HTML stays small. Until each tab finishes hydrating,
@@ -253,14 +257,8 @@ function _withLookupScroll(action) {
         var qs = new URLSearchParams(window.location.search);
         var username = qs.get('username') || '';
         var listId = qs.get('list_id') || '';
-        var url = '/lookup/data?username=' + encodeURIComponent(username) +
-                  '&tab=' + encodeURIComponent(tabName) +
-                  (listId ? '&list_id=' + encodeURIComponent(listId) : '');
-        var p = fetch(url, { headers: { 'Accept': 'application/json' } })
-            .then(function(r) {
-                if (!r.ok) throw new Error('HTTP ' + r.status);
-                return r.json();
-            })
+
+        var p = ToolkitAPI.getLookupData(username, tabName, listId)
             .then(function(data) {
                 var fullItems = (data && data.items) || null;
                 if (fullItems && fullItems.length >= s.items.length) {
@@ -397,6 +395,14 @@ function _withLookupScroll(action) {
     window._applyTabPage = function(tabName) {
         var s = state[tabName];
         if (!s) return;
+        // Deferred tab: kick off the fetch and show an empty page until it lands.
+        // _onTabHydrated re-runs applyPage once the items arrive.
+        if (s.deferred) {
+            if (prevBtn) prevBtn.disabled = true;
+            if (nextBtn) nextBtn.disabled = true;
+            _loadDeferredTab(tabName);
+            return;
+        }
         if (!s.ready) applyPage(tabName, 1);
         syncControls(tabName);
     };
@@ -427,39 +433,38 @@ function _withLookupScroll(action) {
         if (mosaic.dataset.populated === '1') return;
         var s = state[tabName];
         if (!s || !s.items) return;
-        var html = '';
-        s.items.forEach(function(m) {
-            if (!m.thumb) return;
-            if (tabName === 'list') {
-                html += '<span class="mosaic-item"><img src="' + _esc(m.thumb) + '" alt="" loading="lazy" class="mosaic-thumb"></span>';
-            } else {
-                html += '<a class="mosaic-item" href="' + _esc(m.url || '#') +
-                        '" target="_blank" rel="noopener noreferrer">' +
-                        '<img src="' + _esc(m.thumb) + '" alt="" loading="lazy" class="mosaic-thumb"></a>';
-            }
-        });
-        mosaic.innerHTML = html;
+        // Skip while the tab is still waiting on its initial load — items is the
+        // empty placeholder array at this point. _onTabHydrated re-runs once the
+        // real items land.
+        if (s.deferred) return;
+        Mosaic.populate(mosaic, s.items, { tag: tabName === 'list' ? 'span' : 'a' });
         if (!s.needsHydration) mosaic.dataset.populated = '1';
     }
     window._populateLookupMosaic = _populateMosaic;
 
     // When a tab finishes hydrating, refresh anything that was rendered against
     // the inline subset: the page counter, the tab label count, and the mosaic.
+    // For deferred tabs (no inline subset at all), render the first page now.
     window._onTabHydrated = function(tabName) {
         var s = state[tabName];
         if (!s) return;
+        if (!s.ready && document.querySelector('.lookup-tab.active[data-tab="' + tabName + '"]')) {
+            applyPage(tabName, 1);
+        }
         _syncTabCount(tabName, s);
         syncControls(tabName);
         var mosaic = document.getElementById('lookup-mosaic-' + tabName);
         if (mosaic && mosaic.dataset.populated !== '1') _populateMosaic(tabName);
+        if (window._layoutMatchGrids) window._layoutMatchGrids();
     };
 
     // Kick off hydration for every tab that still has trimmed inline data.
     // requestIdleCallback runs after first paint so the user sees the
     // first-page cards immediately; the heavy JSON fetch streams in behind.
+    // Deferred tabs are skipped — they only load on explicit user activation.
     function _kickoffHydration() {
         Object.keys(state).forEach(function(name) {
-            if (state[name] && state[name].needsHydration) _hydrateTab(name);
+            if (state[name] && state[name].needsHydration && !state[name].deferred) _hydrateTab(name);
         });
     }
     if (window.requestIdleCallback) {
@@ -483,7 +488,11 @@ function _withLookupScroll(action) {
         };
         // Hydration brings in items beyond the inline first page — wait for it
         // before paginating past page 1 so we don't show a half-filled grid.
-        if (s.needsHydration && target > 1) {
+        if (s.deferred) {
+            if (prevBtn) prevBtn.disabled = true;
+            if (nextBtn) nextBtn.disabled = true;
+            _loadDeferredTab(name).then(doRender);
+        } else if (s.needsHydration && target > 1) {
             if (prevBtn) prevBtn.disabled = true;
             if (nextBtn) nextBtn.disabled = true;
             _hydrateTab(name).then(doRender);

@@ -86,6 +86,15 @@ def ordinal_filter(n):
 
 register_blueprints(app)
 
+from helper import charts as _charts_mod
+app.jinja_env.globals.update(
+    charts_pie_svg=_charts_mod.pie_svg,
+    charts_pie_legend_html=_charts_mod.pie_legend_html,
+    charts_pie_section=_charts_mod.pie_section,
+    charts_bar_chart_html=_charts_mod.bar_chart_html,
+    charts_line_graph_svg=_charts_mod.line_graph_svg,
+)
+
 
 ## Local Testing ##
 

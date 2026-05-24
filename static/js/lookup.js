@@ -13,18 +13,21 @@
     var listsPanel = document.getElementById("lookup-panel-lists");
     if (!listsPanel) return;
 
-    function getOrCreateListPanel() {
+    function _closeExistingList() {
         var p = document.getElementById("lookup-panel-list");
-        if (p) {
-            var g = p.querySelector(".match-grid");
-            if (g) g.innerHTML = '';
-            var d = p.querySelector(".lookup-data");
-            if (d) d.remove();
-            var e = p.querySelector(".match-empty");
-            if (e) e.remove();
-            return p;
+        if (p && p.parentNode) p.parentNode.removeChild(p);
+        var t = document.querySelector('.lookup-tab[data-tab="list"]');
+        if (t && t.parentNode) t.parentNode.removeChild(t);
+        var m = document.getElementById("lookup-mosaic-list");
+        if (m) {
+            m.innerHTML = '';
+            m.classList.add("lookup-mosaic--inactive");
+            delete m.dataset.populated;
         }
-        p = document.createElement("div");
+    }
+
+    function createListPanel() {
+        var p = document.createElement("div");
         p.id = "lookup-panel-list";
         p.className = "lookup-panel";
         p.style.display = "none";
@@ -34,16 +37,13 @@
         return p;
     }
 
-    function getOrCreateListTab(listName) {
+    function createListTab(listName) {
         var container = document.querySelector(".lookup-tabs");
-        var tab = document.querySelector('.lookup-tab[data-tab="list"]');
-        if (!tab) {
-            tab = document.createElement("button");
-            tab.className = "lookup-tab";
-            tab.type = "button";
-            tab.setAttribute("data-tab", "list");
-            if (container) container.appendChild(tab);
-        }
+        var tab = document.createElement("button");
+        tab.className = "lookup-tab";
+        tab.type = "button";
+        tab.setAttribute("data-tab", "list");
+        if (container) container.appendChild(tab);
         tab.textContent = listName + "…";
         tab.setAttribute("data-count-text", "");
         return tab;
@@ -57,12 +57,18 @@
         var listId = new URLSearchParams(qi !== -1 ? href.slice(qi + 1) : "").get("list_id");
         if (!listId) return;
         e.preventDefault();
+        if (window._markListEntry) window._markListEntry();
 
         var titleEl = card.querySelector(".match-card-title");
         var listName = titleEl ? titleEl.textContent.trim() : "List";
 
-        var listPanel = getOrCreateListPanel();
-        var listTab = getOrCreateListTab(listName);
+        // Always close the previously-opened list (tab + panel + mosaic) before
+        // opening the new one — keeps state clean and gives the user clear
+        // visual feedback that the prior list is gone.
+        _closeExistingList();
+
+        var listPanel = createListPanel();
+        var listTab = createListTab(listName);
         listTab.disabled = true;
 
         if (window._switchToTab) window._switchToTab("list");
@@ -85,25 +91,17 @@
                 listTab.textContent = listName + " (" + count + ")";
                 listTab.setAttribute("data-count-text", countText);
 
-                var mosaic = document.getElementById("lookup-mosaic-list");
-                if (mosaic) {
-                    mosaic.innerHTML = '';
-                    releases.forEach(function(m) {
-                        if (!m.thumb) return;
-                        var span = document.createElement("span");
-                        span.className = "mosaic-item";
-                        var img = document.createElement("img");
-                        img.src = m.thumb;
-                        img.className = "mosaic-thumb";
-                        img.alt = "";
-                        img.loading = "lazy";
-                        span.appendChild(img);
-                        mosaic.appendChild(span);
-                    });
-                }
+                Mosaic.populate(document.getElementById("lookup-mosaic-list"), releases, { tag: 'span' });
 
                 var countEl = document.getElementById("lookup-count");
-                if (countEl) countEl.textContent = countText;
+                var countUrl = listTab.getAttribute("data-count-url") || '';
+                if (countEl) {
+                    if (countUrl) {
+                        countEl.innerHTML = '<a href="' + countUrl + '" target="_blank" rel="noopener noreferrer" class="meta-user-link">' + countText + '</a>';
+                    } else {
+                        countEl.textContent = countText;
+                    }
+                }
 
                 if (!releases.length) {
                     var emptyEl = document.createElement("p");
@@ -172,8 +170,10 @@
                 if (window._onLookupTabChange) window._onLookupTabChange(tabName);
             });
         }
+        // Only show a dashboard when its matching tab is active — the lists and
+        // (user) list subtabs get a clean view with no insights.
         if (collDash) {
-            collDash.style.display = (tabName === 'wantlist') ? 'none' : '';
+            collDash.style.display = (tabName === 'collection') ? '' : 'none';
             collDash.classList.toggle('insights-filters-disabled', tabName !== 'collection');
         }
         if (wantDash) {
@@ -181,6 +181,31 @@
             wantDash.classList.toggle('insights-filters-disabled', tabName !== 'wantlist');
         }
         if (window._syncLookupFilterBadges) window._syncLookupFilterBadges();
+    };
+
+    // Lookup-browse calls this after lazy-injecting a dashboard from /lookup/load-tab.
+    // We need to capture the new node in collDash/wantDash and bind hover/click listeners.
+    window._registerLookupDash = function(tabName) {
+        var dash = null;
+        if (tabName === 'collection') {
+            collDash = document.getElementById('collection-insights-dash');
+            dash = collDash;
+        } else if (tabName === 'wantlist') {
+            wantDash = document.getElementById('wantlist-insights-dash');
+            dash = wantDash;
+            // The lazy /lookup/load-tab path already produced wantlist insights —
+            // suppress the legacy /lookup/insights POST so we don't double-render.
+            wantlistFetchState = 'done';
+        }
+        if (dash && dashes.indexOf(dash) === -1) {
+            dashes.push(dash);
+            _bindDashListeners(dash);
+        }
+        if (dash && window._observeLookupLineGraphs) window._observeLookupLineGraphs(dash);
+        // Apply the visibility/active-class state for the current tab now that
+        // we've captured the new node.
+        var active = document.querySelector('.lookup-tab.active');
+        if (active) window._onLookupTabChange(active.getAttribute('data-tab'));
     };
 
     window._deactivateDashFilter = function(field, value, tabName) {
@@ -199,7 +224,10 @@
         });
     };
 
-    if (!dashes.length) return;
+    // Note: we deliberately do NOT early-return when there are no dashboards on
+    // initial paint. With list_id-deferred loading, the collection dashboard is
+    // injected later by /lookup/load-tab; _registerLookupDash needs the function
+    // declarations + line-graph observer set up below.
 
     var initTab = document.querySelector('.lookup-tab.active');
     if (initTab) window._onLookupTabChange(initTab.getAttribute('data-tab'));
@@ -355,40 +383,45 @@
     //     row height so gridlines align with rows
     // An inverse x-scale transform is applied to text and circle elements to undo
     // the horizontal stretch introduced by preserveAspectRatio="none".
-    (function() {
-        function _scaleLineGraph(svg) {
-            var VW = parseFloat(svg.dataset.vw || '312');
-            var VH = parseFloat(svg.dataset.vh || '106');
-            var svgW = svg.getBoundingClientRect().width;
-            if (!svgW) return;
+    function _scaleLineGraph(svg) {
+        var VW = parseFloat(svg.dataset.vw || '312');
+        var VH = parseFloat(svg.dataset.vh || '106');
+        var svgW = svg.getBoundingClientRect().width;
+        if (!svgW) return;
 
-            // Fixed height: keeps labels at 13px and gridlines at 26px regardless
-            // of the graph's container width.
-            var fixedH = Math.round(VH * 13 / 9);
-            svg.style.height = fixedH + 'px';
+        // Fixed height: keeps labels at 13px and gridlines at 26px regardless
+        // of the graph's container width.
+        var fixedH = Math.round(VH * 13 / 9);
+        svg.style.height = fixedH + 'px';
 
-            // Undo the horizontal stretch so labels and dots stay non-distorted.
-            var xCorr = (fixedH / VH) / (svgW / VW);  // yScale / xScale
+        // Undo the horizontal stretch so labels and dots stay non-distorted.
+        var xCorr = (fixedH / VH) / (svgW / VW);  // yScale / xScale
 
-            svg.querySelectorAll(':scope > text').forEach(function(el) {
-                var x = parseFloat(el.getAttribute('x')) || 0;
-                el.setAttribute('transform',
-                    'translate(' + x + ',0) scale(' + xCorr + ',1) translate(' + (-x) + ',0)');
-            });
-
-            svg.querySelectorAll(':scope > .insights-line-pt, :scope > circle.insights-line-dot').forEach(function(el) {
-                var c = el.tagName.toLowerCase() === 'circle' ? el : el.querySelector('circle');
-                var xref = c ? (parseFloat(c.getAttribute('cx')) || 0) : 0;
-                el.setAttribute('transform',
-                    'translate(' + xref + ',0) scale(' + xCorr + ',1) translate(' + (-xref) + ',0)');
-            });
-        }
-
-        var lineSvgs = document.querySelectorAll('.insights-line-graph-svg[data-vw]');
-        if (!lineSvgs.length || !window.ResizeObserver) return;
-        var ro = new ResizeObserver(function(entries) {
-            entries.forEach(function(e) { _scaleLineGraph(e.target); });
+        svg.querySelectorAll(':scope > text').forEach(function(el) {
+            var x = parseFloat(el.getAttribute('x')) || 0;
+            el.setAttribute('transform',
+                'translate(' + x + ',0) scale(' + xCorr + ',1) translate(' + (-x) + ',0)');
         });
-        lineSvgs.forEach(function(svg) { ro.observe(svg); });
-    })();
+
+        svg.querySelectorAll(':scope > .insights-line-pt, :scope > circle.insights-line-dot').forEach(function(el) {
+            var c = el.tagName.toLowerCase() === 'circle' ? el : el.querySelector('circle');
+            var xref = c ? (parseFloat(c.getAttribute('cx')) || 0) : 0;
+            el.setAttribute('transform',
+                'translate(' + xref + ',0) scale(' + xCorr + ',1) translate(' + (-xref) + ',0)');
+        });
+    }
+
+    // Single shared ResizeObserver so lazily-injected dashboards (collection or
+    // wantlist) can hook in without spinning up new observers per render.
+    var _lineGraphRO = window.ResizeObserver ? new ResizeObserver(function(entries) {
+        entries.forEach(function(e) { _scaleLineGraph(e.target); });
+    }) : null;
+    function _observeLineGraphs(root) {
+        if (!_lineGraphRO) return;
+        (root || document).querySelectorAll('.insights-line-graph-svg[data-vw]').forEach(function(svg) {
+            _lineGraphRO.observe(svg);
+        });
+    }
+    window._observeLookupLineGraphs = _observeLineGraphs;
+    _observeLineGraphs();
 })();

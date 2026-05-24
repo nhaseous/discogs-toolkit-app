@@ -11,25 +11,9 @@
     }
 
     function updateBadgeCounts() {
-        var counts = {
-            recent: 0, old: 0, lowest: 0, low: 0, high: 0, highest: 0,
-            cheapest: 0, overpriced: 0, watch: 0
-        };
-        getActiveContainer().querySelectorAll(".result-card").forEach(function(card) {
-            var badges = (card.getAttribute("data-badges") || "").split(" ");
-            badges.forEach(function(b) { if (counts.hasOwnProperty(b)) counts[b]++; });
-        });
-        document.querySelectorAll(".badge-count").forEach(function(bc) {
-            Object.keys(counts).forEach(function(key) {
-                var badge = bc.querySelector(".inv-count-badge[data-filter='" + key + "']");
-                if (badge) {
-                    var ct = badge.nextElementSibling;
-                    if (ct && ct.classList.contains("badge-ct")) {
-                        ct.textContent = counts[key];
-                    }
-                }
-            });
-        });
+        var container = getActiveContainer();
+        var containerSelector = container.id ? "#" + container.id : null;
+        ToolkitUtils.updateBadgeCounts(containerSelector, ".badge-count");
     }
 
     // Exposed so reprice.js (loaded after this file) can refresh counts
@@ -38,8 +22,7 @@
     window._pcGetActiveContainer = getActiveContainer;
 
     function ordinal(n) {
-        if (11 <= (n % 100) && (n % 100) <= 13) return n + "th";
-        return n + ({1: "st", 2: "nd", 3: "rd"}[n % 10] || "th");
+        return ToolkitUtils.ordinal(n);
     }
 
     var seller = (window.PC_PENDING && window.PC_PENDING.seller) ||
@@ -72,11 +55,7 @@
         function scheduleSave() {
             clearTimeout(saveTimer);
             saveTimer = setTimeout(function() {
-                fetch("/watchlist", {
-                    method: "POST",
-                    headers: {"Content-Type": "application/json"},
-                    body: JSON.stringify({seller: seller, watchlist: getWatchedIds()})
-                });
+                ToolkitAPI.postWatchlist(seller, getWatchedIds());
             }, 600);
         }
 
@@ -148,8 +127,7 @@
         };
 
         // Load watchlist from Firestore, then apply to any cards already present.
-        fetch("/watchlist?seller=" + encodeURIComponent(seller))
-            .then(function(r) { return r.json(); })
+        ToolkitAPI.getWatchlist(seller)
             .then(function(data) {
                 (data.watchlist || []).forEach(function(id) { watchedIds.add(String(id)); });
                 document.querySelectorAll(".result-card").forEach(function(card) {
@@ -356,21 +334,17 @@
     var mosaic = document.getElementById("results-mosaic");
     if (!mosaic) return;
     var container = mosaic.closest(".content");
-    var sticky = null;
-    var syncObservers = [];
-    function reposition() {
-        if (!sticky) return;
-        sticky.style.left = document.getElementById("content-main").getBoundingClientRect().right + 48 + "px";
-    }
-    function activate() {
-        if (sticky) return;
-        sticky = document.createElement("div");
-        sticky.id = "sticky-mosaic";
-        mosaic.querySelectorAll(".mosaic-item").forEach(function(item) {
-            sticky.appendChild(item.cloneNode(true));
-        });
-        var invCount = mosaic.nextElementSibling;
-        if (invCount) {
+    var contentMain = document.getElementById("content-main");
+    var invCount = mosaic.nextElementSibling;
+
+    Mosaic.attachSticky(mosaic, {
+        container: container,
+        leftAnchorEl: contentMain,
+        returnEl: invCount,
+        clipEl: contentMain,
+        onStickyCreated: function(sticky) {
+            if (!invCount) return null;
+            var observers = [];
             var cloned = invCount.cloneNode(true);
             cloned.querySelectorAll(".inv-count-badge[data-filter]").forEach(function(cb) {
                 cb.addEventListener("click", function(e) {
@@ -385,7 +359,7 @@
                     if (cb) cb.classList.toggle("filter-active", ob.classList.contains("filter-active"));
                 });
                 mo.observe(ob, { attributes: true, attributeFilter: ["class"] });
-                syncObservers.push(mo);
+                observers.push(mo);
             });
             var origRC = invCount.querySelector(".reprice-controls");
             var cloneRC = cloned.querySelector(".reprice-controls");
@@ -405,13 +379,13 @@
                         if (cloneBtn.textContent !== origBtn.textContent) cloneBtn.textContent = origBtn.textContent;
                     });
                     moBtn.observe(origBtn, { attributes: true, attributeFilter: ["style", "class"], childList: true, characterData: true, subtree: true });
-                    syncObservers.push(moBtn);
+                    observers.push(moBtn);
                 });
                 var moRC = new MutationObserver(function() {
                     cloneRC.style.cssText = origRC.style.cssText;
                 });
                 moRC.observe(origRC, { attributes: true, attributeFilter: ["style"] });
-                syncObservers.push(moRC);
+                observers.push(moRC);
                 var origStatus = origRC.querySelector(".reprice-status");
                 var cloneStatus = cloneRC.querySelector(".reprice-status");
                 if (origStatus && cloneStatus) {
@@ -420,76 +394,13 @@
                         cloneStatus.textContent = origStatus.textContent;
                     });
                     moSt.observe(origStatus, { attributes: true, attributeFilter: ["style"], childList: true, characterData: true, subtree: true });
-                    syncObservers.push(moSt);
+                    observers.push(moSt);
                 }
             }
             sticky.appendChild(cloned);
-        }
-        document.body.appendChild(sticky);
-        reposition();
-        window.addEventListener("resize", reposition);
-        container.classList.add("sticky-mosaic-active");
-        sticky.style.transform = "translateY(-100%)";
-        requestAnimationFrame(function() {
-            requestAnimationFrame(function() {
-                if (!sticky) return;
-                sticky.style.transition = "transform 0.35s cubic-bezier(0.4,0,0.2,1)";
-                sticky.style.transform = "translateY(0)";
-            });
-        });
-    }
-    var MOSAIC_EASE = "transform 0.35s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease";
-    function slideInMosaic() {
-        var w = mosaic.offsetWidth;
-        var clip = document.getElementById("content-main");
-        if (clip) clip.style.overflow = "hidden";
-        mosaic.style.transition = "none";
-        mosaic.style.transform = "translateX(-" + w + "px)";
-        mosaic.style.opacity = "0";
-        requestAnimationFrame(function() {
-            requestAnimationFrame(function() {
-                mosaic.style.transition = MOSAIC_EASE;
-                mosaic.style.transform = "translateX(0)";
-                mosaic.style.opacity = "1";
-                mosaic.addEventListener("transitionend", function cleanup(e) {
-                    if (e.propertyName !== "transform") return;
-                    mosaic.removeEventListener("transitionend", cleanup);
-                    mosaic.style.transition = "";
-                    mosaic.style.transform = "";
-                    mosaic.style.opacity = "";
-                    if (clip) clip.style.overflow = "";
-                });
-            });
-        });
-    }
-    function revealMosaic() {
-        container.classList.remove("sticky-mosaic-active");
-        slideInMosaic();
-    }
-    function deactivate() {
-        if (!sticky) return;
-        syncObservers.forEach(function(mo) { mo.disconnect(); });
-        syncObservers = [];
-        window.removeEventListener("resize", reposition);
-        var el = sticky;
-        sticky = null;
-        el.style.transition = "transform 0.35s cubic-bezier(0.4,0,0.2,1)";
-        el.style.transform = "translateY(-100%)";
-        el.addEventListener("transitionend", function() { el.remove(); revealMosaic(); }, { once: true });
-    }
-    new IntersectionObserver(function(entries) {
-        if (!entries[0].isIntersecting && entries[0].boundingClientRect.top < 0) { activate(); }
-    }).observe(mosaic);
-    var invCount = mosaic.nextElementSibling;
-    if (invCount) {
-        new IntersectionObserver(function(entries) {
-            if (!entries[0].isIntersecting) return;
-            if (sticky) { deactivate(); return; }
-            if (!container.classList.contains("sticky-mosaic-active")) return;
-            revealMosaic();
-        }).observe(invCount);
-    }
-    slideInMosaic();
+            return observers;
+        },
+    });
 })();
 
 // --- Progressive loader: stream cards in as each scrape batch returns ---
@@ -559,21 +470,12 @@
         });
 
         if (res.thumb && mosaic) {
-            var a = document.createElement("a");
-            a.href = "#" + card.id;
-            a.className = "mosaic-item";
-            a.setAttribute("data-index", res.index);
-            var img = document.createElement("img");
-            img.className = "mosaic-thumb";
-            img.alt = "";
-            img.setAttribute("loading", "lazy");
-            // Play the fade-in animation once the image is actually ready.
-            var reveal = function() { img.classList.add("is-loaded"); };
-            img.addEventListener("load", reveal);
-            img.addEventListener("error", reveal);
-            img.src = res.thumb;
-            a.appendChild(img);
-            if (img.complete && img.naturalWidth > 0) reveal();
+            var a = Mosaic.buildItem({
+                thumb: res.thumb,
+                anchorId: card.id,
+                index: res.index,
+                reveal: true,
+            });
             insertOrdered(mosaic, a, res.index);
         }
 
@@ -631,13 +533,8 @@
         // hangs on a stalled scrape, so the loader can never freeze.
         var ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
         var timer = setTimeout(function() { if (ctrl) try { ctrl.abort(); } catch (e) {} }, BATCH_TIMEOUT_MS);
-        fetch("/scrape_batch", {
-            method: "POST",
-            headers: {"Content-Type": "application/json"},
-            body: JSON.stringify({seller: seller, releases: batch}),
-            signal: ctrl ? ctrl.signal : undefined
-        })
-        .then(function(r) { return r.json(); })
+        
+        ToolkitAPI.scrapeBatch(seller, batch, ctrl ? ctrl.signal : undefined)
         .then(function(d) { clearTimeout(timer); handleBatch(d); })
         .catch(function() { clearTimeout(timer); batch.forEach(markFailed); updateProgress(); })
         .then(function() {
