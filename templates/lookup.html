@@ -45,7 +45,7 @@
 {% if has_results %}
     <div class="meta">
         <span>
-            <b>User: {{ username }}</b>
+            <b>User: <a href="https://www.discogs.com/user/{{ username }}" target="_blank" rel="noopener noreferrer" class="meta-user-link">{{ username }}</a></b>
             {% if loadtime %} &nbsp;&#183;&nbsp; <span id="lookup-count"></span>{% endif %}
         </span>
         {% if loadtime %}
@@ -76,15 +76,14 @@
                     <a class="mosaic-item" href="{{ m.url or '#' }}" target="_blank" rel="noopener noreferrer"><img src="{{ m.thumb }}" alt="" loading="lazy" class="mosaic-thumb"></a>
                 {% endif %}{% endfor %}
             </div>
-            <div id="lookup-mosaic-wantlist" class="lookup-mosaic mosaic lookup-mosaic--inactive">
-                {% for m in wantlist %}{% if m.thumb %}
-                    <a class="mosaic-item" href="{{ m.url or '#' }}" target="_blank" rel="noopener noreferrer"><img src="{{ m.thumb }}" alt="" loading="lazy" class="mosaic-thumb"></a>
-                {% endif %}{% endfor %}
-            </div>
-            <div id="lookup-mosaic-list" class="lookup-mosaic mosaic{{ ' lookup-mosaic--inactive' if not list_id else '' }}">
-                {% for m in list_releases %}{% if m.thumb %}
+            {# Wantlist + list mosaics start empty and are populated by JS on first
+               tab activation — saves a lot of DOM (and HTML weight) on first paint
+               for users who never open those tabs. #}
+            <div id="lookup-mosaic-wantlist" class="lookup-mosaic mosaic lookup-mosaic--inactive" data-mosaic-tab="wantlist"></div>
+            <div id="lookup-mosaic-list" class="lookup-mosaic mosaic{{ ' lookup-mosaic--inactive' if not list_id else '' }}" data-mosaic-tab="list">
+                {% if list_id %}{% for m in list_releases %}{% if m.thumb %}
                     <span class="mosaic-item"><img src="{{ m.thumb }}" alt="" loading="lazy" class="mosaic-thumb"></span>
-                {% endif %}{% endfor %}
+                {% endif %}{% endfor %}{% endif %}
             </div>
         </div>
 
@@ -127,7 +126,7 @@
             {% elif collection %}
                 {% if collection_partial %}<div class="lookup-notice lookup-notice--warning">{{ collection_partial }}</div>{% endif %}
                 <div class="match-grid"></div>
-                <script type="application/json" class="lookup-data" data-tab="collection" data-show-stats="0">{{ collection | tojson | safe }}</script>
+                <script type="application/json" class="lookup-data" data-tab="collection" data-show-stats="0" data-total="{{ collection | length }}" data-needs-hydration="{{ '1' if needs_hydration.collection else '0' }}">{{ collection_inline | tojson | safe }}</script>
             {% else %}
                 <p class="match-empty">This collection is empty.</p>
             {% endif %}
@@ -139,7 +138,7 @@
             {% elif wantlist %}
                 {% if wantlist_partial %}<div class="lookup-notice lookup-notice--warning">{{ wantlist_partial }}</div>{% endif %}
                 <div class="match-grid"></div>
-                <script type="application/json" class="lookup-data" data-tab="wantlist" data-show-stats="1">{{ wantlist | tojson | safe }}</script>
+                <script type="application/json" class="lookup-data" data-tab="wantlist" data-show-stats="1" data-total="{{ wantlist | length }}" data-needs-hydration="{{ '1' if needs_hydration.wantlist else '0' }}">{{ wantlist_inline | tojson | safe }}</script>
             {% else %}
                 <p class="match-empty">This wantlist is empty.</p>
             {% endif %}
@@ -158,7 +157,7 @@
                 {% if cf_blocked_list %}
                     {{ cloudflare_notice | safe }}
                 {% else %}
-                    <script type="application/json" class="lookup-data" data-tab="list" data-show-stats="0">{{ list_releases | tojson | safe }}</script>
+                    <script type="application/json" class="lookup-data" data-tab="list" data-show-stats="0" data-total="{{ list_releases | length }}" data-needs-hydration="{{ '1' if needs_hydration.list else '0' }}">{{ list_releases_inline | tojson | safe }}</script>
                     {% if not list_releases %}<p class="match-empty">This list is empty.</p>{% endif %}
                 {% endif %}
             {% endif %}

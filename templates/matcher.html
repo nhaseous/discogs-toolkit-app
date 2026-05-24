@@ -41,7 +41,7 @@
 
 {% if has_results %}
     <div class="meta">
-        <span><b>Collection: {{ collection_meta }}</b> &nbsp;&middot;&nbsp; <b>Wantlist: {{ wantlist_meta }}</b></span>
+        <span><b>Collection: <a href="https://www.discogs.com/user/{{ collection_meta }}" target="_blank" rel="noopener noreferrer" class="meta-user-link">{{ collection_meta }}</a></b> &nbsp;&middot;&nbsp; <b>Wantlist: <a href="https://www.discogs.com/user/{{ wantlist_meta }}" target="_blank" rel="noopener noreferrer" class="meta-user-link">{{ wantlist_meta }}</a></b></span>
         {% if loadtime %}
             <span>Match time: {{ loadtime }} seconds &nbsp;&#124;&nbsp; {{ searched_at }}</span>
         {% endif %}
@@ -59,7 +59,7 @@
         {% endif %}
 
         <div class="result-card">
-            <div class="card-title card-title--label">Results</div>
+            <div class="place-summary-title">Results</div>
             <div class="card-listings">
                 Collection: <b>{{ collection_user }}</b> ({{ counts.collection }} items)<br>
                 Wantlist: <b>{{ wantlist_user }}</b> ({{ counts.wantlist }} items)<br>

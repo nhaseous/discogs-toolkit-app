@@ -235,6 +235,12 @@
     b { color: var(--ink); font-weight: 600; }
 }
 
+.meta-user-link {
+    color: inherit;
+    text-decoration: none;
+    &:hover { text-decoration: underline; }
+}
+
 /* =========================================================
    Inv-count filter badges
    ========================================================= */

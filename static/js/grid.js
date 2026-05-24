@@ -164,4 +164,25 @@
         pendingCard = null;
         if (activeCard) { activeCard.classList.remove("match-card--active"); activeCard = null; }
     };
+
+    // Mobile touch: on pointer-coarse devices (phones/tablets), first tap expands
+    // a card and second tap navigates. When expand-all is on, single tap navigates.
+    if (window.matchMedia("(pointer: coarse)").matches) {
+        document.addEventListener("touchstart", function(e) {
+            var card = e.target.closest(".match-card:not(.match-card--back)");
+            if (!card) {
+                if (activeCard) { activeCard.classList.remove("match-card--active"); activeCard = null; }
+                clearTimeout(closeTimer); closeTimer = null; pendingCard = null;
+                return;
+            }
+            var grid = card.closest(".match-grid");
+            if (grid && grid.classList.contains("match-grid--expanded")) return;
+            if (activeCard === card) return;
+            e.preventDefault();
+            clearTimeout(closeTimer); closeTimer = null; pendingCard = null;
+            if (activeCard) activeCard.classList.remove("match-card--active");
+            activeCard = card;
+            card.classList.add("match-card--active");
+        }, { passive: false });
+    }
 })();

@@ -190,7 +190,12 @@
     font-variant-numeric: tabular-nums;
 }
 
-.place-summary-title { border-bottom: 1px solid var(--rule); margin-bottom: 8px; }
+.place-summary-title {
+    font-size: 13px;
+    color: var(--ink-soft);
+    border-bottom: 1px solid var(--rule);
+    margin-bottom: 8px;
+}
 
 .place-summary-link {
     font-weight: 500;
@@ -236,14 +241,12 @@
     flex-direction: column;
     overflow: hidden;
     width: 100%;
-    border-radius: 5px;
     padding: 0;
     transition: margin-bottom 0.28s cubic-bezier(0.4,0,0.2,1);
 
     &:hover {
         text-decoration: none;
         transform: translateY(-3px);
-        .match-card-img { transform: scale(1.04); }
     }
 }
 

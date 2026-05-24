@@ -79,6 +79,11 @@ function _withLookupScroll(action) {
     if (!tabsContainer || !tabsContainer.querySelector(".lookup-tab")) return;
     var EASE = "transform 0.35s cubic-bezier(0.4,0,0.2,1), opacity 0.28s ease";
     function switchMosaics(target) {
+        // Lazy mosaics: wantlist + list ship empty in the HTML. Populate the
+        // incoming mosaic from its tab's item list right before the animation
+        // starts so the cards slide in fully composed.
+        if (window._populateLookupMosaic) window._populateLookupMosaic(target);
+
         var all = Array.from(document.querySelectorAll(".lookup-mosaic"));
         var incoming = document.getElementById("lookup-mosaic-" + target);
         var outgoing = all.find(function(m) { return m !== incoming && !m.classList.contains("lookup-mosaic--inactive"); });
@@ -215,16 +220,70 @@ function _withLookupScroll(action) {
         var backCard = grid ? grid.querySelector(".match-card--back") : null;
         var dataEl = document.querySelector('.lookup-data[data-tab="' + name + '"]');
         var items = null, cards = null, showStats = false;
+        var totalItems = 0, needsHydration = false;
         if (dataEl) {
             items = JSON.parse(dataEl.textContent);
             showStats = dataEl.getAttribute("data-show-stats") === "1";
+            // data-total reflects the full server-side count (not just the inlined
+            // first page), so pagination math reports the real "page N of M" even
+            // before /lookup/data hydration completes.
+            var declaredTotal = parseInt(dataEl.getAttribute("data-total"), 10);
+            totalItems = isNaN(declaredTotal) ? items.length : declaredTotal;
+            needsHydration = dataEl.getAttribute("data-needs-hydration") === "1";
         } else {
             cards = grid ? Array.from(grid.querySelectorAll(".match-card:not(.match-card--back)")) : [];
+            totalItems = cards ? cards.length : 0;
         }
-        var count = items ? items.length : (cards ? cards.length : 0);
-        var total = Math.max(1, Math.ceil(count / PAGE_SIZE));
-        state[name] = { page: 1, total: total, items: items, cards: cards, showStats: showStats, backCard: backCard, ready: false };
+        var total = Math.max(1, Math.ceil(totalItems / PAGE_SIZE));
+        state[name] = {
+            page: 1, total: total, items: items, cards: cards,
+            showStats: showStats, backCard: backCard, ready: false,
+            needsHydration: needsHydration, totalItems: totalItems,
+        };
     });
+
+    // Lazy hydration: pull the full items array from /lookup/data after first
+    // paint so the initial HTML stays small. Until each tab finishes hydrating,
+    // pagination beyond page 1 and filter interactions wait on its promise.
+    var _hydrationPromises = {};
+    function _hydrateTab(tabName) {
+        var s = state[tabName];
+        if (!s || !s.needsHydration) return Promise.resolve(s ? s.items : null);
+        if (_hydrationPromises[tabName]) return _hydrationPromises[tabName];
+        var qs = new URLSearchParams(window.location.search);
+        var username = qs.get('username') || '';
+        var listId = qs.get('list_id') || '';
+        var url = '/lookup/data?username=' + encodeURIComponent(username) +
+                  '&tab=' + encodeURIComponent(tabName) +
+                  (listId ? '&list_id=' + encodeURIComponent(listId) : '');
+        var p = fetch(url, { headers: { 'Accept': 'application/json' } })
+            .then(function(r) {
+                if (!r.ok) throw new Error('HTTP ' + r.status);
+                return r.json();
+            })
+            .then(function(data) {
+                var fullItems = (data && data.items) || null;
+                if (fullItems && fullItems.length >= s.items.length) {
+                    s.items = fullItems;
+                    s.totalItems = fullItems.length;
+                    s.total = Math.max(1, Math.ceil(fullItems.length / PAGE_SIZE));
+                    s.needsHydration = false;
+                    if (window._onTabHydrated) window._onTabHydrated(tabName);
+                }
+                return s.items;
+            })
+            .catch(function() {
+                // 410 (cache expired) or network error — keep the inline subset;
+                // the user can refresh to get a fresh lookup. Clear the cached
+                // promise so a later interaction can retry.
+                _hydrationPromises[tabName] = null;
+                s.needsHydration = false;
+                return s.items;
+            });
+        _hydrationPromises[tabName] = p;
+        return p;
+    }
+    window._lookupHydrateTab = _hydrateTab;
     function syncControls(tabName) {
         if (!pagEl || !labelEl) return;
         var s = state[tabName];
@@ -322,12 +381,18 @@ function _withLookupScroll(action) {
         }
         _syncFilterBadges();
         var s = state[tabName];
-        if (s && s.items) {
+        if (!s || !s.items) return;
+        var rerender = function() {
             applyPage(tabName, 1);
             syncControls(tabName);
             _syncTabCount(tabName, s);
             if (window._layoutMatchGrids) window._layoutMatchGrids();
-        }
+        };
+        // Filters need the complete item list to compute counts and match across
+        // pages, so wait on hydration before applying. Render once with the
+        // inline subset to feel responsive, then re-render when full data lands.
+        rerender();
+        if (s.needsHydration) _hydrateTab(tabName).then(rerender);
     };
     window._applyTabPage = function(tabName) {
         var s = state[tabName];
@@ -352,31 +417,89 @@ function _withLookupScroll(action) {
         syncControls(initName);
         if (window._layoutMatchGrids) window._layoutMatchGrids();
     }
+
+    // Populates an initially-empty mosaic (wantlist/list) from the current
+    // state.items. Called when the user first activates the tab and again
+    // when /lookup/data hydration completes with the full item list.
+    function _populateMosaic(tabName) {
+        var mosaic = document.getElementById('lookup-mosaic-' + tabName);
+        if (!mosaic) return;
+        if (mosaic.dataset.populated === '1') return;
+        var s = state[tabName];
+        if (!s || !s.items) return;
+        var html = '';
+        s.items.forEach(function(m) {
+            if (!m.thumb) return;
+            if (tabName === 'list') {
+                html += '<span class="mosaic-item"><img src="' + _esc(m.thumb) + '" alt="" loading="lazy" class="mosaic-thumb"></span>';
+            } else {
+                html += '<a class="mosaic-item" href="' + _esc(m.url || '#') +
+                        '" target="_blank" rel="noopener noreferrer">' +
+                        '<img src="' + _esc(m.thumb) + '" alt="" loading="lazy" class="mosaic-thumb"></a>';
+            }
+        });
+        mosaic.innerHTML = html;
+        if (!s.needsHydration) mosaic.dataset.populated = '1';
+    }
+    window._populateLookupMosaic = _populateMosaic;
+
+    // When a tab finishes hydrating, refresh anything that was rendered against
+    // the inline subset: the page counter, the tab label count, and the mosaic.
+    window._onTabHydrated = function(tabName) {
+        var s = state[tabName];
+        if (!s) return;
+        _syncTabCount(tabName, s);
+        syncControls(tabName);
+        var mosaic = document.getElementById('lookup-mosaic-' + tabName);
+        if (mosaic && mosaic.dataset.populated !== '1') _populateMosaic(tabName);
+    };
+
+    // Kick off hydration for every tab that still has trimmed inline data.
+    // requestIdleCallback runs after first paint so the user sees the
+    // first-page cards immediately; the heavy JSON fetch streams in behind.
+    function _kickoffHydration() {
+        Object.keys(state).forEach(function(name) {
+            if (state[name] && state[name].needsHydration) _hydrateTab(name);
+        });
+    }
+    if (window.requestIdleCallback) {
+        requestIdleCallback(_kickoffHydration, { timeout: 1500 });
+    } else {
+        setTimeout(_kickoffHydration, 100);
+    }
     function getActiveTab() {
         var a = document.querySelector(".lookup-tab.active");
         return a ? a.getAttribute("data-tab") : null;
     }
-    if (prevBtn) prevBtn.addEventListener("click", function() {
-        var name = getActiveTab();
+    function _goToPage(name, target) {
         var s = state[name];
-        if (s && s.page > 1) {
+        if (!s) return;
+        var doRender = function() {
             _withLookupScroll(function() {
-                applyPage(name, s.page - 1);
+                applyPage(name, target);
                 syncControls(name);
                 if (window._layoutMatchGrids) window._layoutMatchGrids();
             });
+        };
+        // Hydration brings in items beyond the inline first page — wait for it
+        // before paginating past page 1 so we don't show a half-filled grid.
+        if (s.needsHydration && target > 1) {
+            if (prevBtn) prevBtn.disabled = true;
+            if (nextBtn) nextBtn.disabled = true;
+            _hydrateTab(name).then(doRender);
+        } else {
+            doRender();
         }
+    }
+    if (prevBtn) prevBtn.addEventListener("click", function() {
+        var name = getActiveTab();
+        var s = state[name];
+        if (s && s.page > 1) _goToPage(name, s.page - 1);
     });
     if (nextBtn) nextBtn.addEventListener("click", function() {
         var name = getActiveTab();
         var s = state[name];
-        if (s && s.page < s.total) {
-            _withLookupScroll(function() {
-                applyPage(name, s.page + 1);
-                syncControls(name);
-                if (window._layoutMatchGrids) window._layoutMatchGrids();
-            });
-        }
+        if (s && s.page < s.total) _goToPage(name, s.page + 1);
     });
     function applySize(value) {
         PAGE_SIZE = value;

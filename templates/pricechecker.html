@@ -41,7 +41,7 @@
 
 {% if seller %}
     <div class="meta">
-        <span><b>Seller: {{ seller }}</b> &nbsp;&middot;&nbsp; {{ inventory_count }} release{{ 's' if inventory_count != 1 else '' }}</span>
+        <span><b>Seller: <a href="https://www.discogs.com/user/{{ seller }}" target="_blank" rel="noopener noreferrer" class="meta-user-link">{{ seller }}</a></b> &nbsp;&middot;&nbsp; {{ inventory_count }} release{{ 's' if inventory_count != 1 else '' }}</span>
         {% if inventory_count %}
             <span><span id="pc-load-status">Loading 0 of {{ inventory_count }}&hellip;</span><span id="pc-load-time" style="display:none">Search time: <span id="pc-load-time-val"></span> seconds &nbsp;&#124;&nbsp; {{ searched_at }}</span></span>
         {% endif %}

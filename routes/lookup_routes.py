@@ -2,10 +2,15 @@ from flask import Blueprint, request, render_template, session, jsonify
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 from datetime import datetime
-from helper import lookup as lookup_helper, api as api_helper, insights as insights_helper
+from helper import lookup as lookup_helper, api as api_helper, insights as insights_helper, lookup_cache
 from web_common import oauth_auth
 
 lookup_bp = Blueprint('lookup', __name__)
+
+# Items inlined per tab on initial HTML render. Anything beyond this is fetched
+# lazily from /lookup/data after first paint. Matches the JS default PAGE_SIZE
+# so the first page of cards can render without waiting on hydration.
+_INLINE_PAGE_SIZE = 50
 
 
 @lookup_bp.route("/lookup")
@@ -89,7 +94,7 @@ def lookuppage():
 
         if list_id and not user_not_found and not rate_limited and not cap_exceeded:
             try:
-                list_releases = lookup_helper.get_list_releases(list_id)
+                list_releases = lookup_helper.get_list_releases(list_id, auth=auth)
             except lookup_helper.RateLimitError:
                 rate_limited = True
             except lookup_helper.CloudflareBlockedError:
@@ -101,6 +106,27 @@ def lookuppage():
         loadtime = round(end_time - start_time, 2)
         searched_at = datetime.now().astimezone().strftime("%-I:%M %p %Z · %-d %b %y")
 
+        # Stash the full result for /lookup/data to serve to the client once it
+        # finishes first paint. Only cache if we actually have something useful
+        # to hand back — failed/empty lookups can re-fetch from Discogs if needed.
+        if not user_not_found and not cap_exceeded and not rate_limited:
+            lookup_cache.put(
+                (username.lower(), str(list_id)),
+                {'collection': collection, 'wantlist': wantlist, 'list_releases': list_releases},
+            )
+
+    # Inline only the first page of items per tab — the rest is hydrated lazily.
+    # The full lists are still passed in for the mosaic (collection) and the tab
+    # count labels; only the heavy lookup-data JSON blocks read the *_inline view.
+    collection_inline = collection[:_INLINE_PAGE_SIZE]
+    wantlist_inline = wantlist[:_INLINE_PAGE_SIZE]
+    list_releases_inline = list_releases[:_INLINE_PAGE_SIZE]
+    needs_hydration = {
+        'collection': len(collection) > _INLINE_PAGE_SIZE,
+        'wantlist':   len(wantlist) > _INLINE_PAGE_SIZE,
+        'list':       len(list_releases) > _INLINE_PAGE_SIZE,
+    }
+
     return render_template('lookup.html',
         username=username,
         list_id=list_id,
@@ -109,6 +135,10 @@ def lookuppage():
         wantlist=wantlist,
         lists=lists,
         list_releases=list_releases,
+        collection_inline=collection_inline,
+        wantlist_inline=wantlist_inline,
+        list_releases_inline=list_releases_inline,
+        needs_hydration=needs_hydration,
         user_not_found=user_not_found,
         rate_limited=rate_limited,
         cap_exceeded=cap_exceeded,
@@ -146,13 +176,36 @@ def lookup_insights():
     return jsonify({"html": html})
 
 
+@lookup_bp.route("/lookup/data")
+def lookup_data():
+    """
+    Lazy-hydration endpoint. Returns the full items array for a given tab from
+    the in-memory cache populated by /lookup. Lets the page ship only the first
+    pagination window inline and fetch the rest after first paint.
+
+    On a cache miss (TTL expired or different process instance), returns 410 so
+    the client can fall back to its inline subset rather than block the user.
+    """
+    username = request.args.get("username", "").lower()
+    tab = request.args.get("tab", "")
+    list_id = request.args.get("list_id", "")
+    if not username or tab not in ("collection", "wantlist", "list"):
+        return jsonify({"error": "bad_request"}), 400
+    cached = lookup_cache.get((username, str(list_id)))
+    if not cached:
+        return jsonify({"error": "expired"}), 410
+    key_map = {"collection": "collection", "wantlist": "wantlist", "list": "list_releases"}
+    return jsonify({"items": cached.get(key_map[tab], [])})
+
+
 @lookup_bp.route("/lookup/list")
 def lookup_list_data():
     list_id = request.args.get("list_id", "")
     if not list_id:
         return jsonify({"error": "Missing list_id"}), 400
+    auth = oauth_auth()
     try:
-        releases = lookup_helper.get_list_releases(list_id)
+        releases = lookup_helper.get_list_releases(list_id, auth=auth)
     except lookup_helper.RateLimitError:
         return jsonify({"error": "rate_limited"}), 429
     except lookup_helper.CloudflareBlockedError:
