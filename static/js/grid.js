@@ -20,30 +20,40 @@
     // columns — without touching anything inside the card. Equalizing per row (not
     // per page) keeps one unusually tall card from adding a big gap below every
     // other card.
+    // Batched in three phases (writes → reads → writes) so we trigger a single
+    // forced reflow for the whole grid instead of one per card. Same outputs
+    // (maxH per row, delta per card) as a straight per-row loop would produce.
     function equalizeExpandedCards(grid) {
         var cols = Array.from(grid.querySelectorAll('.match-column'));
         if (!cols.length) return;
         var numRows = Math.max.apply(null, cols.map(function(c) { return c.children.length; }));
+        var rows = [];
         for (var row = 0; row < numRows; row++) {
-            // Measure with getBoundingClientRect().height (sub-pixel) rather than
-            // offsetHeight (rounded to whole px) so the per-card padding sums to the
-            // exact row height — integer rounding here would otherwise accumulate
-            // into visibly drifting thumbnails further down the page.
             var items = [];
             cols.forEach(function(col) {
                 var card = col.children[row];
                 if (card) {
                     card.style.marginBottom = '';
-                    items.push({ card: card, h: card.getBoundingClientRect().height });
+                    items.push({ card: card });
                 }
             });
-            if (!items.length) continue;
+            rows.push(items);
+        }
+        // Measure with getBoundingClientRect().height (sub-pixel) rather than
+        // offsetHeight (rounded to whole px) so the per-card padding sums to the
+        // exact row height — integer rounding here would otherwise accumulate
+        // into visibly drifting thumbnails further down the page.
+        rows.forEach(function(items) {
+            items.forEach(function(o) { o.h = o.card.getBoundingClientRect().height; });
+        });
+        rows.forEach(function(items) {
+            if (!items.length) return;
             var maxH = Math.max.apply(null, items.map(function(o) { return o.h; }));
             items.forEach(function(o) {
                 var delta = maxH - o.h;
                 o.card.style.marginBottom = delta ? delta.toFixed(2) + 'px' : '';
             });
-        }
+        });
     }
 
     function equalizeCardRows(grid) {
@@ -54,6 +64,7 @@
         var cols = Array.from(grid.querySelectorAll('.match-column'));
         if (!cols.length) return;
         var numRows = Math.max.apply(null, cols.map(function(c) { return c.children.length; }));
+        var rows = [];
         for (var row = 0; row < numRows; row++) {
             var items = [];
             cols.forEach(function(col) {
@@ -64,13 +75,19 @@
                     if (info) { info.style.minHeight = ''; items.push({ card: card, info: info }); }
                 }
             });
-            if (!items.length) continue;
-            var maxH = Math.max.apply(null, items.map(function(o) { return o.info.offsetHeight; }));
+            rows.push(items);
+        }
+        rows.forEach(function(items) {
+            items.forEach(function(o) { o.h = o.info.offsetHeight; });
+        });
+        rows.forEach(function(items) {
+            if (!items.length) return;
+            var maxH = Math.max.apply(null, items.map(function(o) { return o.h; }));
             items.forEach(function(o) {
-                var delta = maxH - o.info.offsetHeight;
+                var delta = maxH - o.h;
                 o.card.style.marginBottom = delta ? delta + 'px' : '';
             });
-        }
+        });
     }
 
     function layoutMatchGrid(grid) {

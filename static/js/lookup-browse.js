@@ -157,6 +157,7 @@ function _withLookupScroll(action) {
     }
 
     var state = {};
+    var _rerenderRaf = 0;
     function getGrid(tabName) {
         var panel = document.getElementById("lookup-panel-" + tabName);
         return panel ? panel.querySelector(".match-grid") : null;
@@ -386,10 +387,23 @@ function _withLookupScroll(action) {
             _syncTabCount(tabName, s);
             if (window._layoutMatchGrids) window._layoutMatchGrids();
         };
-        // Filters need the complete item list to compute counts and match across
-        // pages, so wait on hydration before applying. Render once with the
-        // inline subset to feel responsive, then re-render when full data lands.
-        rerender();
+        // Defer the grid rebuild one frame so the click's visual feedback —
+        // active class on the dashboard row, pie/line dimming via :has(),
+        // filter badge appearing/disappearing — paints immediately. The grid
+        // (rebuild 50 cards + reflow into columns + equalize) is the slow part
+        // (~30–50ms on a sizeable collection); running it inline blocks the
+        // browser from painting the cheap visual updates until it finishes.
+        // Coalesce rapid toggles so multiple clicks don't queue redundant
+        // rerenders against the same final filter state.
+        if (_rerenderRaf) cancelAnimationFrame(_rerenderRaf);
+        _rerenderRaf = requestAnimationFrame(function() {
+            _rerenderRaf = 0;
+            rerender();
+        });
+        // Filters need the complete item list to compute counts and match
+        // across pages. The deferred rerender above gives instant feedback
+        // against the inline subset; this second pass replaces it with the
+        // full data when hydration lands.
         if (s.needsHydration) _hydrateTab(tabName).then(rerender);
     };
     window._applyTabPage = function(tabName) {
@@ -559,14 +573,41 @@ function _withLookupScroll(action) {
                 g.classList.toggle("match-grid--expanded", on);
             });
         });
-        // Card heights settle once the body expand/collapse transition (~0.28s)
-        // finishes; re-run the layout then to set the alignment slack from the final
-        // heights. A second, later pass corrects any cards whose height settles a bit
-        // later (e.g. lazy images / web fonts) — the margin transition keeps it smooth.
-        [320, 800].forEach(function(delay) {
-            setTimeout(function() {
-                if (window._layoutMatchGrids) window._layoutMatchGrids();
-            }, delay);
-        });
+        // Re-run layout once the body expand/collapse transition (~0.28s) ends,
+        // then watch cards for any further size shifts over a short window
+        // (lazy images / web fonts settling). Observing CARDS — not the grid —
+        // means our inline marginBottom writes, which sit outside the card box,
+        // don't retrigger the observer.
+        var relayout = function() { if (window._layoutMatchGrids) window._layoutMatchGrids(); };
+        var grid = Array.from(document.querySelectorAll(".match-grid")).find(function(g) { return g.offsetParent; });
+        if (!grid) return;
+        var startFollowup = function() {
+            relayout();
+            if (!window.ResizeObserver) return;
+            var roTimer = null;
+            var firstFire = true;
+            var ro = new ResizeObserver(function() {
+                // Skip the synthetic fire ResizeObserver emits at observe() time.
+                if (firstFire) { firstFire = false; return; }
+                clearTimeout(roTimer);
+                roTimer = setTimeout(relayout, 80);
+            });
+            grid.querySelectorAll('.match-card:not(.match-card--back)').forEach(function(c) { ro.observe(c); });
+            setTimeout(function() { ro.disconnect(); clearTimeout(roTimer); }, 1200);
+        };
+        var firstBody = grid.querySelector('.match-card-body');
+        if (!firstBody) { startFollowup(); return; }
+        var triggered = false;
+        var fire = function() {
+            if (triggered) return;
+            triggered = true;
+            firstBody.removeEventListener('transitionend', onEnd);
+            startFollowup();
+        };
+        var onEnd = function(e) { if (e.propertyName === 'max-height') fire(); };
+        firstBody.addEventListener('transitionend', onEnd);
+        // Safety net: if transitionend doesn't fire (browser quirk, hidden tab),
+        // still start the followup. 500ms covers the 280ms transition + slack.
+        setTimeout(fire, 500);
     });
 })();
