@@ -80,10 +80,15 @@
     padding: 40px 48px 64px;
     max-width: 1040px;
     width: 100%;
+    transition: margin-left 0.22s cubic-bezier(0.4,0,0.2,1);
 
-    &.has-results { 
-        padding-top: 30px; 
+    &.has-results {
+        padding-top: 30px;
     }
+}
+
+.sidebar-collapsed .content {
+    margin-left: 72px;
 }
 
 .page-header {
@@ -117,6 +122,7 @@
 /* Responsive */
 @media (max-width: 900px) {
     .content { margin-left: 0; padding: 24px 20px 48px; }
+    .sidebar-collapsed .content { margin-left: 0; }
 }
 
 /* Print */

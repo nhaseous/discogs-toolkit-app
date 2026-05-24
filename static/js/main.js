@@ -6,6 +6,20 @@
 // lookup-browse.js.
 // ==========================================================
 
+(function() {
+    var toggle = document.getElementById('sidebar-toggle');
+    if (!toggle) return;
+    var KEY = 'sidebar-collapsed';
+    function apply(collapsed) {
+        document.documentElement.classList.toggle('sidebar-collapsed', collapsed);
+    }
+    toggle.addEventListener('click', function() {
+        var next = !document.documentElement.classList.contains('sidebar-collapsed');
+        apply(next);
+        localStorage.setItem(KEY, next ? '1' : '0');
+    });
+})();
+
 document.querySelectorAll(".sidebar a").forEach(function(link) {
     link.addEventListener("click", function(e) {
         if (this.pathname === window.location.pathname) {

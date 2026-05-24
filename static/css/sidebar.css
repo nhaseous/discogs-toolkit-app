@@ -10,85 +10,175 @@
     width: 220px;
     height: 100vh;
     overflow-y: auto;
+    overflow-x: hidden;
     background: var(--paper-alt);
-    padding: 30px 0 0;
     display: flex;
     flex-direction: column;
+    transition: width 0.22s cubic-bezier(0.4,0,0.2,1);
+    z-index: 100;
 }
 
-.sidebar-brand {
+.sidebar-collapsed .sidebar {
+    width: 72px;
+}
+
+/* ---- Header ---- */
+
+.sidebar-header {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 0 22px 22px;
+    gap: 4px;
+    padding: 14px 10px 10px 14px;
     margin-bottom: 4px;
+    flex-shrink: 0;
+    overflow: hidden;
+}
+
+.sidebar-collapsed .sidebar-header {
+    padding: 4px 8px;
     border-bottom: 1px solid var(--rule);
+    margin-bottom: 10px;
+}
+
+.brand-icon-btn {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    padding: 5px;
+    border-radius: 50%;
+    transition: background 0.12s ease, padding 0.22s cubic-bezier(0.4,0,0.2,1), border-radius 0.22s ease;
+
+    &:hover {
+        background: color-mix(in srgb, var(--ink) 7%, var(--paper-alt));
+    }
+}
+
+.sidebar-collapsed .brand-icon-btn {
+    padding: 9px;
+    border-radius: 10px;
+    width: 100%;
+}
+
+.sidebar-brand-text-link {
+    display: flex;
+    align-items: center;
+    flex: 1;
+    min-width: 0;
+    overflow: hidden;
+    white-space: nowrap;
     color: var(--ink) !important;
     text-decoration: none !important;
+    transition: opacity 0.18s ease, max-width 0.22s cubic-bezier(0.4,0,0.2,1);
+    max-width: 160px;
+
+    &:hover { text-decoration: none !important; }
+}
+
+.sidebar-collapsed .sidebar-brand-text-link {
+    opacity: 0;
+    max-width: 0;
+    pointer-events: none;
+}
+
+.sidebar-brand-text {
+    overflow: hidden;
 }
 
 /* ---- Nav sections ---- */
 
 .sidebar-nav {
     flex: 1 1 0;
+    padding: 0 8px;
 }
 
 .sidebar-section {
-    margin-bottom: 2px;
+    margin-bottom: 4px;
+}
+
+.sidebar-section + .sidebar-section {
+    margin-top: 2px;
+}
+
+.sidebar-collapsed .sidebar-section + .sidebar-section {
+    border-top: 1px solid var(--rule);
+    padding-top: 6px;
+    margin-top: 6px;
 }
 
 .sidebar-label {
-    font-size: 9.5px;
+    font-size: 10px;
     font-weight: 700;
     color: var(--ink-muted);
     text-transform: uppercase;
-    letter-spacing: 0.16em;
-    padding: 14px 22px 4px;
+    letter-spacing: 0.14em;
+    padding: 10px 12px 4px;
+    white-space: nowrap;
+    overflow: hidden;
+    max-height: 32px;
+    transition: opacity 0.15s ease, max-height 0.22s cubic-bezier(0.4,0,0.2,1), padding 0.22s ease;
+}
+
+.sidebar-collapsed .sidebar-label {
+    opacity: 0;
+    max-height: 0;
+    padding-top: 0;
+    padding-bottom: 0;
 }
 
 .sidebar-nav a {
     display: flex;
     align-items: center;
-    gap: 9px;
-    margin: 2px 10px;
-    padding: 7px 12px;
+    gap: 14px;
+    padding: 9px 12px;
+    margin: 1px 0;
     color: var(--ink-soft);
     font-size: 13.5px;
     font-weight: 500;
-    border-radius: 8px;
-    background: var(--paper-alt);
-    border: 1px solid var(--rule);
-    box-shadow: 0 2.5px 0 var(--rule-strong);
+    border-radius: 10px;
+    background: transparent;
     text-decoration: none;
-    transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.12s ease, color 0.12s ease, border-color 0.12s ease;
+    white-space: nowrap;
+    overflow: hidden;
+    transition: background 0.12s ease, color 0.12s ease, padding 0.22s cubic-bezier(0.4,0,0.2,1), gap 0.22s cubic-bezier(0.4,0,0.2,1);
 
     &:hover {
         color: var(--ink);
-        background: color-mix(in srgb, var(--ink) 5%, var(--paper-alt));
-        transform: translateY(-1px);
-        box-shadow: 0 3.5px 0 var(--rule-strong);
+        background: color-mix(in srgb, var(--ink) 7%, var(--paper-alt));
         text-decoration: none;
     }
 
     &.active {
         color: var(--ink);
-        background: var(--focus-ring-amber);
-        border-color: var(--rule-strong);
-        box-shadow: 0 2.5px 0 color-mix(in srgb, var(--ink) 18%, var(--rule-strong));
+        background: color-mix(in srgb, var(--amber) 18%, var(--paper-alt));
+        font-weight: 600;
     }
 }
 
-.nav-icon {
-    width: 14px;
-    height: 14px;
-    flex-shrink: 0;
-    opacity: 0.6;
-    transition: opacity 0.12s ease;
+.sidebar-collapsed .sidebar-nav a {
+    padding: 9px;
+    justify-content: center;
+    gap: 0;
 }
 
-.sidebar-nav a:hover .nav-icon,
-.sidebar-nav a.active .nav-icon {
-    opacity: 1;
+.sidebar-nav-label {
+    overflow: hidden;
+    transition: opacity 0.12s ease, max-width 0.22s cubic-bezier(0.4,0,0.2,1);
+    max-width: 160px;
+}
+
+.sidebar-collapsed .sidebar-nav-label {
+    opacity: 0;
+    max-width: 0;
+}
+
+.nav-icon {
+    width: 18px;
+    height: 18px;
+    flex-shrink: 0;
 }
 
 /* ---- Auth section ---- */
@@ -97,13 +187,20 @@
     margin-top: auto;
     padding: 12px 0 0;
     border-top: 1px solid var(--rule);
+    overflow: hidden;
 }
 
 .sidebar-user {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding: 10px 20px 14px;
+    padding: 8px 14px 12px;
+    transition: padding 0.22s cubic-bezier(0.4,0,0.2,1), justify-content 0s;
+}
+
+.sidebar-collapsed .sidebar-user {
+    padding: 8px;
+    justify-content: center;
 }
 
 .sidebar-user-info {
@@ -111,6 +208,14 @@
     flex-direction: column;
     gap: 3px;
     min-width: 0;
+    overflow: hidden;
+    transition: opacity 0.15s ease, max-width 0.22s cubic-bezier(0.4,0,0.2,1);
+    max-width: 140px;
+}
+
+.sidebar-collapsed .sidebar-user-info {
+    opacity: 0;
+    max-width: 0;
 }
 
 .sidebar-avatar {
@@ -137,6 +242,7 @@
     font-size: 11px;
     color: var(--ink-muted);
     text-decoration: none;
+    white-space: nowrap;
 
     &:hover {
         color: var(--ink-soft);
@@ -148,28 +254,30 @@
 .sidebar-login-link {
     display: flex;
     align-items: center;
-    gap: 9px;
-    margin: 2px 10px 14px;
-    padding: 7px 12px;
+    gap: 14px;
+    margin: 2px 8px 12px;
+    padding: 9px 12px;
     font-size: 13.5px;
     font-weight: 500;
-    border-radius: 8px;
+    border-radius: 10px;
     color: var(--rust);
-    background: color-mix(in srgb, var(--rust) 10%, var(--card));
-    border: 1px solid color-mix(in srgb, var(--rust) 35%, var(--rule));
-    box-shadow: 0 2.5px 0 color-mix(in srgb, var(--rust) 30%, var(--rule-strong));
+    background: color-mix(in srgb, var(--rust) 10%, var(--paper-alt));
     text-decoration: none;
-    transition: transform 0.1s ease, box-shadow 0.1s ease, background 0.12s ease;
+    white-space: nowrap;
+    overflow: hidden;
+    transition: background 0.12s ease, padding 0.22s cubic-bezier(0.4,0,0.2,1), gap 0.22s cubic-bezier(0.4,0,0.2,1);
 
     &:hover {
-        background: color-mix(in srgb, var(--rust) 15%, var(--card));
-        transform: translateY(-1px);
-        box-shadow: 0 3.5px 0 color-mix(in srgb, var(--rust) 30%, var(--rule-strong));
+        background: color-mix(in srgb, var(--rust) 16%, var(--paper-alt));
         text-decoration: none;
     }
+}
 
-    .nav-icon { opacity: 0.75; }
-    &:hover .nav-icon { opacity: 1; }
+.sidebar-collapsed .sidebar-login-link {
+    padding: 9px;
+    justify-content: center;
+    gap: 0;
+    margin: 2px 8px 12px;
 }
 
 /* ---- Sidebar art ---- */
@@ -178,6 +286,14 @@
     border-top: 1px solid var(--rule);
     overflow: hidden;
     position: relative;
+    max-height: 300px;
+    transition: max-height 0.3s cubic-bezier(0.4,0,0.2,1), opacity 0.2s ease, border-color 0.22s ease;
+}
+
+.sidebar-collapsed .sidebar-art {
+    max-height: 0;
+    opacity: 0;
+    border-top-color: transparent;
 }
 
 .sidebar-art-img {
@@ -217,6 +333,13 @@
     color: var(--rust);
     flex-shrink: 0;
     animation: rotate 24s linear infinite;
+    transition: width 0.22s cubic-bezier(0.4,0,0.2,1), height 0.22s cubic-bezier(0.4,0,0.2,1);
+    display: block;
+}
+
+.sidebar-collapsed .brand-icon {
+    width: 20px;
+    height: 20px;
 }
 
 .brand-text {
@@ -225,6 +348,7 @@
     font-weight: 550;
     line-height: 1.1;
     letter-spacing: -0.01em;
+    white-space: nowrap;
 
     em {
         font-style: oblique;

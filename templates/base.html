@@ -7,6 +7,7 @@
     <link rel="icon" href="/favicon.ico" sizes="any">
     <link rel="icon" type="image/png" sizes="64x64" href="/static/logo-64.png">
     <link rel="apple-touch-icon" href="/static/logo-64.png">
+    <script>if(localStorage.getItem('sidebar-collapsed')==='1')document.documentElement.classList.add('sidebar-collapsed');</script>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,500;1,9..144,400;1,9..144,500&family=Inter:wght@400;500;600;700&display=swap">
@@ -30,48 +31,52 @@
 </head>
 <body>
 <div class="layout">
-    <nav class="sidebar">
-        <a href="/" class="sidebar-brand">
-            {{ logo_svg | safe }}
-            <span class="brand-text"><span class="brand-discogs-logo">{{ discogs_logo_svg | safe }}</span>Toolkit</span>
-        </a>
+    <nav class="sidebar" id="sidebar">
+        <div class="sidebar-header">
+            <button class="brand-icon-btn" id="sidebar-toggle" aria-label="Toggle sidebar">
+                {{ logo_svg | safe }}
+            </button>
+            <a href="/" class="sidebar-brand-text-link">
+                <span class="brand-text sidebar-brand-text"><span class="brand-discogs-logo">{{ discogs_logo_svg | safe }}</span>Toolkit</span>
+            </a>
+        </div>
         <div class="sidebar-nav">
             {% if price_checker_enabled %}
             <div class="sidebar-section">
                 <div class="sidebar-label">Marketplace</div>
-                <a href="/pricechecker"{% if request.path == '/pricechecker' %} class="active"{% endif %}>
+                <a href="/pricechecker"{% if request.path == '/pricechecker' %} class="active"{% endif %} title="Price Checker">
                     <svg class="nav-icon" viewBox="0 0 16 16" fill="currentColor" xmlns="http://www.w3.org/2000/svg">
                         <rect x="2" y="9.5" width="3" height="4.5" rx=".6"/>
                         <rect x="6.5" y="6" width="3" height="8" rx=".6"/>
                         <rect x="11" y="2" width="3" height="12" rx=".6"/>
                     </svg>
-                    Price Checker
+                    <span class="sidebar-nav-label">Price Checker</span>
                 </a>
             </div>
             {% endif %}
             <div class="sidebar-section">
                 <div class="sidebar-label">Collections</div>
-                <a href="/matcher"{% if request.path == '/matcher' %} class="active"{% endif %}>
+                <a href="/matcher"{% if request.path == '/matcher' %} class="active"{% endif %} title="Matcher">
                     <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg">
                         <circle cx="5.5" cy="8" r="4"/>
                         <circle cx="10.5" cy="8" r="4"/>
                     </svg>
-                    Matcher
+                    <span class="sidebar-nav-label">Matcher</span>
                 </a>
-                <a href="/lookup"{% if request.path == '/lookup' %} class="active"{% endif %}>
+                <a href="/lookup"{% if request.path == '/lookup' %} class="active"{% endif %} title="Lookup">
                     <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg">
                         <circle cx="6.5" cy="6.5" r="4.5"/>
                         <line x1="10" y1="10" x2="13.5" y2="13.5"/>
                     </svg>
-                    Lookup
+                    <span class="sidebar-nav-label">Lookup</span>
                 </a>
                 {% if session_user == 'curefortheitch' %}
-                <a href="/records"{% if request.path == '/records' %} class="active"{% endif %}>
+                <a href="/records"{% if request.path == '/records' %} class="active"{% endif %} title="Records">
                     <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" xmlns="http://www.w3.org/2000/svg">
                         <circle cx="8" cy="8" r="5.5"/>
                         <circle cx="8" cy="8" r="2"/>
                     </svg>
-                    Records
+                    <span class="sidebar-nav-label">Records</span>
                 </a>
                 {% endif %}
             </div>
@@ -86,13 +91,13 @@
                 </div>
             </div>
             {% else %}
-            <a href="/login" class="sidebar-login-link">
+            <a href="/login" class="sidebar-login-link" title="Login with Discogs">
                 <svg class="nav-icon" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round" xmlns="http://www.w3.org/2000/svg">
                     <path d="M6 3H3.5A1.5 1.5 0 0 0 2 4.5v7A1.5 1.5 0 0 0 3.5 13H6"/>
                     <polyline points="10,5 13,8 10,11"/>
                     <line x1="13" y1="8" x2="6" y2="8"/>
                 </svg>
-                Login with Discogs
+                <span class="sidebar-nav-label">Login with Discogs</span>
             </a>
             {% endif %}
         </div>

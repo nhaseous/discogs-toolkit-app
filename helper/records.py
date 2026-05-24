@@ -342,7 +342,7 @@ def _compute_stats(collection, inventory, sold):
 # ── Public loaders ────────────────────────────────────────────────────────────
 
 def load_all():
-    client      = _get_client()
+    client      = get_gspread_client()
     spreadsheet = client.open_by_key(SHEET_ID)
 
     col_rows  = spreadsheet.worksheet('Collection').get_all_values()
