@@ -1,8 +1,8 @@
 from discord_webhook import DiscordWebhook, DiscordEmbed
 import cloudscraper, time, random, sys, itertools
 
-sys.path.insert(1, 'helper')
-import pricechecker
+sys.path.insert(1, '.')
+from services.logic import pricechecker
 
 # Worker node that loops its task (of scraping a seller's Discogs inventory)
 # Has properties: url, status, and savedlist

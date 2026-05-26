@@ -1,5 +1,5 @@
 from flask import Blueprint, render_template, session
-from helper import records as records_helper
+from services.utils import records as records_helper
 
 records_bp = Blueprint('records', __name__)
 

@@ -1,7 +1,8 @@
 from flask import Blueprint, request, render_template
 import time
 from datetime import datetime
-from helper import matcher, discogs_client as api_helper
+from services.logic import matcher
+from services.clients import discogs_client as api_helper
 from web_common import oauth_auth
 import assets
 

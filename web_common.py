@@ -10,7 +10,7 @@ import threading
 import cloudscraper
 from flask import session, request
 from requests_oauthlib import OAuth1 as _OAuth1
-from helper import auth as auth_persistence
+from services.utils import auth as auth_persistence
 
 CONSUMER_KEY    = os.environ.get('DISCOGS_CONSUMER_KEY', '')
 CONSUMER_SECRET = os.environ.get('DISCOGS_CONSUMER_SECRET', '')

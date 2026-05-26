@@ -10,7 +10,7 @@ import sys
 from datetime import timedelta
 from flask import Flask, session
 import assets
-from helper import pricechecker
+from services.logic import pricechecker
 import web_common
 from routes import register_blueprints
 
@@ -86,7 +86,7 @@ def ordinal_filter(n):
 
 register_blueprints(app)
 
-from helper import charts as _charts_mod
+from services.logic import charts as _charts_mod
 app.jinja_env.globals.update(
     charts_pie_svg=_charts_mod.pie_svg,
     charts_pie_legend_html=_charts_mod.pie_legend_html,

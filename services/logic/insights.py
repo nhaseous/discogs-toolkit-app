@@ -1,6 +1,6 @@
 import collections
 
-from helper.charts import PIE_COLORS as _PIE_COLORS
+from services.logic.charts import PIE_COLORS as _PIE_COLORS
 
 def get_collection_insights(items, total_value=None):
     """

@@ -31,7 +31,7 @@ OPTIONS = {
         'flask', 'webview', 'cloudscraper', 'requests', 'bs4',
         'charset_normalizer',
         'discord_webhook', 'gspread', 'discogs_client',
-        'requests_oauthlib', 'helper', 'server',
+        'requests_oauthlib', 'services', 'services.clients', 'services.logic', 'services.utils', 'services.models', 'server',
         'objc', 'AppKit', 'Foundation', 'WebKit'
     ],
     'includes': ['jinja2.ext'],

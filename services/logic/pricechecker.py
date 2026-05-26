@@ -12,8 +12,8 @@ _list_lock = threading.Lock()
 
 ## Classes ##
 
-from helper.models import FormattedEntry
-from helper.discogs_client import get_inventory_ids, reprice_listings, CloudflareBlockedError, is_cf_blocked as _is_cf_blocked
+from services.models.models import FormattedEntry
+from services.clients.discogs_client import get_inventory_ids, reprice_listings, CloudflareBlockedError, is_cf_blocked as _is_cf_blocked
 
 # Given username and item_id, scrapes marketplace for listings and stores them in provided list.
 def get_listings(scraper, inventory_list, sorted_inventory_list, username, release_title, item_id, thumbnail_url, listing_ids, index):

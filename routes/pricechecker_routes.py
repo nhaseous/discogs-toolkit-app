@@ -3,7 +3,8 @@ from concurrent.futures import ThreadPoolExecutor, as_completed
 import cloudscraper, time
 import requests as _requests
 from datetime import datetime
-from helper import pricechecker, discogs_client as api_helper, firestore_db as _firestore_db
+from services.logic import pricechecker
+from services.clients import discogs_client as api_helper, firestore_db as _firestore_db
 from web_common import is_price_checker_enabled, oauth_auth, get_pc_scraper
 
 pricechecker_bp = Blueprint('pricechecker', __name__)

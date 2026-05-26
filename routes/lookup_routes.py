@@ -2,7 +2,9 @@ from flask import Blueprint, request, render_template, session, jsonify
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import time
 from datetime import datetime
-from helper import lookup as lookup_helper, discogs_client as api_helper, insights as insights_helper, lookup_cache
+from services.logic import lookup as lookup_helper, insights as insights_helper
+from services.clients import discogs_client as api_helper
+from services.utils import lookup_cache
 from web_common import oauth_auth
 
 lookup_bp = Blueprint('lookup', __name__)

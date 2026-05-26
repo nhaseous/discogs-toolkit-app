@@ -4,7 +4,7 @@ import re
 import threading
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from helper.common import API_HEADERS as _API_HEADERS
+from services.utils.common import API_HEADERS as _API_HEADERS
 
 # Given a seller username, returns a list of the releases in their inventory and their item ids.
 def get_inventory_ids(username, scraper, auth=None):

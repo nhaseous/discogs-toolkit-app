@@ -1,7 +1,7 @@
 from flask import Blueprint, request, session, redirect
 import discogs_client as _discogs_client
 from web_common import CONSUMER_KEY, CONSUMER_SECRET, CALLBACK_URL
-from helper import auth as auth_persistence
+from services.utils import auth as auth_persistence
 
 auth_bp = Blueprint('auth', __name__)
 

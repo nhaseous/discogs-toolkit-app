@@ -7,7 +7,7 @@ import re
 # Discogs Collection Matcher Module
 # Compares a user's collection against another user's wantlist via the Discogs REST API.
 
-from helper.discogs_client import fetch_all_pages, clean_artist, clean_format_descriptions, RateLimitError
+from services.clients.discogs_client import fetch_all_pages, clean_artist, clean_format_descriptions, RateLimitError
 
 ## Get ##
 

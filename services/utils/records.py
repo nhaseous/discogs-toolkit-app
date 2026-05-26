@@ -1,7 +1,7 @@
 import base64, csv, json, os, re
 
-from helper.google_client import get_gspread_client
-from helper.charts import PIE_COLORS as _PIE_COLORS
+from services.clients.google_client import get_gspread_client
+from services.logic.charts import PIE_COLORS as _PIE_COLORS
 
 DATA_DIR = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'data')
 

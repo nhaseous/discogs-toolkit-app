@@ -35,16 +35,24 @@ assets.py             # Loads SVGs and HTML snippets into module-level constants
 mac_main.py           # macOS .app entry point — starts Flask + opens pywebview window
 setup.py              # py2app config for building the macOS .app bundle
 
-helper/
-  api.py              # Centralized API logic: retries, pagination, rate-limiting, value fetch
-  auth.py             # macOS Keychain credential persistence (save/get/delete)
-  common.py           # Shared API headers (User-Agent)
-  firestore_db.py     # Firestore integration for watchlist persistence
-  insights.py         # Aggregates collection stats and renders the Insights Dashboard
-  pricechecker.py     # Price Checker — inventory fetch, marketplace scraping, HTML rendering
-  matcher.py          # Matcher — collection/wantlist fetch and comparison
-  lookup.py           # Lookup — collection, wantlist, lists fetch + list page scraping
-  records.py          # Records — Google Sheets load + HTML table/dashboard rendering
+services/
+  clients/            # External API integrations
+    discogs_client.py # Discogs REST API: session management, pagination, user profile/counts
+    google_client.py  # Google Sheets API client (gspread)
+    firestore_db.py   # Firestore integration for watchlist persistence
+  logic/              # Feature-specific business logic
+    lookup.py         # Lookup: collection, wantlist, lists fetch + list page scraping
+    matcher.py        # Matcher: collection/wantlist comparison
+    pricechecker.py   # Price Checker: inventory fetch, marketplace scraping, HTML rendering
+    insights.py       # Aggregates collection stats
+    charts.py         # SVG chart generators (pie, bar, line)
+  utils/              # Shared helpers and utilities
+    auth.py           # macOS Keychain credential persistence (save/get/delete)
+    common.py         # Shared API headers (User-Agent)
+    lookup_cache.py   # In-memory cache for lookup payloads
+    records.py        # Records: Google Sheets load + data parsing
+  models/
+    models.py         # Shared data structures (FormattedEntry)
 
 server/               # Standalone background monitor (NOT wired into web routes)
   server.py           # PriceCheckerServer — manages Worker threads
@@ -113,7 +121,7 @@ Discogs uses OAuth 1.0a. Credentials are stored in `app.yaml` env vars:
 - `DISCOGS_CALLBACK_URL` — differs between GAE and localhost
 - `FLASK_SECRET_KEY` — Flask session signing
 
-On a successful `/callback`, tokens are written to the Flask session. On macOS, they're also persisted to Keychain via `helper/auth.py` so the user stays logged in across app restarts. A `before_request` hook (`_load_persistent_auth`) restores Keychain credentials into the session on each request if the session is empty.
+On a successful `/callback`, tokens are written to the Flask session. On macOS, they're also persisted to Keychain via `services/utils/auth.py` so the user stays logged in across app restarts. A `before_request` hook (`_load_persistent_auth`) restores Keychain credentials into the session on each request if the session is empty.
 
 Price Checker is gated by `_is_price_checker_enabled()`: returns True only on localhost or when running as a frozen macOS app.
 

@@ -9,6 +9,8 @@
 {% block extra_js %}
 <script src="/static/v{{ static_v }}/js/grid.js"></script>
 <script src="/static/v{{ static_v }}/js/mosaic.js"></script>
+<script src="/static/v{{ static_v }}/js/lookup-filters.js"></script>
+<script src="/static/v{{ static_v }}/js/lookup-pagination.js"></script>
 <script src="/static/v{{ static_v }}/js/lookup-browse.js"></script>
 <script src="/static/v{{ static_v }}/js/records.js"></script>
 <script src="/static/v{{ static_v }}/js/lookup.js"></script>
@@ -34,13 +36,16 @@
 <div id="spinner"><span id="spinner-icon"></span>Looking up user&hellip;</div>
 
 <div class="page-header">
-    <div class="page-eyebrow">Collections</div>
+    <div class="page-eyebrow">Collection</div>
     <h2>User <em>Lookup</em></h2>
 </div>
 </div>
 
 {% if not has_results %}
-<p class="lookup-hint">You can log in with Discogs to view your Collection or Wantlist if they are not public. <br> Authenticating with Discogs also raises your rate limit from 25 to 60 requests/minute (it takes 1 request to fetch 100 Collection or Wantlist items).</p>
+<p class="lookup-hint">
+    > You can log in with Discogs to view your Collection or Wantlist if they are not public. <br> 
+    > Authenticating with Discogs also raises your rate limit from 25 to 60 requests/minute (it takes 1 request to fetch 100 Collection or Wantlist items).
+</p>
 {% endif %}
 
 {% if has_results %}

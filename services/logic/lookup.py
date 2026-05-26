@@ -1,13 +1,13 @@
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import html as _html, json, re
 
-from helper.discogs_client import (
+from services.clients.discogs_client import (
     fetch_all_pages, request_with_retry, get_user_profile, make_api_session, clean_artist,
     clean_format_descriptions,
     UserNotFoundError, CollectionPrivateError, WantlistPrivateError, ListPrivateError,
     RateLimitError, CloudflareBlockedError
 )
-from helper.common import API_HEADERS as _API_HEADERS
+from services.utils.common import API_HEADERS as _API_HEADERS
 
 
 def _extract_artists(artists_list):
