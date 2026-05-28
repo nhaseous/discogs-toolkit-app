@@ -3,6 +3,7 @@
 
 {% block extra_js %}
 <script src="/static/v{{ static_v }}/js/grid.js"></script>
+<script src="/static/v{{ static_v }}/js/matcher.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -40,6 +41,7 @@
 </div>
 
 {% if has_results %}
+<div id="matcher-results" class="matcher-results{% if exact %} matcher-results--exact{% endif %}" data-exact-count="{{ exact_count }}" data-nonexact-count="{{ nonexact_count }}">
     <div class="meta">
         <span><b>Collection: <a href="https://www.discogs.com/user/{{ collection_meta }}" target="_blank" rel="noopener noreferrer" class="meta-user-link">{{ collection_meta }}</a></b> &nbsp;&middot;&nbsp; <b>Wantlist: <a href="https://www.discogs.com/user/{{ wantlist_meta }}" target="_blank" rel="noopener noreferrer" class="meta-user-link">{{ wantlist_meta }}</a></b></span>
         {% if loadtime %}
@@ -53,7 +55,7 @@
         {% if matches %}
             <div id="matcher-mosaic" class="mosaic">
                 {% for m in matches %}{% if m.thumb %}
-                    <span class="mosaic-item"><img src="{{ m.thumb }}" alt="" class="mosaic-thumb"></span>
+                    <span class="mosaic-item" data-is-exact="{{ '1' if m.is_exact else '0' }}"><img src="{{ m.thumb }}" alt="" class="mosaic-thumb"></span>
                 {% endif %}{% endfor %}
             </div>
         {% endif %}
@@ -63,22 +65,23 @@
             <div class="card-listings">
                 Collection: <b>{{ collection_user }}</b> ({{ counts.collection }} items)<br>
                 Wantlist: <b>{{ wantlist_user }}</b> ({{ counts.wantlist }} items)<br>
-                <br><b>Matches: {{ matches | length }} items</b><br>
+                <br><b>Matches: <span id="matcher-match-count">{{ exact_count if exact else nonexact_count }}</span> items</b><br>
                 {% if matches %}<br>{% endif %}
                 {% for m in matches %}
-                    <b>{{ m.artist }}</b> - {{ m.title }}
+                    <span class="matcher-listing-line" data-is-exact="{{ '1' if m.is_exact else '0' }}"><b>{{ m.artist }}</b> - {{ m.title }}
                     {% set fmt_parts = [] %}
                     {% if m.format_descriptions %}{% set _ = fmt_parts.append(m.format_descriptions) %}{% endif %}
                     {% if m.format_text %}{% set _ = fmt_parts.append(m.format_text) %}{% endif %}
                     {% if fmt_parts %} &nbsp;&middot; <i>({{ fmt_parts | join(', ') }})</i>{% endif %}
-                    <br>
+                    <br></span>
                 {% endfor %}
             </div>
         </div>
 
         <div class="lookup-tabs-row">
             <div class="lookup-tabs">
-                <button class="lookup-tab active" data-tab="matches" data-count-text="Matches ({{ matches | length }})">Matches ({{ matches | length }})</button>
+                {% set initial_count = exact_count if exact else nonexact_count %}
+                <button class="lookup-tab active" data-tab="matches" data-count-text="Matches ({{ initial_count }})">Matches (<span id="matcher-tab-count">{{ initial_count }}</span>)</button>
             </div>
             <div class="lookup-pagination" id="lookup-pagination">
                 <button class="pag-expand-btn" id="pag-expand-btn" type="button" title="Expand all cards">
@@ -112,5 +115,6 @@
             {% endif %}
         </div>
     {% endif %}
+</div>
 {% endif %}
 {% endblock %}

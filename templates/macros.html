@@ -71,7 +71,7 @@
 <div class="match-grid">
     {{ prepend_card | safe }}
     {% for m in items %}
-        <a href="{{ m.url or '#' }}" class="match-card" target="_blank" rel="noopener noreferrer">
+        <a href="{{ m.url or '#' }}" class="match-card"{% if m is mapping and 'is_exact' in m %} data-is-exact="{{ '1' if m.is_exact else '0' }}"{% endif %} target="_blank" rel="noopener noreferrer">
             <div class="match-card-art">
                 {% if m.cover_image or m.thumb %}
                     <img src="{{ m.cover_image or m.thumb }}" alt="" class="match-card-img">

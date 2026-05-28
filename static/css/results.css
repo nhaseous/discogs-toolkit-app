@@ -270,6 +270,11 @@
 
 .rec-pie-pct { color: var(--ink-muted); font-variant-numeric: tabular-nums; font-size: 12px; }
 
+/* Matcher — exact toggle hides non-exact items in mosaic and listing.
+   Cards inside .match-grid are filtered in JS so column layout stays balanced. */
+.matcher-results--exact .mosaic-item[data-is-exact="0"],
+.matcher-results--exact .matcher-listing-line[data-is-exact="0"] { display: none; }
+
 @media (max-width: 768px) {
     .rec-stat-grid { grid-template-columns: 1fr 1fr; }
     .rec-breakdown { grid-template-columns: 1fr; }

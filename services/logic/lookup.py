@@ -123,8 +123,6 @@ def get_lists(username, scraper, auth=None, budget=None):
     # would only distinguish a private-but-empty-200 set from a genuinely empty one —
     # it's a low-value distinction and the extra request risks the 25/min rate limit.
     for lst in lists:
-        if not lst.get("public", True):
-            continue
         results.append({
             "id": lst.get("id", ""),
             "name": lst.get("name", ""),
