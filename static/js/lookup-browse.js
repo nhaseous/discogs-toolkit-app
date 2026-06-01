@@ -77,7 +77,14 @@ window._withLookupScroll = function(action) {
     tabsContainer.addEventListener("click", function(e) {
         var tab = e.target.closest(".lookup-tab");
         if (!tab) return;
-        window._withLookupScroll(function() { doTabSwitch(tab.getAttribute("data-tab")); });
+        var target = tab.getAttribute("data-tab");
+        var wasActive = tab.classList.contains("active");
+        window._withLookupScroll(function() { doTabSwitch(target); });
+        // Re-clicking the already-active Collection tab reveals per-folder
+        // subtabs (built once, client-side, from the collection's folder_ids).
+        if (wasActive && target === "collection" && window._onCollectionReclick) {
+            window._onCollectionReclick();
+        }
     });
     window._switchToTab = function(target) {
         window._withLookupScroll(function() { doTabSwitch(target); });

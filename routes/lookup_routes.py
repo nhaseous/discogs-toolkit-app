@@ -259,6 +259,24 @@ def lookup_load_tab():
     })
 
 
+@lookup_bp.route("/lookup/folders")
+def lookup_folders():
+    """Return the viewed user's collection folders (id/name/count) so the Lookup
+    page can build per-folder subtabs client-side, without a page refresh. Only
+    the collection owner (when signed in) sees their named folders; for everyone
+    else Discogs returns just the 'All' folder and the page adds no subtabs."""
+    username = request.args.get("username", "")
+    if not username:
+        return jsonify({"error": "bad_request"}), 400
+    scraper = api_helper.make_api_session()
+    auth = oauth_auth()
+    try:
+        folders = lookup_helper.get_collection_folders(username, scraper, auth=auth)
+    except lookup_helper.RateLimitError:
+        return jsonify({"error": "rate_limited"}), 429
+    return jsonify({"folders": folders})
+
+
 @lookup_bp.route("/lookup/list")
 def lookup_list_data():
     list_id = request.args.get("list_id", "")

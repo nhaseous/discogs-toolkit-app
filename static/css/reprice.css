@@ -2,49 +2,130 @@
    Reprice UI
    ========================================================= */
 
-.reprice-controls { display: flex; align-items: center; gap: 7px; flex-shrink: 0; }
-
-.reprice-btn, .reprice-action-btn {
+/* Reprice chips share the badge-bar pill geometry: 9.5px uppercase
+   micro-type, 2px 8px padding, 4px radius, no border. Semantic colors
+   line up with the filter badges (OVERPRICED red, CHEAPEST green,
+   WATCH-like amber), so the controls feel like an extension of the
+   pill row rather than a separate button group. */
+.reprice-controls {
     display: inline-flex;
     align-items: center;
-    padding: 3px 10px;
+    gap: 5px;
+    flex-shrink: 0;
+}
+
+.reprice-btn,
+.reprice-action-btn {
+    display: inline-flex;
+    align-items: center;
+    padding: 2px 8px;
+    border: none;
     border-radius: 4px;
-    border: 1.5px solid;
     cursor: pointer;
     font-family: inherit;
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    line-height: 1.6;
+    text-transform: uppercase;
+    transition: background 0.15s ease, color 0.15s ease;
 }
 
+.reprice-btn:focus-visible,
+.reprice-action-btn:focus-visible {
+    outline: 2px solid var(--focus-ring);
+    outline-offset: 1px;
+}
+
+/* REPRICE — destructive primary, twin to the OVERPRICED filter badge.
+   The active state appends a paired "dismiss" half-chip via ::after,
+   echoing the inv-count-badge / badge-ct two-segment pill pattern. */
 .reprice-btn {
-    border-color: var(--red);
     background: var(--red);
     color: #fff;
-    &:hover, &.active { border-color: var(--red-deep); background: var(--red-deep); }
-    &.active::after { content: "\00D7"; margin-left: 4px; }
+    &:hover { background: var(--red-deep); }
+    &.active {
+        background: var(--red-deep);
+        padding-right: 0;
+    }
+    &.active::after {
+        content: "\00D7";
+        /* Negative top/bottom margins pull the chip into the button's
+           vertical padding so the half-pill spans edge-to-edge. */
+        margin: -2px 0 -2px 7px;
+        padding: 2px 7px;
+        background: rgba(0, 0, 0, 0.26);
+        border-radius: 0 4px 4px 0;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.38;
+    }
 }
 
+/* Secondary actions — soft amber chip in the WATCH/RECENT idiom.
+   Hover fills with amber, the REVIEW active state goes ink to mirror
+   the inv-count-badge.filter-active fill behavior. */
 .reprice-action-btn {
-    border-color: var(--amber);
-    background: var(--amber);
-    color: var(--paper);
-    &:hover { opacity: 0.78; }
-    &.active { background: var(--ink); color: var(--paper); border-color: var(--ink); opacity: 1; }
+    background: var(--amber-soft);
+    color: var(--amber);
+    &:hover {
+        background: var(--amber);
+        color: #fff;
+    }
+    &.active {
+        background: var(--ink);
+        color: var(--paper);
+    }
 }
 
+/* SUBMIT — solid green, twin to the CHEAPEST filter badge. */
 .reprice-submit-btn {
-    border-color: var(--green);
     background: var(--green);
     color: #fff;
-    &:hover { background: color-mix(in srgb, var(--green) 74%, #000); border-color: color-mix(in srgb, var(--green) 74%, #000); }
-    &:disabled { opacity: 0.6; cursor: default; }
+    &:hover { background: color-mix(in srgb, var(--green) 74%, #000); }
+    &:disabled {
+        opacity: 0.42;
+        cursor: default;
+    }
+}
+
+/* CONFIRM — high-contrast ink chip for the final, irreversible action. */
+.reprice-action-btn.reprice-confirm-btn {
+    background: var(--ink);
+    color: var(--paper);
+    &:hover { background: color-mix(in srgb, var(--ink) 82%, var(--green)); }
 }
 
 .reprice-status {
-    font-size: 11px;
+    font-size: 10.5px;
+    font-weight: 600;
+    letter-spacing: 0.02em;
     color: var(--red);
     max-width: 300px;
     overflow: hidden;
     text-overflow: ellipsis;
     white-space: nowrap;
+}
+
+/* Sticky-mosaic sidebar (220px wide) — wrap the controls onto multiple rows
+   so they don't blow out the narrow column. The badge pills already wrap
+   here via mosaic.css; this gives the reprice chips the same treatment and
+   relaxes the status text so longer error messages stay readable. */
+#sticky-mosaic .reprice-controls {
+    width: 100%;
+    flex-wrap: wrap;
+    gap: 4px 5px;
+    line-height: 1.8;
+}
+
+#sticky-mosaic .reprice-status {
+    max-width: 100%;
+    white-space: normal;
+    text-overflow: clip;
+    overflow: visible;
+    font-size: 10px;
+    line-height: 1.35;
+    flex-basis: 100%;
 }
 
 .result-card.reprice-selectable {
@@ -85,41 +166,57 @@
 
 a.reprice-new { color: var(--green-text); font-weight: 600; }
 
+/* SPREAD chip — amber-soft pill with an inline editable number.
+   No border, no input chrome; the chip is the container, the input
+   inherits the chip's amber typography so the whole thing reads as
+   one cohesive "LABEL value %" badge. */
 .reprice-spread-wrap {
     display: inline-flex;
     align-items: center;
-    gap: 5px;
+    gap: 4px;
     background: var(--amber-soft);
-    border: 1.5px solid var(--amber);
-    border-radius: 5px;
-    padding: 3px 9px;
-    margin-left: 3px;
+    border-radius: 4px;
+    padding: 2px 7px 2px 8px;
+    line-height: 1.6;
 }
 
-.reprice-spread-label { white-space: nowrap; }
+.reprice-spread-label {
+    color: var(--amber);
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.06em;
+    text-transform: uppercase;
+    white-space: nowrap;
+}
 
 .reprice-spread-input {
-    width: 4ch;
-    background: var(--card);
-    border: 1.5px solid var(--rule-strong);
-    border-radius: 3px;
-    color: var(--ink);
+    width: 3.4ch;
+    background: transparent;
+    border: none;
+    color: var(--amber);
     font: inherit;
-    font-size: 11px;
+    font-size: 10.5px;
     font-weight: 700;
+    letter-spacing: 0.01em;
     text-align: center;
-    padding: 1px 3px;
+    padding: 0;
+    margin: 0;
     outline: none;
+    border-radius: 2px;
+    transition: background 0.15s ease;
 
-    &:focus {
-        border-color: var(--amber);
-        box-shadow: 0 0 0 2px var(--focus-ring-amber);
-    }
+    &:hover { background: color-mix(in srgb, #fff 60%, transparent); }
+    &:focus { background: color-mix(in srgb, #fff 78%, transparent); }
 
     &::-webkit-inner-spin-button, &::-webkit-outer-spin-button { -webkit-appearance: none; margin: 0; }
 }
 
-.reprice-spread-pct { color: var(--amber); font-size: 10.5px; font-weight: 700; }
+.reprice-spread-pct {
+    color: var(--amber);
+    font-size: 9.5px;
+    font-weight: 700;
+    letter-spacing: 0.04em;
+}
 
 input.reprice-price-input {
     width: 5.5ch;

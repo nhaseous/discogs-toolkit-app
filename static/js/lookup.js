@@ -425,3 +425,94 @@
     window._observeLookupLineGraphs = _observeLineGraphs;
     _observeLineGraphs();
 })();
+
+// Collection folder subtabs: re-clicking the already-active Collection tab
+// fetches the user's folder names once (GET /lookup/folders) and adds a subtab
+// per folder. The items themselves aren't refetched — each subtab is just the
+// already-loaded collection split by each item's folder_id. The subtabs are
+// plain DOM, so they persist while switching to other tabs and vanish on a page
+// refresh. Wired to the hook in lookup-browse.js's tab click handler.
+(function() {
+    var collTab = document.querySelector('.lookup-tab[data-tab="collection"]');
+    if (!collTab) return;
+
+    var _built = false;  // build (and fetch) at most once per page load
+
+    // Resolve the full collection item list. _lookupHydrateTab returns the
+    // already-hydrated items (or triggers/awaits the cached hydration fetch —
+    // no extra Discogs call); fall back to the inline subset if unavailable.
+    function _collectionItems() {
+        if (window._lookupHydrateTab) return Promise.resolve(window._lookupHydrateTab('collection'));
+        var el = document.querySelector('.lookup-data[data-tab="collection"]');
+        var items = [];
+        try { items = el ? JSON.parse(el.textContent) : []; } catch (e) { items = []; }
+        return Promise.resolve(items);
+    }
+
+    function _buildFolderTabs(folders, items) {
+        var tabsContainer = document.querySelector('.lookup-tabs');
+        var collPanel = document.getElementById('lookup-panel-collection');
+        var mosaicWrap = document.querySelector('.lookup-mosaic-wrap');
+        if (!tabsContainer || !collPanel) return;
+        var afterTab = collTab, afterPanel = collPanel;
+        folders.forEach(function(f) {
+            var fItems = items.filter(function(it) { return it.folder_id === f.id; });
+            var count = fItems.length;
+
+            var tab = document.createElement('button');
+            tab.type = 'button';
+            tab.className = 'lookup-tab lookup-tab--folder';
+            tab.setAttribute('data-tab', 'folder-' + f.id);
+            tab.setAttribute('data-folder-tab', '1');
+            tab.textContent = f.name + ' (' + count + ')';
+            tab.setAttribute('data-count-text', f.name + ': ' + count + ' item' + (count !== 1 ? 's' : ''));
+            afterTab.insertAdjacentElement('afterend', tab);
+            afterTab = tab;
+
+            var panel = document.createElement('div');
+            panel.id = 'lookup-panel-folder-' + f.id;
+            panel.className = 'lookup-panel';
+            panel.style.display = 'none';
+            panel.innerHTML = '<div class="match-grid"></div>';
+            afterPanel.insertAdjacentElement('afterend', panel);
+            afterPanel = panel;
+
+            // Give the folder its own thumbnail mosaic in the shared wrap,
+            // alongside the collection/wantlist/list mosaics. Starts empty +
+            // inactive; switchMosaics() lazily populates it from the folder's
+            // registered state.items on first open and animates the swap
+            // (collection -> folder, or folder -> folder) like the other tabs.
+            if (mosaicWrap) {
+                var mosaic = document.createElement('div');
+                mosaic.id = 'lookup-mosaic-folder-' + f.id;
+                mosaic.className = 'lookup-mosaic mosaic lookup-mosaic--inactive';
+                mosaic.setAttribute('data-mosaic-tab', 'folder-' + f.id);
+                mosaicWrap.appendChild(mosaic);
+            }
+
+            // Registers pagination state + renders the first page into the
+            // (hidden) grid; doTabSwitch re-lays it out when the tab opens.
+            if (window._registerAndApplyTab) window._registerAndApplyTab('folder-' + f.id, fItems, false);
+        });
+    }
+
+    window._onCollectionReclick = function() {
+        if (_built) return;
+        _built = true;
+        var qs = new URLSearchParams(window.location.search);
+        var username = qs.get('username') || '';
+        if (!username) { _built = false; return; }
+
+        fetch('/lookup/folders?username=' + encodeURIComponent(username), {
+            headers: { 'Accept': 'application/json' }
+        })
+            .then(function(r) { return r.ok ? r.json() : { folders: [] }; })
+            .then(function(data) {
+                // Skip folder 0 ("All") — the Collection tab already covers it.
+                var named = ((data && data.folders) || []).filter(function(f) { return f && f.id !== 0; });
+                if (!named.length) return;  // non-owner / no custom folders: degrade gracefully
+                return _collectionItems().then(function(items) { _buildFolderTabs(named, items || []); });
+            })
+            .catch(function() { _built = false; });  // allow a retry on the next re-click
+    };
+})();

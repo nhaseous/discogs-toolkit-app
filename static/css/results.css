@@ -81,11 +81,19 @@
     }
 }
 
+.lookup-tab--folder {
+    color: var(--ink-muted);
+
+    &.active {
+        color: var(--rust);
+    }
+}
+
 .lookup-pagination {
     display: flex;
     align-items: center;
     gap: 10px;
-    padding-bottom: 8px;
+    padding: 8px;
     flex-shrink: 0;
 }
 

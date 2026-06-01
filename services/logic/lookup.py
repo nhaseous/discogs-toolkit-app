@@ -31,9 +31,11 @@ def _extract_formats(formats_list):
             result.append(name)
     return result
 
-def _release_dict(info, date_added=None):
+def _release_dict(info, date_added=None, folder_id=None):
     """Build the match-grid release dict from a Discogs `basic_information` block.
-    date_added is collection-only; pass None to omit it (used for wantlist/list)."""
+    date_added is collection-only; pass None to omit it (used for wantlist/list).
+    folder_id is collection-only too: the user folder the item lives in (used by
+    the Lookup page to split the collection into per-folder subtabs)."""
     fmt_info = info["formats"][0] if info.get("formats") else {}
     release_id = info.get("id", "")
     out = {
@@ -54,6 +56,8 @@ def _release_dict(info, date_added=None):
     }
     if date_added is not None:
         out["date_added"] = date_added
+    if folder_id is not None:
+        out["folder_id"] = folder_id
     return out
 
 def get_collection(username, scraper, auth=None, budget=None):
@@ -74,13 +78,36 @@ def get_collection(username, scraper, auth=None, budget=None):
         raise CollectionPrivateError(username)
 
     for r in releases:
-        results.append(_release_dict(r["basic_information"], date_added=r.get("date_added", "")))
+        results.append(_release_dict(r["basic_information"], date_added=r.get("date_added", ""), folder_id=r.get("folder_id")))
 
     partial_warning = ""
     if expected_total and len(results) < expected_total:
         partial_warning = "Partial results: fetched {0} of {1} collection items. Some records may be missing due to a connection issue.".format(len(results), expected_total)
 
     return results, partial_warning, expected_total
+
+def get_collection_folders(username, scraper, auth=None):
+    """Return the user's collection folders as [{id, name, count}, ...].
+
+    Discogs only exposes the user's named/custom folders (Jazz, To Sell, …) to
+    the authenticated owner of the collection. For anyone else the endpoint
+    returns just the catch-all "All" folder (id 0), so the Lookup page simply
+    shows no per-folder subtabs in that case."""
+    url = "https://api.discogs.com/users/{0}/collection/folders".format(username)
+    try:
+        resp = request_with_retry(scraper, "GET", url, headers=_API_HEADERS, auth=auth)
+    except Exception:
+        return []
+    if resp is None or resp.status_code != 200:
+        return []
+    try:
+        folders = resp.json().get("folders", [])
+    except Exception:
+        return []
+    return [
+        {"id": f.get("id"), "name": f.get("name", ""), "count": f.get("count", 0)}
+        for f in folders if f.get("id") is not None
+    ]
 
 def get_wantlist(username, scraper, auth=None, budget=None):
     url = "https://api.discogs.com/users/{0}/wants".format(username)
