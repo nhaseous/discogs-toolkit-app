@@ -130,7 +130,7 @@ Price Checker is gated by `_is_price_checker_enabled()`: returns True only on lo
 **Base URL:** `https://api.discogs.com`  
 **Docs:** https://www.discogs.com/developers
 
-None of the calls this app makes require authentication — they all access public user data. Discogs enforces rate limits using a sliding 60-second window: unauthenticated requests are capped at 25/minute; adding a personal access token header raises that to 240/minute. The `X-Discogs-Ratelimit-Remaining` response header can be read to throttle proactively before hitting HTTP 429.
+The calls this app makes access public user data, but the app authenticates *every* request anyway to earn the higher rate-limit tier. Signed-in users authenticate as themselves via OAuth; signed-out users authenticate at the **application level** using the consumer key/secret (`DiscogsAppAuth` in `web_common.py`, sent as `Authorization: Discogs key=…, secret=…`). App auth carries no user identity (it can't read private data or write) but still lifts requests from the unauthenticated tier to the authenticated one. Per the [Discogs API rate-limiting docs](https://www.discogs.com/developers/accessing.html#page:home,header:home-rate-limiting), Discogs throttles per source IP over a sliding 60-second window: unauthenticated requests are capped at **25/minute**, authenticated requests (OAuth *or* app auth) at **60/minute**. The `X-Discogs-Ratelimit-Remaining` response header can be read to throttle proactively before hitting HTTP 429.
 
 ### REST API endpoints in use
 

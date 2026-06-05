@@ -148,7 +148,7 @@ def get_lists(username, scraper, auth=None, budget=None):
     # Lists are fetched with a single call. A private lists set that returns 401/403
     # is still caught above; we deliberately skip the extra get_user_profile call that
     # would only distinguish a private-but-empty-200 set from a genuinely empty one —
-    # it's a low-value distinction and the extra request risks the 25/min rate limit.
+    # it's a low-value distinction and the extra request risks the 60/min rate limit.
     for lst in lists:
         results.append({
             "id": lst.get("id", ""),

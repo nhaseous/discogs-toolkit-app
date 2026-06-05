@@ -9,6 +9,7 @@ import sys
 import threading
 import cloudscraper
 from flask import session, request
+from requests.auth import AuthBase
 from requests_oauthlib import OAuth1 as _OAuth1
 from services.utils import auth as auth_persistence
 
@@ -59,12 +60,34 @@ def load_persistent_auth():
         session.permanent = True
 
 
+class DiscogsAppAuth(AuthBase):
+    """App-level Discogs auth: identifies the *application* via consumer
+    key/secret with no user token, by setting the ``Authorization: Discogs
+    key=..., secret=...`` header Discogs documents for app authentication.
+
+    This is the fallback for signed-out visitors. It carries no user identity
+    (so it can't read private data or write), but it lifts the request from
+    Discogs' unauthenticated 25/min tier to the authenticated 60/min tier — the
+    same ceiling a signed-in user gets. It's a plain ``requests`` auth callable,
+    interchangeable with the ``OAuth1`` object used for signed-in users, so every
+    downstream caller that already accepts ``auth=`` works unchanged.
+    """
+    def __call__(self, r):
+        if CONSUMER_KEY and CONSUMER_SECRET:
+            r.headers['Authorization'] = 'Discogs key={0}, secret={1}'.format(
+                CONSUMER_KEY, CONSUMER_SECRET)
+        return r
+
+
 def oauth_auth():
+    # Signed in: authenticate as the user (consumer key/secret + their token).
     if session.get('discogs_access_token'):
         return _OAuth1(CONSUMER_KEY, CONSUMER_SECRET,
                        session['discogs_access_token'],
                        session['discogs_access_secret'])
-    return None
+    # Signed out: authenticate as the application so requests still get the
+    # 60/min authenticated rate limit instead of the 25/min unauthenticated one.
+    return DiscogsAppAuth()
 
 
 def is_price_checker_enabled():

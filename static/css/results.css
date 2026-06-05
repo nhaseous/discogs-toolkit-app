@@ -83,6 +83,7 @@
 
 .lookup-tab--folder {
     color: var(--ink-muted);
+    background: var(--rule);
 
     &.active {
         color: var(--rust);
@@ -95,6 +96,8 @@
     gap: 10px;
     padding: 8px;
     flex-shrink: 0;
+    align-self: stretch;
+    background: var(--rule);
 }
 
 .pag-select { position: relative; }

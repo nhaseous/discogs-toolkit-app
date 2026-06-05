@@ -63,8 +63,8 @@ _MAX_WORKERS = 5
 class RequestBudget:
     """Thread-safe cap on how many Discogs requests a single lookup may fire.
 
-    Used to keep an unauthenticated lookup under Discogs' 25-requests/60s limit:
-    one budget is shared across the concurrent collection/wantlist/lists fetches,
+    Used to keep a signed-out (app-auth) lookup under Discogs' 60-requests/60s
+    limit: one budget is shared across the concurrent collection/wantlist/lists fetches,
     so the combined burst can never exceed the cap regardless of how the pages
     split between them. `exhausted` records whether the cap was ever hit, letting
     the caller tell a truncated (capped) result apart from a complete one.
@@ -92,8 +92,9 @@ def _build_api_session():
 
 # Module-level session shared across all REST API callers. requests.Session is
 # safe for concurrent reads from its connection pool; we never set per-user state
-# on it (auth is passed per-call via OAuth1 tuples, and Discogs's API doesn't
-# use cookies). Sharing one session across requests keeps TLS/TCP connections
+# on it (auth is passed per-call as a requests auth object — an OAuth1 tuple for
+# signed-in users or app-auth headers for signed-out ones — and Discogs's API
+# doesn't use cookies). Sharing one session across requests keeps TLS/TCP connections
 # warm between lookups so subsequent lookups skip the handshake.
 _API_SESSION = _build_api_session()
 

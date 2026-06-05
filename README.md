@@ -104,7 +104,7 @@ Collection, wantlist, and list-index calls are paginated and fetched concurrentl
 
 ### Rate Limits
 
-Unauthenticated: 25 requests/minute. With OAuth: 240 requests/minute. Discogs uses a sliding 60-second window — no fixed lockout; slots free up as the window rolls. The `X-Discogs-Ratelimit-Remaining` response header can be read to throttle proactively.
+Every API request the app makes is authenticated, so all requests get Discogs' authenticated limit of **60 requests/minute** (vs. 25/minute for unauthenticated requests). Signed-in users authenticate via OAuth; signed-out users authenticate at the **application level** using the consumer key/secret (`Authorization: Discogs key=…, secret=…`), which carries no user identity but still earns the 60/min tier. Discogs uses a sliding 60-second window — no fixed lockout; slots free up as the window rolls — and throttles per source IP. The `X-Discogs-Ratelimit-Remaining` response header can be read to throttle proactively. See the [Discogs API rate-limiting docs](https://www.discogs.com/developers/accessing.html#page:home,header:home-rate-limiting).
 
 ---
 

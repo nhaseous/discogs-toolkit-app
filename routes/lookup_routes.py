@@ -45,10 +45,12 @@ def lookuppage():
         scraper = api_helper.make_api_session()
         auth = oauth_auth()
 
-        # Unauthenticated lookups share a single 25-request budget across the
-        # collection/wantlist/lists fetches to stay under Discogs' 25/60s limit.
-        # Signed-in viewers have a higher limit, so they fetch without a budget.
-        budget = api_helper.RequestBudget(25) if auth is None else None
+        # Signed-out lookups (app auth) share a single 60-request budget across the
+        # collection/wantlist/lists fetches to stay under Discogs' 60/60s limit.
+        # Signed-in viewers fetch their own data without a budget. NB: oauth_auth()
+        # now always returns an auth object (app auth when signed out), so detect
+        # sign-in via the session token rather than `auth is None`.
+        budget = api_helper.RequestBudget(60) if not session.get('discogs_access_token') else None
 
         _fetch_tasks = {
             'lists':      lambda: lookup_helper.get_lists(username, scraper, auth=auth, budget=budget),
@@ -87,7 +89,7 @@ def lookuppage():
                     rate_limited = True
 
         # The shared budget runs out only when the user's collection + wantlist need
-        # more than the 25 unauthenticated requests allow. Results would be truncated,
+        # more than the 60 app-auth requests allow. Results would be truncated,
         # so block the lookup and tell the viewer to sign in (showing the real sizes).
         cap_exceeded = budget is not None and budget.exhausted
 
@@ -224,7 +226,8 @@ def lookup_load_tab():
 
     scraper = api_helper.make_api_session()
     auth = oauth_auth()
-    budget = api_helper.RequestBudget(25) if auth is None else None
+    # Signed out uses app auth (60/min); budget that burst. Signed in: no budget.
+    budget = api_helper.RequestBudget(60) if not session.get('discogs_access_token') else None
 
     try:
         if tab == "collection":
