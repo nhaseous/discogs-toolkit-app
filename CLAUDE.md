@@ -44,7 +44,7 @@ routes/               # Flask blueprints, one module per tool (registered by rou
   pricechecker_routes.py # /pricechecker, /scrape_batch, /reprice, /refresh_card, /watchlist
   matcher_routes.py   # /matcher
   lookup_routes.py    # /lookup + insights/data/load-tab/folders/list sub-routes
-  recommend_routes.py # /recommend — per-IP daily cap, collection fetch, recommendation cards
+  recommend_routes.py # /recommend (shell) + /recommend/batch (one streamed Gemini round)
   records_routes.py   # /records
 
 services/
@@ -81,16 +81,19 @@ static/
   js/
     main.js           # Global UI: sidebar, tabs, pagination, badge filter pills, tooltips
     pricechecker.js   # Price Checker: filter pills, card refresh, reprice modal + API calls
+    recommend.js      # Recommendations: streams Gemini rounds from /recommend/batch into the grid
     records.js        # Records dashboard: tab switching between panels
 
 templates/
   base.html           # Master layout: sidebar nav, stylesheet links, content slot, main.js
-  macros.html         # Shared Jinja macros (e.g. lookup_grid card grid)
+  macros.html         # Shared Jinja macros (match_card + lookup_grid card grid)
+  _recommend_cards.html # Bare match_card list returned by /recommend/batch for client append
+  _recommend_lines.html # Per-release text lines for the Recommendations card (same data as cards)
   landing.html        # Tool card grid (extends base)
   pricechecker.html   # Extends base; sets window.TOOLKIT_CONFIG; loads pricechecker.js
   matcher.html        # Extends base
   lookup.html         # Extends base
-  recommend.html      # Extends base; "New artists" toggle, taste-profile summary + card grid
+  recommend.html      # Extends base; "New artists" toggle, streaming shell, loads recommend.js
   records.html        # Extends base; loads records.js
 ```
 
@@ -108,7 +111,8 @@ templates/
 | `/lookup` | GET | Lookup UI | Optional |
 | `/lookup/list` | GET | JSON API — fetches list releases (bypass scrape on GAE) | — |
 | `/lookup/insights`, `/lookup/data`, `/lookup/load-tab`, `/lookup/folders` | GET/POST | JSON APIs — Insights dashboard, lazy tab/folder loading | Optional |
-| `/recommend` | GET | Recommendations UI — taste profile → Gemini → resolved cards (`new_artists` toggle) | Optional |
+| `/recommend` | GET | Recommendations UI shell — cards stream in client-side (`new_artists` toggle) | Optional |
+| `/recommend/batch` | POST | JSON API — runs one Gemini round, returns rendered cards + bio; streamed by `recommend.js` | Optional |
 | `/watchlist` | GET/POST | Firestore API — manage user's Price Checker watchlist | Required |
 | `/records` | GET | Personal records dashboard | `curefortheitch` only |
 | `/reprice` | POST | JSON API — reprices selected Discogs listings | Required |
@@ -177,10 +181,12 @@ These use `cloudscraper` + BeautifulSoup rather than the REST API:
 `services/logic/recommend.py` runs a three-stage pipeline:
 
 1. **Taste profile** — reuses the Insights aggregation (`insights.py`) to turn the collection into a compact text summary of top genres/styles/artists/labels/decades. No extra Discogs calls beyond the collection fetch.
-2. **Gemini candidates** — calls Gemini via Vertex AI (`google-genai`, model `gemini-2.5-flash` by default) using **structured output** (`response_schema`) so it returns validated JSON, not a delimited text format. Authenticates with the same service-account JSON as the Sheets client (`GOOGLE_SA_KEY_B64` / `GOOGLE_APPLICATION_CREDENTIALS`).
+2. **Gemini candidates** — calls Gemini via Vertex AI (`google-genai`, model `gemini-2.5-flash` by default) using **structured output** (`response_schema`) so it returns validated JSON, not a delimited text format. Returns a 2-sentence taste **bio** plus the candidates; the bio is requested only on the first round (`want_bio`), since later rounds discard it. Authenticates with the same service-account JSON as the Sheets client (`GOOGLE_SA_KEY_B64` / `GOOGLE_APPLICATION_CREDENTIALS`).
 3. **Resolution** — each suggestion is resolved to a real Discogs release via `/database/search`, requiring a Vinyl, non-Unofficial result that fuzzy-matches the artist/album (token-coverage match). Tries a strict structured query, then a looser free-text query.
 
-Cost/abuse guards (all in `firestore_db`): a **per-IP daily cap** (`RECOMMEND_IP_DAILY_LIMIT`, default 50) checked before any work, and a **global monthly Gemini-round cap** (`RECOMMEND_MONTHLY_ROUND_CAP`, default 1000) consumed per Gemini round. Signed-out requests share a `RequestBudget(60)` across the collection pagination and the per-candidate searches. Relevant env vars: `VERTEX_GEMINI_MODEL`, `VERTEX_LOCATION`, `GCP_PROJECT`.
+**Streaming delivery** — the Gemini call dominates latency (~15–22s/round), so `/recommend` renders only the page shell and `recommend.js` streams rounds in one at a time via `POST /recommend/batch`. Each call runs one `run_recommendation_round` (5 candidates) and returns rendered cards; the first batch (with the bio) paints as soon as one round resolves, and later rounds append under a "Finding more…" footer until ~10 releases or the 3-round cap. The endpoint is stateless across rounds — the client round-trips `considered` (already-suggested `{artist, album}` pairs) and `seen_ids` (rendered release IDs) to avoid repeats. The viewed user's collection is fetched once and cached in `lookup_cache` (key `("recommend", username)`) so rounds 2–3 don't re-page it. `get_recommendation_cards` loops the same per-round core as an all-at-once, non-streaming variant targeting the same 10-result goal, but it is not wired to any live route — the streaming path is the only one in use.
+
+Cost/abuse guards (all in `firestore_db`): a **per-IP daily cap** (`RECOMMEND_IP_DAILY_LIMIT`, default 50) counted once per request (on the first batch round), and a **global monthly Gemini-round cap** (`RECOMMEND_MONTHLY_ROUND_CAP`, default 1000) consumed per Gemini round. Signed-out requests budget each round's burst with a `RequestBudget(60)`. Relevant env vars: `VERTEX_GEMINI_MODEL`, `VERTEX_LOCATION`, `GCP_PROJECT`.
 
 ## Additional Documentation
 

@@ -42,7 +42,12 @@ _LOCATION = os.environ.get("VERTEX_LOCATION", "us-central1")
 _SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
 
 _SEARCH_URL = "https://api.discogs.com/database/search"
-_CANDIDATES_PER_ROUND = 10  # ask Gemini for extra so filtering still yields 5
+_CANDIDATES_PER_ROUND = 5  # per-round Gemini ask; rounds stream in via /recommend/batch
+
+# Fixed Gemini thinking budget (tokens). Default 2.5-flash dynamic thinking adds
+# ~12s/round; a small cap keeps taste reasoning while making rounds ~3-4x faster.
+# Override via env. 0 disables thinking entirely.
+_THINKING_BUDGET = int(os.environ.get("VERTEX_THINKING_BUDGET", "128"))
 
 # Global monthly cost guard: each round is one Gemini call. A round is ~0.1–0.2¢,
 # so 1000 rounds/month ≈ $1–$2 — comfortably under the $5 budget. Override via env.
@@ -60,10 +65,16 @@ SYSTEM_PROMPT = (
     "profile (their most-collected genres, styles, artists, and labels), "
     "recommend specific records they most likely do NOT already own but would "
     "love. Favour depth and discovery over obvious mainstream picks. Keep each "
-    "reason to a single sentence grounded in the profile. Also write a warm, "
-    "insightful 3-4 sentence bio that summarises the collector's taste — the "
-    "genres, eras, and sensibilities their collection reveals — addressed to "
-    "the collector in the second person."
+    "reason to a single sentence grounded in the profile."
+)
+
+# Bio is requested only on the first Gemini round of a recommendation (the only
+# one whose result is kept), so top-up rounds don't pay to generate it. The
+# instruction is appended to the per-round prompt when `want_bio` is set.
+_BIO_INSTRUCTION = (
+    "Also write a warm, insightful bio of exactly 2 sentences that summarises "
+    "this collector's taste — the genres, eras, and sensibilities their "
+    "collection reveals — addressed to the collector in the second person. "
 )
 
 # Lazily-built singleton genai client. Constructed on first use so importing this
@@ -136,40 +147,48 @@ def build_taste_profile(items, max_each=15):
     return "\n".join(lines)
 
 
-def _recommendation_schema():
-    """JSON schema for the structured Gemini response: a `bio` summarising the
-    collector's taste plus an array of {artist, album, reason} recommendations.
-    Using the model's native structured-output mode removes the need to parse a
-    delimited text format."""
+def _recommendation_item_schema():
+    """Schema for one {artist, album, reason} recommendation object."""
     from google.genai import types
     return types.Schema(
         type=types.Type.OBJECT,
-        required=["bio", "recommendations"],
+        required=["artist", "album", "reason"],
         properties={
-            "bio": types.Schema(type=types.Type.STRING),
-            "recommendations": types.Schema(
-                type=types.Type.ARRAY,
-                items=types.Schema(
-                    type=types.Type.OBJECT,
-                    required=["artist", "album", "reason"],
-                    properties={
-                        "artist": types.Schema(type=types.Type.STRING),
-                        "album": types.Schema(type=types.Type.STRING),
-                        "reason": types.Schema(type=types.Type.STRING),
-                    },
-                ),
-            ),
+            "artist": types.Schema(type=types.Type.STRING),
+            "album": types.Schema(type=types.Type.STRING),
+            "reason": types.Schema(type=types.Type.STRING),
         },
     )
 
 
-def fetch_recommendations(profile_text, n, exclude_titles=None, new_artists=False):
+def _recommendation_schema(want_bio):
+    """Structured-output schema for the Gemini response. With `want_bio` the
+    response is an object of {bio, recommendations}; without it (top-up rounds,
+    where the bio would be discarded) it's a bare array of recommendations — a
+    smaller payload the model generates faster."""
+    from google.genai import types
+    items = types.Schema(type=types.Type.ARRAY, items=_recommendation_item_schema())
+    if not want_bio:
+        return items
+    return types.Schema(
+        type=types.Type.OBJECT,
+        required=["bio", "recommendations"],
+        properties={"bio": types.Schema(type=types.Type.STRING), "recommendations": items},
+    )
+
+
+def fetch_recommendations(profile_text, n, exclude_titles=None, new_artists=False,
+                          want_bio=True):
     """Ask Gemini for `n` recommendations and return a `(bio, recommendations)`
-    tuple, where `bio` is a 3-4 sentence taste-profile summary and
-    `recommendations` is a list of {artist, album, reason} dicts.
+    tuple. `recommendations` is a list of {artist, album, reason} dicts; `bio`
+    is a 2-sentence taste-profile summary, or "" when `want_bio` is False.
 
     Uses Vertex structured output (response_schema) so the model returns
     validated JSON instead of a delimited text format we have to hand-parse.
+
+    The bio is requested only on the first round of a recommendation (the only
+    one whose bio is kept), so top-up rounds skip generating it — both the prompt
+    instruction and the schema's `bio` field are dropped when `want_bio` is False.
 
     `exclude_titles` (a list of "Artist - Album" strings already considered) is
     fed back into the prompt so top-up rounds don't repeat earlier suggestions.
@@ -195,20 +214,25 @@ def fetch_recommendations(profile_text, n, exclude_titles=None, new_artists=Fals
             "artists above, or any other artist already in their collection. "
             "Recommend only artists that are new to this collector."
         )
+    bio_rule = _BIO_INSTRUCTION if want_bio else ""
     prompt = (
         "Here is the collector's taste profile:\n\n{profile}\n\n"
-        "Write a warm, insightful 3-4 sentence bio summarising this collector's "
-        "taste, then recommend exactly {n} records they likely don't own but "
-        "would love. Only suggest records the collector does NOT already own — "
-        "favour fresh discoveries over their existing collection.{avoid}{newartist} "
-        "For each, give the primary artist, the album title, and a one-sentence "
+        "Recommend exactly {n} records they likely don't own but would love. "
+        "Only suggest records the collector does NOT already own — favour fresh "
+        "discoveries over their existing collection.{avoid}{newartist} {bio}For "
+        "each, give the primary artist, the album title, and a one-sentence "
         "reason grounded in their taste."
-    ).format(profile=profile_text, n=n, avoid=avoid, newartist=new_artist_rule)
+    ).format(profile=profile_text, n=n, avoid=avoid, newartist=new_artist_rule, bio=bio_rule)
 
     config = types.GenerateContentConfig(
         system_instruction=SYSTEM_PROMPT,
         response_mime_type="application/json",
-        response_schema=_recommendation_schema(),
+        response_schema=_recommendation_schema(want_bio),
+        # Cap the reasoning budget: gemini-2.5-flash defaults to *dynamic*
+        # thinking, which burns ~12s/round reasoning before emitting any JSON —
+        # the dominant cost of a round. A small fixed budget keeps enough
+        # reasoning for taste-profile fit while cutting a round from ~14s to ~4s.
+        thinking_config=types.ThinkingConfig(thinking_budget=_THINKING_BUDGET),
     )
     resp = client.models.generate_content(model=_MODEL, contents=prompt, config=config)
 
@@ -222,12 +246,17 @@ def fetch_recommendations(profile_text, n, exclude_titles=None, new_artists=Fals
             data = json.loads(text)
         except (ValueError, TypeError):
             return "", []
-    if not isinstance(data, dict):
-        return "", []
-    bio = (data.get("bio") or "").strip()
-    recs = data.get("recommendations")
-    if not isinstance(recs, list):
-        recs = []
+
+    # want_bio → object {bio, recommendations}; otherwise → bare array.
+    if want_bio:
+        if not isinstance(data, dict):
+            return "", []
+        bio = (data.get("bio") or "").strip()
+        recs = data.get("recommendations")
+        recs = recs if isinstance(recs, list) else []
+    else:
+        bio = ""
+        recs = data if isinstance(data, list) else []
     return bio, [d for d in recs if isinstance(d, dict)]
 
 
@@ -271,12 +300,13 @@ def owned_artists(items):
     return names
 
 
-def collect_candidates(profile_text, n, exclude_keys, exclude_titles, new_artists=False):
+def collect_candidates(profile_text, n, exclude_keys, exclude_titles, new_artists=False,
+                       want_bio=True):
     """Run one Gemini round and return a `(bio, candidates)` tuple, dropping any
     candidate whose artist|album key is in `exclude_keys` (owned or
-    already-suggested)."""
+    already-suggested). `bio` is "" unless `want_bio` is set."""
     bio, recs = fetch_recommendations(profile_text, n, exclude_titles=exclude_titles,
-                                      new_artists=new_artists)
+                                      new_artists=new_artists, want_bio=want_bio)
     out, seen = [], set()
     for rec in recs:
         artist = (rec.get("artist") or "").strip()
@@ -402,67 +432,70 @@ def _card_from(candidate, result):
     }
 
 
-def get_recommendation_cards(items, scraper, auth=None, budget=None, min_results=5,
-                             max_rounds=3, new_artists=False):
-    """Full step-3 pipeline: ask Gemini for candidates, drop owned ones, and
-    resolve each to a valid Vinyl (non-Unofficial) Discogs release. Returns a
-    `(cards, bio)` tuple — `cards` is ALL releases that pass the qualifying
-    checks (no upper cap) and `bio` is Gemini's 3-4 sentence taste summary.
-    A single clean round of 10 returns 10. Runs another Gemini round only while
-    fewer than `min_results` have been found, up to `max_rounds` (1 initial + 2
-    top-ups), aggregating across rounds (e.g. 4 from round one + 10 from round
-    two = 14).
+def run_recommendation_round(items, scraper, auth=None, budget=None,
+                             considered=None, seen_ids=None, new_artists=False,
+                             want_bio=True):
+    """Run ONE Gemini round and resolve its candidates to Vinyl cards.
 
-    When `new_artists` is set, recommendations by an artist already in the
-    collection are dropped (so only artists new to the collector surface), and
-    the Gemini prompt is told to avoid owned artists to reduce wasted rounds."""
-    profile = build_taste_profile(items)
+    This is the per-round core the streaming `/recommend/batch` endpoint calls
+    once per HTTP request, and which `get_recommendation_cards` loops over for
+    the all-at-once path. It is stateless across calls: the caller round-trips
+    `considered` (a list of {"artist","album"} dicts already suggested in prior
+    rounds — fed back to Gemini to avoid repeats and to dedupe) and `seen_ids`
+    (release IDs already rendered, to dedupe resolved releases across rounds).
+
+    `want_bio` should be True only for the first round of a recommendation; later
+    rounds skip generating the (discarded) bio to keep their Gemini call cheaper.
+
+    Returns a dict:
+      cards      — newly resolved cards this round (lookup_grid-shaped)
+      bio        — Gemini's 2-sentence taste summary ("" when `want_bio` is False)
+      considered — updated {"artist","album"} list to pass to the next round
+      seen_ids   — updated sorted list of release IDs to pass to the next round
+      capped     — True if the global monthly cap blocked this round (no call made)
+      exhausted  — True if Gemini returned no usable new candidates
+
+    When `new_artists` is set, candidates by an already-owned artist are dropped
+    before any Discogs search, and Gemini is told to avoid owned artists.
+    """
+    considered = [dict(c) for c in (considered or [])]
+    seen_ids = set(str(i) for i in (seen_ids or []))
+
+    # Global cost guard: count this round against the monthly cap before
+    # spending a Gemini call.
+    if not firestore_db.consume_gemini_round(_MONTHLY_ROUND_CAP):
+        return {"cards": [], "bio": "", "considered": considered,
+                "seen_ids": sorted(seen_ids), "capped": True, "exhausted": False}
+
     owned_text = owned_keys(items)
     owned_ids = owned_release_ids(items)
     owned_art = owned_artists(items) if new_artists else set()
 
+    suggested_keys = {_key(c["artist"], c["album"]) for c in considered}
+    suggested_titles = ["{0} - {1}".format(c["artist"], c["album"]) for c in considered]
+
+    bio, candidates = collect_candidates(
+        build_taste_profile(items), _CANDIDATES_PER_ROUND,
+        exclude_keys=owned_text | suggested_keys,
+        exclude_titles=suggested_titles,
+        new_artists=new_artists,
+        want_bio=want_bio,
+    )
+
+    # Record every raw candidate as "considered" so future rounds don't
+    # re-suggest it, even ones we're about to drop for being an owned artist.
+    for c in candidates:
+        considered.append({"artist": c["artist"], "album": c["album"]})
+
+    # 'New artists only': drop candidates by an artist already owned before
+    # spending any Discogs searches on them.
+    if new_artists:
+        candidates = [c for c in candidates if _norm(c["artist"]) not in owned_art]
+
     cards = []
-    bio = ""                 # keep the first non-empty bio Gemini returns
-    suggested_keys = set()   # artist|album keys seen across all rounds
-    suggested_titles = []    # "Artist - Album" strings fed back to Gemini to avoid repeats
-    used_ids = set()         # resolved release IDs already added
-
-    for _round in range(max_rounds):
-        if len(cards) >= min_results:
-            break
-        # Global cost guard: count this round against the monthly cap before
-        # spending a Gemini call. If we're capped and have nothing yet, signal
-        # the route to show a "paused" notice; if we already have some cards,
-        # just stop and return them.
-        if not firestore_db.consume_gemini_round(_MONTHLY_ROUND_CAP):
-            if not cards:
-                raise CapReachedError()
-            break
-        round_bio, candidates = collect_candidates(
-            profile, _CANDIDATES_PER_ROUND,
-            exclude_keys=owned_text | suggested_keys,
-            exclude_titles=suggested_titles,
-            new_artists=new_artists,
-        )
-        if not bio and round_bio:
-            bio = round_bio
-        if not candidates:
-            break
-        # Record every raw candidate as "considered" so future rounds don't
-        # re-suggest it, even ones we're about to drop for being an owned artist.
-        for c in candidates:
-            suggested_keys.add(_key(c["artist"], c["album"]))
-            suggested_titles.append("{0} - {1}".format(c["artist"], c["album"]))
-
-        # 'New artists only': drop candidates by an artist already owned before
-        # spending any Discogs searches on them.
-        if new_artists:
-            candidates = [c for c in candidates if _norm(c["artist"]) not in owned_art]
-            if not candidates:
-                continue
-
+    if candidates:
         # Resolve candidates concurrently (network-bound), then assemble in order
-        # so dedupe/target logic stays single-threaded.
+        # so dedupe stays single-threaded.
         resolved = [None] * len(candidates)
         with ThreadPoolExecutor(max_workers=5) as ex:
             futs = {
@@ -480,9 +513,42 @@ def get_recommendation_cards(items, scraper, auth=None, budget=None, min_results
             if not r:
                 continue
             rid = str(r.get("id", ""))
-            if not rid or rid in owned_ids or rid in used_ids:
+            if not rid or rid in owned_ids or rid in seen_ids:
                 continue
-            used_ids.add(rid)
-            cards.append(_card_from(c, r))  # keep every qualifying release — no cap
+            seen_ids.add(rid)
+            cards.append(_card_from(c, r))
 
+    return {"cards": cards, "bio": bio, "considered": considered,
+            "seen_ids": sorted(seen_ids), "capped": False,
+            "exhausted": not candidates}
+
+
+def get_recommendation_cards(items, scraper, auth=None, budget=None, min_results=10,
+                             max_rounds=3, new_artists=False):
+    """All-at-once pipeline: loop `run_recommendation_round` until at least
+    `min_results` cards are found or `max_rounds` Gemini rounds are spent,
+    aggregating across rounds. Returns a `(cards, bio)` tuple.
+
+    Raises CapReachedError if the monthly cap blocks the very first round (so the
+    route can show a 'paused' notice); a cap hit after some cards exist just
+    stops and returns what was found. The streaming `/recommend/batch` endpoint
+    drives the same rounds itself, so this remains the non-streaming entry point."""
+    cards, bio, considered, seen_ids = [], "", [], []
+    for _round in range(max_rounds):
+        if len(cards) >= min_results:
+            break
+        res = run_recommendation_round(items, scraper, auth=auth, budget=budget,
+                                       considered=considered, seen_ids=seen_ids,
+                                       new_artists=new_artists, want_bio=(_round == 0))
+        if res["capped"]:
+            if not cards:
+                raise CapReachedError()
+            break
+        if not bio and res["bio"]:
+            bio = res["bio"]
+        considered = res["considered"]
+        seen_ids = res["seen_ids"]
+        cards.extend(res["cards"])
+        if res["exhausted"]:
+            break
     return cards, bio

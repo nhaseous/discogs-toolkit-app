@@ -1,0 +1,4 @@
+{# Per-release summary lines for the Recommendations card, appended by
+   recommend.js as each batch resolves. Same data as the card grid, shown as a
+   compact text list. #}
+{% for c in cards %}<span class="matcher-listing-line"><b>{{ c.artist }}</b> - {{ c.title }}{% if c.format %} &nbsp;&middot; <i>({{ c.format }})</i>{% endif %}<br></span>{% endfor %}

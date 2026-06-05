@@ -1,0 +1,4 @@
+{# Bare list of recommendation cards (no .match-grid wrapper) returned by
+   /recommend/batch so recommend.js can append them into the existing grid. #}
+{% from "macros.html" import match_card with context %}
+{% for m in cards %}{{ match_card(m) }}{% endfor %}

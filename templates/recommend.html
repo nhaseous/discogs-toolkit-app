@@ -1,8 +1,8 @@
 {% extends "base.html" %}
-{% from "macros.html" import lookup_grid with context %}
 
 {% block extra_js %}
 <script src="/static/v{{ static_v }}/js/grid.js"></script>
+<script src="/static/v{{ static_v }}/js/recommend.js"></script>
 {% endblock %}
 
 {% block content %}
@@ -39,29 +39,27 @@
 </div>
 
 {% if has_results %}
-<div id="recommend-results" class="recommend-output">
+<div id="recommend-results" class="recommend-output"
+     data-user="{{ username }}" data-new-artists="{{ 'yes' if new_artists else '' }}">
     <div class="meta">
         <span><b>Taste Profile: <a href="https://www.discogs.com/user/{{ username }}" target="_blank" rel="noopener noreferrer" class="meta-user-link">{{ username }}</a></b></span>
-        {% if loadtime %}<span>Found in {{ loadtime }} seconds &nbsp;&#124;&nbsp; {{ searched_at }}</span>{% endif %}
+        <span id="recommend-meta-time"></span>
     </div>
 
-    {% if error_output %}
-        <div class="result-card"><div class="card-listings">{{ error_output }}</div></div>
-    {% elif cards %}
-        <div class="result-card">
-            <div class="place-summary-title">Recommendations</div>
-            <div class="card-listings">
-                Vinyl recommendations from <b>{{ username }}</b>&rsquo;s taste profile.<br>
-                {% if bio %}<br><span class="recommend-bio">{{ bio }}</span><br>{% endif %}
-                <br><b>{{ cards | length }} release{{ '' if cards | length == 1 else 's' }}</b><br>
-                {% if cards %}<br>{% endif %}
-                {% for c in cards %}
-                    <span class="matcher-listing-line"><b>{{ c.artist }}</b> - {{ c.title }}{% if c.format %} &nbsp;&middot; <i>({{ c.format }})</i>{% endif %}<br></span>
-                {% endfor %}
-            </div>
+    <div id="recommend-error" class="result-card" hidden><div class="card-listings"></div></div>
+
+    <div class="result-card" id="recommend-summary" hidden>
+        <div class="place-summary-title">Recommendations</div>
+        <div class="card-listings">
+            Vinyl recommendations from <b>{{ username }}</b>&rsquo;s taste profile.<br>
+            <br><span class="recommend-bio" id="recommend-bio"></span>
+            <span id="recommend-count-line" hidden><br><b><span id="recommend-count">0</span> <span id="recommend-count-label">releases</span></b><br><br><span id="recommend-lines"></span></span>
         </div>
-        {{ lookup_grid(cards, grid_class="match-grid--expanded") }}
-    {% endif %}
+    </div>
+
+    <div class="match-grid match-grid--expanded" id="recommend-grid"></div>
+
+    <div id="recommend-more" class="recommend-more" hidden><span class="recommend-more-icon"></span>Finding more&hellip;</div>
 </div>
 {% endif %}
 {% endblock %}

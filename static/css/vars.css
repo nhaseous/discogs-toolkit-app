@@ -48,6 +48,10 @@
 /* Reset */
 * { box-sizing: border-box; margin: 0; padding: 0; }
 
+/* The `hidden` attribute must win over component `display` rules (e.g.
+   .result-card { display: flex }), otherwise hidden cards still render. */
+[hidden] { display: none !important; }
+
 html { scroll-behavior: smooth; overscroll-behavior: none; }
 
 body {

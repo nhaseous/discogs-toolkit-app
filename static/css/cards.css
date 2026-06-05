@@ -149,6 +149,26 @@
     line-height: 1.7;
 }
 
+/* "Finding more…" footer shown under the grid while later batches stream in. */
+.recommend-more {
+    margin: 18px 0 4px;
+    color: var(--ink-soft);
+    font-size: 13px;
+    font-style: italic;
+}
+
+.recommend-more-icon {
+    display: inline-block;
+    width: 14px;
+    height: 14px;
+    border: 2px solid var(--rule);
+    border-top-color: var(--rust);
+    border-radius: 50%;
+    animation: rotate 0.8s linear infinite;
+    vertical-align: middle;
+    margin-right: 8px;
+}
+
 /* =========================================================
    Sorted view
    ========================================================= */

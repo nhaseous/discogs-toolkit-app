@@ -67,36 +67,40 @@
 {% endmacro %}
 
 
+{% macro match_card(m, show_stats=False) %}
+<a href="{{ m.url or '#' }}" class="match-card"{% if m is mapping and 'is_exact' in m %} data-is-exact="{{ '1' if m.is_exact else '0' }}"{% endif %} target="_blank" rel="noopener noreferrer">
+    <div class="match-card-art">
+        {% if m.cover_image or m.thumb %}
+            <img src="{{ m.cover_image or m.thumb }}" alt="" class="match-card-img">
+        {% else %}
+            <div class="match-card-placeholder">{{ vinyl_placeholder_svg | safe }}</div>
+        {% endif %}
+    </div>
+    <div class="match-card-info">
+        <div class="match-card-artist">{{ m.artist }}</div>
+        <div class="match-card-title">{{ m.title }}</div>
+    </div>
+    <div class="match-card-body">
+        {% if m.format %}<div class="match-card-format">{{ m.format }}</div>{% endif %}
+        {% if m.format_descriptions %}<div class="match-card-format-desc">{{ m.format_descriptions }}</div>{% endif %}
+        {% if m.format_text %}<div class="match-card-format-text">{{ m.format_text }}</div>{% endif %}
+        {% if m.for_sale and m.for_sale_url %}
+            <div class="match-card-forsale"
+                 onclick="event.stopPropagation();event.preventDefault();window.open('{{ m.for_sale_url }}','_blank','noopener,noreferrer')">
+                {{ m.for_sale }}
+            </div>
+        {% endif %}
+        {% if m.comment %}<div class="match-card-comment">{{ m.comment }}</div>{% endif %}
+        {% if show_stats and m.stats %}<div class="match-card-stats">{{ m.stats }}</div>{% endif %}
+    </div>
+</a>
+{% endmacro %}
+
 {% macro lookup_grid(items, show_stats=False, prepend_card="", grid_class="") %}
 <div class="match-grid{% if grid_class %} {{ grid_class }}{% endif %}">
     {{ prepend_card | safe }}
     {% for m in items %}
-        <a href="{{ m.url or '#' }}" class="match-card"{% if m is mapping and 'is_exact' in m %} data-is-exact="{{ '1' if m.is_exact else '0' }}"{% endif %} target="_blank" rel="noopener noreferrer">
-            <div class="match-card-art">
-                {% if m.cover_image or m.thumb %}
-                    <img src="{{ m.cover_image or m.thumb }}" alt="" class="match-card-img">
-                {% else %}
-                    <div class="match-card-placeholder">{{ vinyl_placeholder_svg | safe }}</div>
-                {% endif %}
-            </div>
-            <div class="match-card-info">
-                <div class="match-card-artist">{{ m.artist }}</div>
-                <div class="match-card-title">{{ m.title }}</div>
-            </div>
-            <div class="match-card-body">
-                {% if m.format %}<div class="match-card-format">{{ m.format }}</div>{% endif %}
-                {% if m.format_descriptions %}<div class="match-card-format-desc">{{ m.format_descriptions }}</div>{% endif %}
-                {% if m.format_text %}<div class="match-card-format-text">{{ m.format_text }}</div>{% endif %}
-                {% if m.for_sale and m.for_sale_url %}
-                    <div class="match-card-forsale"
-                         onclick="event.stopPropagation();event.preventDefault();window.open('{{ m.for_sale_url }}','_blank','noopener,noreferrer')">
-                        {{ m.for_sale }}
-                    </div>
-                {% endif %}
-                {% if m.comment %}<div class="match-card-comment">{{ m.comment }}</div>{% endif %}
-                {% if show_stats and m.stats %}<div class="match-card-stats">{{ m.stats }}</div>{% endif %}
-            </div>
-        </a>
+        {{ match_card(m, show_stats) }}
     {% endfor %}
 </div>
 {% endmacro %}
