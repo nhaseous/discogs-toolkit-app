@@ -117,6 +117,19 @@
     margin-bottom: 8px;
 }
 
+/* Eyebrow row: section label and a secondary note (e.g. attribution) inline,
+   separated by a dot, sharing the eyebrow's bottom spacing. */
+.page-eyebrow-row {
+    display: flex;
+    align-items: baseline;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+.page-eyebrow-row .page-eyebrow { margin-bottom: 0; }
+
+.page-eyebrow--muted { color: var(--ink-muted); }
+
 /* Responsive */
 @media (max-width: 900px) {
     .content { margin-left: 0; padding: 24px 20px 48px; }

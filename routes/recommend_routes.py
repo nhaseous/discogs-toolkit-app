@@ -16,7 +16,8 @@ _IP_DAILY_LIMIT = int(os.environ.get("RECOMMEND_IP_DAILY_LIMIT", "50"))
 
 @recommend_bp.route("/recommend")
 def recommendpage():
-    username = request.args.get("username", "").strip()
+    username = request.args.get("user", "").strip()
+    new_artists = request.args.get("new_artists", "") == "yes"
 
     cards = []
     error_output = ""
@@ -42,7 +43,7 @@ def recommendpage():
                 if not items:
                     error_output = "No public collection found for this user."
                 else:
-                    cards = recommend_helper.get_recommendation_cards(items, scraper, auth=auth, budget=budget)
+                    cards = recommend_helper.get_recommendation_cards(items, scraper, auth=auth, budget=budget, new_artists=new_artists)
                     if not cards:
                         error_output = "Couldn’t find any new vinyl recommendations — try again."
             except lookup_helper.UserNotFoundError:
@@ -64,6 +65,7 @@ def recommendpage():
 
     return render_template('recommend.html',
         username=username,
+        new_artists=new_artists,
         cards=cards,
         error_output=error_output,
         loadtime=loadtime,

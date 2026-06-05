@@ -16,15 +16,24 @@
         {% endif %}
     </span>
     <div class="search-bar-segment">
-        <label class="search-bar-label" for="username">Discogs user</label>
-        <input type="text" id="username" name="username" placeholder="username" autocomplete="off" value="{{ username or '' }}">
+        <label class="search-bar-label" for="user">Discogs user</label>
+        <input type="text" id="user" name="user" placeholder="username" autocomplete="off" value="{{ username or '' }}">
     </div>
+    <div class="search-bar-divider"></div>
+    <label class="search-bar-toggle" for="new_artists">
+        <input type="checkbox" id="new_artists" name="new_artists" value="yes" {{ 'checked' if new_artists else '' }}>
+        <span>New artists</span>
+    </label>
     <button type="submit" class="search-bar-submit">Recommend</button>
 </form>
 <div id="spinner"><span id="spinner-icon"></span>Finding recommendations&hellip;</div>
 
 <div class="page-header">
-    <div class="page-eyebrow">Powered by Gemini</div>
+    <div class="page-eyebrow-row">
+        <span class="page-eyebrow">Collection</span>
+        <span class="page-eyebrow page-eyebrow--muted" aria-hidden="true">&middot;</span>
+        <span class="page-eyebrow page-eyebrow--muted">Powered by Gemini</span>
+    </div>
     <h2>Record <em>Recommendations</em></h2>
 </div>
 </div>
@@ -32,7 +41,7 @@
 {% if has_results %}
 <div id="recommend-results" class="recommend-output">
     <div class="meta">
-        <span><b>Collector: <a href="https://www.discogs.com/user/{{ username }}" target="_blank" rel="noopener noreferrer" class="meta-user-link">{{ username }}</a></b></span>
+        <span><b>Taste Profile: <a href="https://www.discogs.com/user/{{ username }}" target="_blank" rel="noopener noreferrer" class="meta-user-link">{{ username }}</a></b></span>
         {% if loadtime %}<span>Found in {{ loadtime }} seconds &nbsp;&#124;&nbsp; {{ searched_at }}</span>{% endif %}
     </div>
 
@@ -42,7 +51,7 @@
         <div class="result-card">
             <div class="place-summary-title">Recommendations</div>
             <div class="card-listings">
-                Vinyl picks for <b>{{ username }}</b> &middot; from this collection&rsquo;s taste profile, already-owned records excluded.<br>
+                Vinyl recommendations from <b>{{ username }}</b>&rsquo;s taste profile.<br>
                 <br><b>{{ cards | length }} release{{ '' if cards | length == 1 else 's' }}</b><br>
                 {% if cards %}<br>{% endif %}
                 {% for c in cards %}

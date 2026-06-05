@@ -133,38 +133,85 @@ def build_taste_profile(items, max_each=15):
     return "\n".join(lines)
 
 
-def stream_recommendations(profile_text, n, exclude_titles=None):
-    """Yield Gemini's recommendation text in chunks as they arrive.
+def _recommendation_schema():
+    """JSON schema for the structured Gemini response: an array of
+    {artist, album, reason} objects. Using the model's native structured-output
+    mode removes the need to parse a delimited text format."""
+    from google.genai import types
+    return types.Schema(
+        type=types.Type.ARRAY,
+        items=types.Schema(
+            type=types.Type.OBJECT,
+            required=["artist", "album", "reason"],
+            properties={
+                "artist": types.Schema(type=types.Type.STRING),
+                "album": types.Schema(type=types.Type.STRING),
+                "reason": types.Schema(type=types.Type.STRING),
+            },
+        ),
+    )
+
+
+def fetch_recommendations(profile_text, n, exclude_titles=None, new_artists=False):
+    """Ask Gemini for `n` recommendations and return a list of
+    {artist, album, reason} dicts.
+
+    Uses Vertex structured output (response_schema) so the model returns
+    validated JSON instead of a delimited text format we have to hand-parse.
 
     `exclude_titles` (a list of "Artist - Album" strings already considered) is
     fed back into the prompt so top-up rounds don't repeat earlier suggestions.
 
+    When `new_artists` is set, the prompt also instructs the model to only
+    suggest artists not already in the collection — a yield mitigation paired
+    with the hard owned-artist filter in `get_recommendation_cards`.
+
     Raises VertexConfigError if the client can't be built; other exceptions
     propagate to the caller (the route surfaces them for debugging).
     """
+    from google.genai import types
     client = _get_client()
     avoid = ""
     if exclude_titles:
         avoid = (" Do NOT suggest any of these already-considered records: "
                  + "; ".join(exclude_titles) + ".")
+    new_artist_rule = ""
+    if new_artists:
+        new_artist_rule = (
+            " Every recommendation must be by an artist the collector does NOT "
+            "already own — do not recommend any artist listed in their top "
+            "artists above, or any other artist already in their collection. "
+            "Recommend only artists that are new to this collector."
+        )
     prompt = (
-        "{system}\n\n"
         "Here is the collector's taste profile:\n\n{profile}\n\n"
         "Recommend exactly {n} records they likely don't own but would love. "
         "Only suggest records the collector does NOT already own — favour fresh "
-        "discoveries over their existing collection.{avoid} "
-        "Output ONE recommendation per line in EXACTLY this format, with no "
-        "numbering, no markdown, no preamble, and no extra lines:\n"
-        "Artist ||| Album ||| one-sentence reason grounded in their taste\n"
-        "Use ' ||| ' (space pipe pipe pipe space) as the separator between the "
-        "three fields, and nothing else."
-    ).format(system=SYSTEM_PROMPT, profile=profile_text, n=n, avoid=avoid)
+        "discoveries over their existing collection.{avoid}{newartist} For each, "
+        "give the primary artist, the album title, and a one-sentence reason "
+        "grounded in their taste."
+    ).format(profile=profile_text, n=n, avoid=avoid, newartist=new_artist_rule)
 
-    stream = client.models.generate_content_stream(model=_MODEL, contents=prompt)
-    for chunk in stream:
-        text = getattr(chunk, "text", None)
-        if text:
-            yield text
+    config = types.GenerateContentConfig(
+        system_instruction=SYSTEM_PROMPT,
+        response_mime_type="application/json",
+        response_schema=_recommendation_schema(),
+    )
+    resp = client.models.generate_content(model=_MODEL, contents=prompt, config=config)
+
+    # Prefer the SDK's parsed value; fall back to decoding the raw text.
+    data = getattr(resp, "parsed", None)
+    if data is None:
+        text = getattr(resp, "text", None)
+        if not text:
+            return []
+        try:
+            data = json.loads(text)
+        except (ValueError, TypeError):
+            return []
+    if not isinstance(data, list):
+        return []
+    return [d for d in data if isinstance(d, dict)]
 
 
 def _norm(s):
@@ -191,40 +238,38 @@ def owned_keys(items):
     return keys
 
 
-def _parse_line(line):
-    t = re.sub(r"^\s*\d+[.)]\s*", "", (line or "").strip())  # tolerate stray numbering
-    if not t or "|||" not in t:
-        return None
-    parts = [p.strip() for p in t.split("|||")]
-    artist = parts[0] if len(parts) > 0 else ""
-    album = parts[1] if len(parts) > 1 else ""
-    reason = parts[2] if len(parts) > 2 else ""
-    if not artist or not album:
-        return None
-    return {"artist": artist, "album": album, "reason": reason}
+def owned_artists(items):
+    """Normalized artist names for every release in the collection, used by the
+    'new artists only' filter to drop recommendations by artists already owned
+    (even when the specific album is new)."""
+    names = set()
+    for item in items:
+        artists = item.get("artist") or []
+        if isinstance(artists, str):
+            artists = [artists]
+        for a in artists:
+            key = _norm(a)
+            if key:
+                names.add(key)
+    return names
 
 
-def collect_candidates(profile_text, n, exclude_keys, exclude_titles):
+def collect_candidates(profile_text, n, exclude_keys, exclude_titles, new_artists=False):
     """Run one Gemini round and return parsed candidate dicts, dropping any whose
     artist|album key is in `exclude_keys` (owned or already-suggested)."""
-    out, seen, buf = [], set(), ""
-
-    def take(line):
-        rec = _parse_line(line)
-        if not rec:
-            return
-        key = _key(rec["artist"], rec["album"])
+    out, seen = [], set()
+    for rec in fetch_recommendations(profile_text, n, exclude_titles=exclude_titles,
+                                     new_artists=new_artists):
+        artist = (rec.get("artist") or "").strip()
+        album = (rec.get("album") or "").strip()
+        reason = (rec.get("reason") or "").strip()
+        if not artist or not album:
+            continue
+        key = _key(artist, album)
         if key in exclude_keys or key in seen:
-            return
+            continue
         seen.add(key)
-        out.append(rec)
-
-    for chunk in stream_recommendations(profile_text, n, exclude_titles=exclude_titles):
-        buf += chunk
-        while "\n" in buf:
-            line, buf = buf.split("\n", 1)
-            take(line)
-    take(buf)  # flush final, newline-less line
+        out.append({"artist": artist, "album": album, "reason": reason})
     return out
 
 
@@ -241,37 +286,53 @@ def owned_release_ids(items):
     return ids
 
 
-def _result_matches(artist, album, result):
-    """Guard against the search returning an unrelated release: require both the
-    candidate artist and album (normalized) to appear in the result's title
-    (Discogs formats result titles as "Artist - Album")."""
-    title = _norm(result.get("title", ""))
-    return bool(_norm(album)) and _norm(album) in title and _norm(artist) in title
+def _tokens(s):
+    """Lowercased alphanumeric word tokens, with a leading 'the' dropped to match
+    `_norm`'s article handling."""
+    s = re.sub(r"^the\s+", "", (s or "").lower().strip())
+    return {t for t in re.split(r"[^a-z0-9]+", s) if t}
 
 
-def search_vinyl_release(artist, album, scraper, auth=None, budget=None):
-    """Find a Discogs release for `artist`/`album` available on Vinyl and not an
-    Unofficial Release. Returns the matching search-result dict, or None."""
-    if budget is not None and not budget.take():
-        return None
-    params = {
-        "artist": artist,
-        "release_title": album,
-        "format": "Vinyl",
-        "type": "release",
-        "per_page": 15,
-    }
+def _coverage(needle, haystack_tokens):
+    """Fraction of `needle`'s tokens present in `haystack_tokens` (0.0–1.0)."""
+    nt = _tokens(needle)
+    if not nt:
+        return 0.0
+    return len(nt & haystack_tokens) / len(nt)
+
+
+def _result_matches(artist, album, result, artist_min=0.5, album_min=0.6):
+    """Guard against the search returning an unrelated release. Discogs formats
+    result titles as "Artist - Album", so we fuzzy-match the candidate against
+    the whole title by token coverage rather than exact substring: this tolerates
+    word reordering, extra qualifiers ("Quintet", "(Remastered)"), and featured
+    artists that broke the old strict `in` check. We require most of the album's
+    tokens and at least half the artist's tokens to appear."""
+    if not _tokens(album):
+        return False
+    title_tokens = _tokens(result.get("title", ""))
+    return (_coverage(album, title_tokens) >= album_min
+            and _coverage(artist, title_tokens) >= artist_min)
+
+
+def _run_search(params, scraper, auth):
+    """Execute one Discogs search; return its results list ([] on any failure)."""
     try:
         resp = request_with_retry(scraper, "GET", _SEARCH_URL, params=params,
                                   headers=_API_HEADERS, auth=auth, max_429_retries=0)
     except Exception:
-        return None
+        return []
     if resp is None or resp.status_code != 200:
-        return None
+        return []
     try:
-        results = resp.json().get("results", [])
+        return resp.json().get("results", []) or []
     except Exception:
-        return None
+        return []
+
+
+def _pick_match(artist, album, results):
+    """First result that is Vinyl, not Unofficial, and fuzzy-matches the
+    candidate. Returns the result dict or None."""
     for r in results:
         formats = [str(f).lower() for f in (r.get("format") or [])]
         if "vinyl" not in formats:                      # need Vinyl present
@@ -281,6 +342,28 @@ def search_vinyl_release(artist, album, scraper, auth=None, budget=None):
         if not _result_matches(artist, album, r):       # exclude unrelated matches
             continue
         return r
+    return None
+
+
+def search_vinyl_release(artist, album, scraper, auth=None, budget=None):
+    """Find a Discogs release for `artist`/`album` available on Vinyl and not an
+    Unofficial Release. Returns the matching search-result dict, or None.
+
+    Tries progressively looser searches so a candidate isn't lost to one rigid
+    query: (1) strict structured search on the Vinyl format, (2) a free-text
+    query post-filtered for vinyl. Stops at the first qualifying match."""
+    strategies = [
+        {"artist": artist, "release_title": album, "format": "Vinyl",
+         "type": "release", "per_page": 15},
+        {"q": "{0} {1}".format(artist, album), "format": "Vinyl",
+         "type": "release", "per_page": 25},
+    ]
+    for params in strategies:
+        if budget is not None and not budget.take():
+            return None
+        match = _pick_match(artist, album, _run_search(params, scraper, auth))
+        if match:
+            return match
     return None
 
 
@@ -300,16 +383,22 @@ def _card_from(candidate, result):
     }
 
 
-def get_recommendation_cards(items, scraper, auth=None, budget=None, min_results=5, max_rounds=3):
+def get_recommendation_cards(items, scraper, auth=None, budget=None, min_results=5,
+                             max_rounds=3, new_artists=False):
     """Full step-3 pipeline: ask Gemini for candidates, drop owned ones, and
     resolve each to a valid Vinyl (non-Unofficial) Discogs release. Returns ALL
     releases that pass the qualifying checks (no upper cap) — a single clean
     round of 10 returns 10. Runs another Gemini round only while fewer than
     `min_results` have been found, up to `max_rounds` (1 initial + 2 top-ups),
-    aggregating across rounds (e.g. 4 from round one + 10 from round two = 14)."""
+    aggregating across rounds (e.g. 4 from round one + 10 from round two = 14).
+
+    When `new_artists` is set, recommendations by an artist already in the
+    collection are dropped (so only artists new to the collector surface), and
+    the Gemini prompt is told to avoid owned artists to reduce wasted rounds."""
     profile = build_taste_profile(items)
     owned_text = owned_keys(items)
     owned_ids = owned_release_ids(items)
+    owned_art = owned_artists(items) if new_artists else set()
 
     cards = []
     suggested_keys = set()   # artist|album keys seen across all rounds
@@ -331,12 +420,22 @@ def get_recommendation_cards(items, scraper, auth=None, budget=None, min_results
             profile, _CANDIDATES_PER_ROUND,
             exclude_keys=owned_text | suggested_keys,
             exclude_titles=suggested_titles,
+            new_artists=new_artists,
         )
         if not candidates:
             break
+        # Record every raw candidate as "considered" so future rounds don't
+        # re-suggest it, even ones we're about to drop for being an owned artist.
         for c in candidates:
             suggested_keys.add(_key(c["artist"], c["album"]))
             suggested_titles.append("{0} - {1}".format(c["artist"], c["album"]))
+
+        # 'New artists only': drop candidates by an artist already owned before
+        # spending any Discogs searches on them.
+        if new_artists:
+            candidates = [c for c in candidates if _norm(c["artist"]) not in owned_art]
+            if not candidates:
+                continue
 
         # Resolve candidates concurrently (network-bound), then assemble in order
         # so dedupe/target logic stays single-threaded.
