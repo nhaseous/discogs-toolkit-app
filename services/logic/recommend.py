@@ -42,7 +42,12 @@ _LOCATION = os.environ.get("VERTEX_LOCATION", "us-central1")
 _SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
 
 _SEARCH_URL = "https://api.discogs.com/database/search"
-_CANDIDATES_PER_ROUND = 5  # per-round Gemini ask; rounds stream in via /recommend/batch
+# Default per-round Gemini ask for the initial streaming rounds. Manual "get more"
+# refreshes over-ask instead (see _REFRESH_CANDIDATES in recommend_routes.py),
+# because ~half of each round's candidates are lost to the owned-collection filter
+# and to candidates with no qualifying Discogs vinyl release — so a lone refresh
+# round on a large collection would otherwise sometimes net zero.
+_CANDIDATES_PER_ROUND = 5
 
 # Fixed Gemini thinking budget (tokens). Default 2.5-flash dynamic thinking adds
 # ~12s/round; a small cap keeps taste reasoning while making rounds ~3-4x faster.
@@ -434,7 +439,7 @@ def _card_from(candidate, result):
 
 def run_recommendation_round(items, scraper, auth=None, budget=None,
                              considered=None, seen_ids=None, new_artists=False,
-                             want_bio=True):
+                             want_bio=True, n_candidates=None):
     """Run ONE Gemini round and resolve its candidates to Vinyl cards.
 
     This is the per-round core the streaming `/recommend/batch` endpoint calls
@@ -446,6 +451,10 @@ def run_recommendation_round(items, scraper, auth=None, budget=None,
 
     `want_bio` should be True only for the first round of a recommendation; later
     rounds skip generating the (discarded) bio to keep their Gemini call cheaper.
+
+    `n_candidates` overrides how many candidates this round asks Gemini for
+    (defaults to `_CANDIDATES_PER_ROUND`); manual "get more" refreshes pass a
+    higher count to offset per-round attrition.
 
     Returns a dict:
       cards      — newly resolved cards this round (lookup_grid-shaped)
@@ -475,7 +484,7 @@ def run_recommendation_round(items, scraper, auth=None, budget=None,
     suggested_titles = ["{0} - {1}".format(c["artist"], c["album"]) for c in considered]
 
     bio, candidates = collect_candidates(
-        build_taste_profile(items), _CANDIDATES_PER_ROUND,
+        build_taste_profile(items), n_candidates or _CANDIDATES_PER_ROUND,
         exclude_keys=owned_text | suggested_keys,
         exclude_titles=suggested_titles,
         new_artists=new_artists,

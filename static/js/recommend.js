@@ -131,7 +131,8 @@
                 considered: considered,
                 seen_ids: seenIds,
                 have: cardEls.length,
-                round: roundIdx
+                round: roundIdx,
+                manual: !auto   // refresh clicks over-ask Gemini; initial rounds don't
             })
         }).then(function(r) {
             return r.json().catch(function() { throw new Error("bad_json"); });

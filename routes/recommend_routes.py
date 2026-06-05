@@ -18,6 +18,12 @@ _IP_DAILY_ROUND_LIMIT = int(os.environ.get("RECOMMEND_IP_DAILY_ROUND_LIMIT", "60
 _TARGET_RESULTS = 10
 _MAX_ROUNDS = 3
 
+# Manual "get more" refreshes (a single round each) ask Gemini for more candidates
+# than the initial streaming rounds, so one round nets enough cards despite ~half
+# being lost to the owned filter / no-vinyl-match — the initial rounds stay leaner
+# since they stack up across the run toward _TARGET_RESULTS.
+_REFRESH_CANDIDATES = 10
+
 
 @recommend_bp.route("/recommend")
 def recommendpage():
@@ -54,6 +60,8 @@ def recommend_batch():
     seen_ids = data.get("seen_ids") or []
     have = int(data.get("have") or 0)
     round_idx = int(data.get("round") or 0)
+    # Manual "get more" refreshes over-ask Gemini; initial streaming rounds don't.
+    manual = bool(data.get("manual"))
     if not username:
         return jsonify({"error": "bad_request"}), 400
 
@@ -94,7 +102,8 @@ def recommend_batch():
         res = recommend_helper.run_recommendation_round(
             items, scraper, auth=auth, budget=budget,
             considered=considered, seen_ids=seen_ids, new_artists=new_artists,
-            want_bio=(round_idx == 0))
+            want_bio=(round_idx == 0),
+            n_candidates=_REFRESH_CANDIDATES if manual else None)
     except recommend_helper.VertexConfigError as e:
         return jsonify({"done": True, "error": "vertex_config", "message": "Vertex AI is not configured: {0}".format(e)})
     except Exception:
