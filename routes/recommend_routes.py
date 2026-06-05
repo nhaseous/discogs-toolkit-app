@@ -20,6 +20,7 @@ def recommendpage():
     new_artists = request.args.get("new_artists", "") == "yes"
 
     cards = []
+    bio = ""
     error_output = ""
     loadtime, searched_at = "", ""
     has_results = bool(username)
@@ -43,7 +44,7 @@ def recommendpage():
                 if not items:
                     error_output = "No public collection found for this user."
                 else:
-                    cards = recommend_helper.get_recommendation_cards(items, scraper, auth=auth, budget=budget, new_artists=new_artists)
+                    cards, bio = recommend_helper.get_recommendation_cards(items, scraper, auth=auth, budget=budget, new_artists=new_artists)
                     if not cards:
                         error_output = "Couldn’t find any new vinyl recommendations — try again."
             except lookup_helper.UserNotFoundError:
@@ -67,6 +68,7 @@ def recommendpage():
         username=username,
         new_artists=new_artists,
         cards=cards,
+        bio=bio,
         error_output=error_output,
         loadtime=loadtime,
         searched_at=searched_at,

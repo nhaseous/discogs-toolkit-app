@@ -23,6 +23,11 @@ Enter any Discogs username. Browse their full collection, wantlist, and any publ
 
 **Insights Dashboard:** Aggregates collection and wantlist data into an interactive dashboard showing breakdowns by genre, artist, label, format, and decade. If you look up your own username while logged in, it also displays your total collection value (minimum, median, maximum) and an approximated "Value per Genre" breakdown.
 
+### Recommendations (`/recommend`)
+Enter any Discogs username. Builds a taste profile from their collection (top genres, styles, artists, labels, and decades) and asks Gemini, via Google's Vertex AI, for vinyl records they likely don't own but would love. Each suggestion is resolved to a real Discogs release (Vinyl, non-bootleg) and shown as a card with album art and a one-line reason grounded in the profile. A **"New artists"** toggle restricts results to artists not already in the collection — pure discovery rather than new albums by familiar names.
+
+> Recommendations are guarded by a per-IP daily limit and a global monthly Gemini-usage cap to keep costs bounded.
+
 ### Records (`/records`)
 Personal collection dashboard backed by Google Sheets. Shows collection stats, inventory, and sold records. Restricted to a single user.
 
@@ -31,40 +36,50 @@ Personal collection dashboard backed by Google Sheets. Shows collection stats, i
 ## Project Structure
 
 ```
-main.py               # Flask app — all routes, context processor, session config
+main.py               # Flask app — setup, context processor, session config, registers blueprints
+web_common.py         # Shared web helpers: Discogs app auth, oauth_auth(), price-checker gating
 assets.py             # SVG and HTML snippet constants loaded at startup
 mac_main.py           # macOS .app entry point
 setup.py              # py2app build config for macOS .app
 
-helper/
-  api.py              # Centralized API logic: retries, pagination, rate-limiting, value fetch
-  insights.py         # Aggregates collection stats and renders the Insights Dashboard
-  firestore_db.py     # Firestore integration for watchlist persistence
-  pricechecker.py     # Price Checker — inventory fetch + marketplace scraping + rendering
-  matcher.py          # Matcher — collection/wantlist fetch and comparison
-  lookup.py           # Lookup — collection, wantlist, lists fetch + list scraping
-  records.py          # Records — Google Sheets load + dashboard rendering
-  auth.py             # macOS Keychain credential persistence
-  common.py           # Shared API headers
+routes/               # Flask blueprints, one per tool (registered in routes/__init__.py)
+  core_routes.py      # Landing page, favicon, versioned static
+  auth_routes.py      # /login, /callback, /logout
+  pricechecker_routes.py # /pricechecker, /scrape_batch, /reprice, /refresh_card, /watchlist
+  matcher_routes.py   # /matcher
+  lookup_routes.py    # /lookup + insights/data/load-tab/folders/list sub-routes
+  recommend_routes.py # /recommend
+  records_routes.py   # /records
+
+services/
+  clients/            # External API integrations
+    discogs_client.py # Discogs REST: retries, pagination, search, RequestBudget rate-limiting
+    google_client.py  # Google Sheets client (gspread)
+    firestore_db.py   # Firestore: watchlist persistence + Recommendations usage caps
+  logic/              # Feature business logic
+    pricechecker.py   # Inventory fetch + marketplace scraping + rendering
+    matcher.py        # Collection/wantlist fetch and comparison
+    lookup.py         # Collection, wantlist, lists fetch + list scraping
+    recommend.py      # Taste profile -> Gemini candidates -> Discogs release resolution
+    insights.py       # Aggregates collection stats; renders the Insights Dashboard
+    charts.py         # SVG chart generators
+  utils/              # auth.py (Keychain), common.py (headers), lookup_cache.py, records.py
+  models/             # models.py — shared data structures
 
 static/
-  css/
-    vars.css          # Design tokens, reset, global layout
-    sidebar.css       # Left nav sidebar
-    components.css    # Search bar, spinner, badges
-    results.css       # Result cards, tabs, pagination, mosaics
-    tools.css         # Landing page tool cards
-  js/
-    main.js           # Global UI: sidebar, tabs, pagination, badge filters, tooltips
-    pricechecker.js   # Price Checker: filter pills, card refresh, reprice flow
-    records.js        # Records: tab switching
+  css/                # vars, sidebar, components, results, cards, mosaic, insights, lookup,
+                      #   reprice, records, tools, main — design tokens + per-feature styles
+  js/                 # main, pricechecker, reprice, lookup*, matcher, mosaic, insights,
+                      #   grid, records, app-client, utils — global + per-feature UI
 
 templates/
   base.html           # Master layout with sidebar and content slot
+  macros.html         # Shared Jinja macros (card grid, etc.)
   landing.html        # Landing page (extends base)
   pricechecker.html   # Price Checker page
   matcher.html        # Matcher page
   lookup.html         # Lookup page
+  recommend.html      # Recommendations page
   records.html        # Records page
 
 server/               # Standalone background monitor (not wired to web routes)
@@ -76,20 +91,25 @@ server/               # Standalone background monitor (not wired to web routes)
 
 ## API Calls
 
-All requests go through a `cloudscraper` instance to handle Cloudflare. The `User-Agent` header is set in `helper/common.py`. Authenticated requests pass an OAuth1 object.
+All requests go through a `cloudscraper` instance to handle Cloudflare. The `User-Agent` header is set in `services/utils/common.py`. Authenticated requests pass an OAuth1 object.
 
 ### REST API — `https://api.discogs.com`
 
 | Endpoint | Used in | Route |
 |---|---|---|
 | `GET /users/{username}/inventory?status=For+Sale` | `pricechecker.py` | `/pricechecker` |
-| `GET /users/{username}/collection/folders/0/releases` | `matcher.py`, `lookup.py` | `/matcher`, `/lookup` |
+| `GET /users/{username}/collection/folders/0/releases` | `matcher.py`, `lookup.py`, `recommend.py` | `/matcher`, `/lookup`, `/recommend` |
 | `GET /users/{username}/wants` | `matcher.py`, `lookup.py` | `/matcher`, `/lookup` |
 | `GET /users/{username}/lists` | `lookup.py` | `/lookup` |
-| `GET /listings/{listing_id}` | `main.py` | `/reprice` (POST) |
-| `POST /listings/{listing_id}` | `main.py` | `/reprice` (POST) |
+| `GET /database/search` | `recommend.py` | `/recommend` |
+| `GET /listings/{listing_id}` | `pricechecker_routes.py` | `/reprice` (POST) |
+| `POST /listings/{listing_id}` | `pricechecker_routes.py` | `/reprice` (POST) |
 
-Collection, wantlist, and list-index calls are paginated and fetched concurrently with `ThreadPoolExecutor` (5 workers). Price Checker scrapes 10 releases concurrently.
+Collection, wantlist, and list-index calls are paginated and fetched concurrently with `ThreadPoolExecutor` (5 workers). Price Checker scrapes 10 releases concurrently. Recommendations resolve Gemini suggestions to Discogs releases via `/database/search`, also concurrently.
+
+### AI — Vertex AI (Gemini)
+
+The Recommendations tool calls Gemini through Google's Vertex AI using the `google-genai` SDK (model `gemini-2.5-flash` by default), authenticated with the same service-account credentials as the Google Sheets client. It returns structured JSON suggestions which are then resolved against the Discogs search API. Usage is bounded by a per-IP daily limit and a global monthly round cap.
 
 ### HTML Scraping — `https://www.discogs.com`
 

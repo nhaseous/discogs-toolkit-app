@@ -52,6 +52,7 @@
             <div class="place-summary-title">Recommendations</div>
             <div class="card-listings">
                 Vinyl recommendations from <b>{{ username }}</b>&rsquo;s taste profile.<br>
+                {% if bio %}<br><span class="recommend-bio">{{ bio }}</span><br>{% endif %}
                 <br><b>{{ cards | length }} release{{ '' if cards | length == 1 else 's' }}</b><br>
                 {% if cards %}<br>{% endif %}
                 {% for c in cards %}

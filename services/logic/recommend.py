@@ -60,7 +60,10 @@ SYSTEM_PROMPT = (
     "profile (their most-collected genres, styles, artists, and labels), "
     "recommend specific records they most likely do NOT already own but would "
     "love. Favour depth and discovery over obvious mainstream picks. Keep each "
-    "reason to a single sentence grounded in the profile."
+    "reason to a single sentence grounded in the profile. Also write a warm, "
+    "insightful 3-4 sentence bio that summarises the collector's taste — the "
+    "genres, eras, and sensibilities their collection reveals — addressed to "
+    "the collector in the second person."
 )
 
 # Lazily-built singleton genai client. Constructed on first use so importing this
@@ -134,27 +137,36 @@ def build_taste_profile(items, max_each=15):
 
 
 def _recommendation_schema():
-    """JSON schema for the structured Gemini response: an array of
-    {artist, album, reason} objects. Using the model's native structured-output
-    mode removes the need to parse a delimited text format."""
+    """JSON schema for the structured Gemini response: a `bio` summarising the
+    collector's taste plus an array of {artist, album, reason} recommendations.
+    Using the model's native structured-output mode removes the need to parse a
+    delimited text format."""
     from google.genai import types
     return types.Schema(
-        type=types.Type.ARRAY,
-        items=types.Schema(
-            type=types.Type.OBJECT,
-            required=["artist", "album", "reason"],
-            properties={
-                "artist": types.Schema(type=types.Type.STRING),
-                "album": types.Schema(type=types.Type.STRING),
-                "reason": types.Schema(type=types.Type.STRING),
-            },
-        ),
+        type=types.Type.OBJECT,
+        required=["bio", "recommendations"],
+        properties={
+            "bio": types.Schema(type=types.Type.STRING),
+            "recommendations": types.Schema(
+                type=types.Type.ARRAY,
+                items=types.Schema(
+                    type=types.Type.OBJECT,
+                    required=["artist", "album", "reason"],
+                    properties={
+                        "artist": types.Schema(type=types.Type.STRING),
+                        "album": types.Schema(type=types.Type.STRING),
+                        "reason": types.Schema(type=types.Type.STRING),
+                    },
+                ),
+            ),
+        },
     )
 
 
 def fetch_recommendations(profile_text, n, exclude_titles=None, new_artists=False):
-    """Ask Gemini for `n` recommendations and return a list of
-    {artist, album, reason} dicts.
+    """Ask Gemini for `n` recommendations and return a `(bio, recommendations)`
+    tuple, where `bio` is a 3-4 sentence taste-profile summary and
+    `recommendations` is a list of {artist, album, reason} dicts.
 
     Uses Vertex structured output (response_schema) so the model returns
     validated JSON instead of a delimited text format we have to hand-parse.
@@ -185,11 +197,12 @@ def fetch_recommendations(profile_text, n, exclude_titles=None, new_artists=Fals
         )
     prompt = (
         "Here is the collector's taste profile:\n\n{profile}\n\n"
-        "Recommend exactly {n} records they likely don't own but would love. "
-        "Only suggest records the collector does NOT already own — favour fresh "
-        "discoveries over their existing collection.{avoid}{newartist} For each, "
-        "give the primary artist, the album title, and a one-sentence reason "
-        "grounded in their taste."
+        "Write a warm, insightful 3-4 sentence bio summarising this collector's "
+        "taste, then recommend exactly {n} records they likely don't own but "
+        "would love. Only suggest records the collector does NOT already own — "
+        "favour fresh discoveries over their existing collection.{avoid}{newartist} "
+        "For each, give the primary artist, the album title, and a one-sentence "
+        "reason grounded in their taste."
     ).format(profile=profile_text, n=n, avoid=avoid, newartist=new_artist_rule)
 
     config = types.GenerateContentConfig(
@@ -204,14 +217,18 @@ def fetch_recommendations(profile_text, n, exclude_titles=None, new_artists=Fals
     if data is None:
         text = getattr(resp, "text", None)
         if not text:
-            return []
+            return "", []
         try:
             data = json.loads(text)
         except (ValueError, TypeError):
-            return []
-    if not isinstance(data, list):
-        return []
-    return [d for d in data if isinstance(d, dict)]
+            return "", []
+    if not isinstance(data, dict):
+        return "", []
+    bio = (data.get("bio") or "").strip()
+    recs = data.get("recommendations")
+    if not isinstance(recs, list):
+        recs = []
+    return bio, [d for d in recs if isinstance(d, dict)]
 
 
 def _norm(s):
@@ -255,11 +272,13 @@ def owned_artists(items):
 
 
 def collect_candidates(profile_text, n, exclude_keys, exclude_titles, new_artists=False):
-    """Run one Gemini round and return parsed candidate dicts, dropping any whose
-    artist|album key is in `exclude_keys` (owned or already-suggested)."""
+    """Run one Gemini round and return a `(bio, candidates)` tuple, dropping any
+    candidate whose artist|album key is in `exclude_keys` (owned or
+    already-suggested)."""
+    bio, recs = fetch_recommendations(profile_text, n, exclude_titles=exclude_titles,
+                                      new_artists=new_artists)
     out, seen = [], set()
-    for rec in fetch_recommendations(profile_text, n, exclude_titles=exclude_titles,
-                                     new_artists=new_artists):
+    for rec in recs:
         artist = (rec.get("artist") or "").strip()
         album = (rec.get("album") or "").strip()
         reason = (rec.get("reason") or "").strip()
@@ -270,7 +289,7 @@ def collect_candidates(profile_text, n, exclude_keys, exclude_titles, new_artist
             continue
         seen.add(key)
         out.append({"artist": artist, "album": album, "reason": reason})
-    return out
+    return bio, out
 
 
 # ---- Step 3: resolve candidates to real Discogs vinyl releases -------------
@@ -386,11 +405,13 @@ def _card_from(candidate, result):
 def get_recommendation_cards(items, scraper, auth=None, budget=None, min_results=5,
                              max_rounds=3, new_artists=False):
     """Full step-3 pipeline: ask Gemini for candidates, drop owned ones, and
-    resolve each to a valid Vinyl (non-Unofficial) Discogs release. Returns ALL
-    releases that pass the qualifying checks (no upper cap) — a single clean
-    round of 10 returns 10. Runs another Gemini round only while fewer than
-    `min_results` have been found, up to `max_rounds` (1 initial + 2 top-ups),
-    aggregating across rounds (e.g. 4 from round one + 10 from round two = 14).
+    resolve each to a valid Vinyl (non-Unofficial) Discogs release. Returns a
+    `(cards, bio)` tuple — `cards` is ALL releases that pass the qualifying
+    checks (no upper cap) and `bio` is Gemini's 3-4 sentence taste summary.
+    A single clean round of 10 returns 10. Runs another Gemini round only while
+    fewer than `min_results` have been found, up to `max_rounds` (1 initial + 2
+    top-ups), aggregating across rounds (e.g. 4 from round one + 10 from round
+    two = 14).
 
     When `new_artists` is set, recommendations by an artist already in the
     collection are dropped (so only artists new to the collector surface), and
@@ -401,6 +422,7 @@ def get_recommendation_cards(items, scraper, auth=None, budget=None, min_results
     owned_art = owned_artists(items) if new_artists else set()
 
     cards = []
+    bio = ""                 # keep the first non-empty bio Gemini returns
     suggested_keys = set()   # artist|album keys seen across all rounds
     suggested_titles = []    # "Artist - Album" strings fed back to Gemini to avoid repeats
     used_ids = set()         # resolved release IDs already added
@@ -416,12 +438,14 @@ def get_recommendation_cards(items, scraper, auth=None, budget=None, min_results
             if not cards:
                 raise CapReachedError()
             break
-        candidates = collect_candidates(
+        round_bio, candidates = collect_candidates(
             profile, _CANDIDATES_PER_ROUND,
             exclude_keys=owned_text | suggested_keys,
             exclude_titles=suggested_titles,
             new_artists=new_artists,
         )
+        if not bio and round_bio:
+            bio = round_bio
         if not candidates:
             break
         # Record every raw candidate as "considered" so future rounds don't
@@ -461,4 +485,4 @@ def get_recommendation_cards(items, scraper, auth=None, budget=None, min_results
             used_ids.add(rid)
             cards.append(_card_from(c, r))  # keep every qualifying release — no cap
 
-    return cards
+    return cards, bio

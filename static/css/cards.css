@@ -142,6 +142,13 @@
     flex-wrap: wrap;
 }
 
+.recommend-bio {
+    display: block;
+    font-style: italic;
+    color: var(--ink-soft);
+    line-height: 1.7;
+}
+
 /* =========================================================
    Sorted view
    ========================================================= */

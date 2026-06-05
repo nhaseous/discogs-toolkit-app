@@ -4,10 +4,11 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## Project Overview
 
-Discogs Toolkit is a Flask web app for Discogs marketplace research and collection browsing. It has four tools:
+Discogs Toolkit is a Flask web app for Discogs marketplace research and collection browsing. It has five tools:
 - **Price Checker** (`/pricechecker`): scrapes a seller's inventory and shows where each listing ranks among all marketplace listings for the same release. Disabled on GAE (Cloudflare blocks scraping from server IPs); only available locally and in the macOS desktop app. Supports a per-user **Watchlist** persisted to Firestore.
 - **Matcher** (`/matcher`): finds overlap between one user's collection and another user's wantlist
 - **Lookup** (`/lookup`): browse any user's collection, wantlist, and curated lists as a card grid. Includes an **Insights Dashboard** for collection stats and estimated value.
+- **Recommendations** (`/recommend`): builds a taste profile from any user's collection and asks Gemini (Vertex AI) for vinyl records they likely don't own but would love, then resolves each suggestion to a real Discogs release. Includes a "New artists" toggle to restrict suggestions to artists not already in the collection.
 - **Records** (`/records`): personal collection dashboard backed by Google Sheets; restricted to user `curefortheitch`
 
 Deployed on Google App Engine. Live at: https://discogs-toolkit.uc.r.appspot.com
@@ -16,34 +17,46 @@ Also ships as a standalone macOS desktop app (built with `py2app` + `pywebview`)
 
 ## Tech Stack
 
-- **Python/Flask** — web framework, all routes in `main.py`
+- **Python/Flask** — web framework; routes are split into Flask blueprints under `routes/` (registered in `main.py` via `register_blueprints`)
 - **cloudscraper** — wraps `requests` to bypass Cloudflare on Discogs HTML pages
 - **BeautifulSoup4** — parses scraped HTML marketplace pages
-- **Discogs REST API** — used directly for collection, wantlist, inventory, and list data
+- **Discogs REST API** — used directly for collection, wantlist, inventory, list, and search data
 - **requests-oauthlib** — OAuth 1.0a flow for Discogs login (`/login` → `/callback`)
-- **ThreadPoolExecutor** — concurrent scraping; 10 workers in Price Checker, 5 in Matcher/Lookup
+- **ThreadPoolExecutor** — concurrent scraping; 10 workers in Price Checker, 5 in Matcher/Lookup/Recommendations
+- **google-genai (Vertex AI / Gemini)** — generates the recommendation candidates; authenticates with the same service-account JSON as the Sheets client
 - **gspread + google-auth** — Google Sheets access for the Records dashboard
-- **Google Cloud Firestore** — persists user watchlists
+- **Google Cloud Firestore** — persists user watchlists; also backs the per-IP daily and global monthly caps on Recommendations
 - **Google App Engine** — production deployment (`app.yaml`, `runtime: python312`)
 - **pywebview + pyobjc** — native macOS .app wrapper (macOS only)
 
 ## Key Files and Directories
 
 ```
-main.py               # Flask entry point — all routes, context processor, session config
+main.py               # Flask entry point — app setup, context processor, session config, registers blueprints
+web_common.py         # Shared web helpers: app auth (DiscogsAppAuth), oauth_auth(), price-checker gating
 assets.py             # Loads SVGs and HTML snippets into module-level constants at startup
 mac_main.py           # macOS .app entry point — starts Flask + opens pywebview window
 setup.py              # py2app config for building the macOS .app bundle
 
+routes/               # Flask blueprints, one module per tool (registered by routes/__init__.py)
+  core_routes.py      # Landing page, favicon, versioned static
+  auth_routes.py      # /login, /callback, /logout (OAuth 1.0a)
+  pricechecker_routes.py # /pricechecker, /scrape_batch, /reprice, /refresh_card, /watchlist
+  matcher_routes.py   # /matcher
+  lookup_routes.py    # /lookup + insights/data/load-tab/folders/list sub-routes
+  recommend_routes.py # /recommend — per-IP daily cap, collection fetch, recommendation cards
+  records_routes.py   # /records
+
 services/
   clients/            # External API integrations
-    discogs_client.py # Discogs REST API: session management, pagination, user profile/counts
+    discogs_client.py # Discogs REST API: session management, pagination, search, RequestBudget
     google_client.py  # Google Sheets API client (gspread)
-    firestore_db.py   # Firestore integration for watchlist persistence
+    firestore_db.py   # Firestore: watchlist persistence + Recommendations IP/monthly caps
   logic/              # Feature-specific business logic
     lookup.py         # Lookup: collection, wantlist, lists fetch + list page scraping
     matcher.py        # Matcher: collection/wantlist comparison
     pricechecker.py   # Price Checker: inventory fetch, marketplace scraping, HTML rendering
+    recommend.py      # Recommendations: taste profile → Gemini candidates → Discogs release resolution
     insights.py       # Aggregates collection stats
     charts.py         # SVG chart generators (pie, bar, line)
   utils/              # Shared helpers and utilities
@@ -72,10 +85,12 @@ static/
 
 templates/
   base.html           # Master layout: sidebar nav, stylesheet links, content slot, main.js
-  landing.html        # Empty (extends base)
+  macros.html         # Shared Jinja macros (e.g. lookup_grid card grid)
+  landing.html        # Tool card grid (extends base)
   pricechecker.html   # Extends base; sets window.TOOLKIT_CONFIG; loads pricechecker.js
   matcher.html        # Extends base
   lookup.html         # Extends base
+  recommend.html      # Extends base; "New artists" toggle, taste-profile summary + card grid
   records.html        # Extends base; loads records.js
 ```
 
@@ -88,9 +103,12 @@ templates/
 | `/callback` | GET | OAuth1 callback — saves tokens to session (+ Keychain on macOS) | — |
 | `/logout` | GET | Clears session and Keychain entry | — |
 | `/pricechecker` | GET | Price Checker UI (disabled on GAE) | Optional |
+| `/scrape_batch` | POST | JSON API — scrapes a batch of release cards for Price Checker | Optional |
 | `/matcher` | GET | Matcher UI | Optional |
 | `/lookup` | GET | Lookup UI | Optional |
 | `/lookup/list` | GET | JSON API — fetches list releases (bypass scrape on GAE) | — |
+| `/lookup/insights`, `/lookup/data`, `/lookup/load-tab`, `/lookup/folders` | GET/POST | JSON APIs — Insights dashboard, lazy tab/folder loading | Optional |
+| `/recommend` | GET | Recommendations UI — taste profile → Gemini → resolved cards (`new_artists` toggle) | Optional |
 | `/watchlist` | GET/POST | Firestore API — manage user's Price Checker watchlist | Required |
 | `/records` | GET | Personal records dashboard | `curefortheitch` only |
 | `/reprice` | POST | JSON API — reprices selected Discogs listings | Required |
@@ -137,12 +155,13 @@ The calls this app makes access public user data, but the app authenticates *eve
 | Endpoint | Used in | Notes |
 |---|---|---|
 | `GET /users/{username}/inventory` | `pricechecker.py` | Returns seller's for-sale listings. Paginated. |
-| `GET /users/{username}/collection/folders/0/releases` | `lookup.py`, `matcher.py` | Folder `0` is the "All" folder. |
-| `GET /users/{username}/collection/value` | `main.py` | Fetches collection value range. Requires auth for owner. |
+| `GET /users/{username}/collection/folders/0/releases` | `lookup.py`, `matcher.py` | Folder `0` is the "All" folder. Also feeds the Recommendations taste profile. |
+| `GET /users/{username}/collection/value` | `discogs_client.py` | Fetches collection value range. Requires auth for owner. |
 | `GET /users/{username}/wants` | `lookup.py`, `matcher.py` | Returns user's wantlist. |
 | `GET /users/{username}/lists` | `lookup.py` | Returns the user's curated lists index. |
-| `GET /listings/{listing_id}` | `main.py` `/reprice` | Fetches current listing data before updating. |
-| `POST /listings/{listing_id}` | `main.py` `/reprice` | Updates a listing's price (requires OAuth). |
+| `GET /database/search` | `recommend.py` | Resolves a Gemini suggestion to a real Vinyl (non-Unofficial) release; tries a strict then a free-text query. |
+| `GET /listings/{listing_id}` | `pricechecker_routes.py` `/reprice` | Fetches current listing data before updating. |
+| `POST /listings/{listing_id}` | `pricechecker_routes.py` `/reprice` | Updates a listing's price (requires OAuth). |
 
 ### HTML scraping endpoints in use
 
@@ -152,6 +171,16 @@ These use `cloudscraper` + BeautifulSoup rather than the REST API:
 |---|---|---|
 | `https://www.discogs.com/sell/release/{release_id}` | `pricechecker.py` | Marketplace listings page; parses the `mpitems` table for pricing. |
 | `https://www.discogs.com/lists/{list_id}` | `lookup.py` | List detail page; parses the embedded `<script id="dsdata">` Apollo cache JSON for items, thumbnails, and per-item comments. Paginated via `?page=N`. |
+
+### Recommendations (Vertex AI / Gemini)
+
+`services/logic/recommend.py` runs a three-stage pipeline:
+
+1. **Taste profile** — reuses the Insights aggregation (`insights.py`) to turn the collection into a compact text summary of top genres/styles/artists/labels/decades. No extra Discogs calls beyond the collection fetch.
+2. **Gemini candidates** — calls Gemini via Vertex AI (`google-genai`, model `gemini-2.5-flash` by default) using **structured output** (`response_schema`) so it returns validated JSON, not a delimited text format. Authenticates with the same service-account JSON as the Sheets client (`GOOGLE_SA_KEY_B64` / `GOOGLE_APPLICATION_CREDENTIALS`).
+3. **Resolution** — each suggestion is resolved to a real Discogs release via `/database/search`, requiring a Vinyl, non-Unofficial result that fuzzy-matches the artist/album (token-coverage match). Tries a strict structured query, then a looser free-text query.
+
+Cost/abuse guards (all in `firestore_db`): a **per-IP daily cap** (`RECOMMEND_IP_DAILY_LIMIT`, default 50) checked before any work, and a **global monthly Gemini-round cap** (`RECOMMEND_MONTHLY_ROUND_CAP`, default 1000) consumed per Gemini round. Signed-out requests share a `RequestBudget(60)` across the collection pagination and the per-candidate searches. Relevant env vars: `VERTEX_GEMINI_MODEL`, `VERTEX_LOCATION`, `GCP_PROJECT`.
 
 ## Additional Documentation
 
