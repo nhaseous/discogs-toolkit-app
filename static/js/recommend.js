@@ -25,7 +25,9 @@
     var linesEl = document.getElementById("recommend-lines");
     var grid = document.getElementById("recommend-grid");
     var moreEl = document.getElementById("recommend-more");
+    var noteEl = document.getElementById("recommend-note");
     var errEl = document.getElementById("recommend-error");
+    var refreshBtn = document.getElementById("recommend-refresh");
     var metaTime = document.getElementById("recommend-meta-time");
 
     var considered = [];     // [{artist, album}] round-tripped to avoid repeats
@@ -33,9 +35,15 @@
     var roundIdx = 0;
     var cardEls = [];        // all rendered card nodes, in insertion order
     var startTime = Date.now();
+    var busy = false;        // a batch round is in flight
+    var GENERIC_ERR = "Something went wrong generating recommendations.";
 
     function showSpinner(on) { if (spinner) spinner.style.display = on ? "block" : "none"; }
     function showMore(on) { if (moreEl) moreEl.hidden = !on; }
+    function showRefresh(on) { if (refreshBtn) refreshBtn.hidden = !on; }
+    function setBusy(on) { busy = on; if (refreshBtn) refreshBtn.disabled = on; }
+    function showNote(msg) { if (noteEl) { noteEl.textContent = msg; noteEl.hidden = false; } }
+    function hideNote() { if (noteEl) noteEl.hidden = true; }
 
     // On a failure: if cards are already shown, stop quietly and keep them;
     // otherwise replace the spinner with the error message.
@@ -99,7 +107,21 @@
         }
     }
 
-    function fetchBatch() {
+    // A manual refresh ended (empty result, cap, or error): keep the cards we
+    // have, drop the footer spinner, and surface a brief inline note. The refresh
+    // control comes back so the user can try again.
+    function manualStop(msg) {
+        showMore(false);
+        setMetaTime();
+        showNote(msg);
+        showRefresh(true);
+    }
+
+    // Run ONE batch round. `auto` drives the initial streaming load (keeps going
+    // until the server says done); a manual refresh (`auto` false) runs a single
+    // round, shows only the bottom spinner, and never re-shows the top one.
+    function postBatch(auto) {
+        setBusy(true);
         fetch("/recommend/batch", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -114,33 +136,57 @@
         }).then(function(r) {
             return r.json().catch(function() { throw new Error("bad_json"); });
         }).then(function(data) {
+            setBusy(false);
             if (data.error) {
-                finishOrError(data.message || "Something went wrong generating recommendations.");
+                if (auto) finishOrError(data.message || GENERIC_ERR);
+                else manualStop(data.message || GENERIC_ERR);
                 return;
             }
 
+            var before = cardEls.length;
             addBatch(data);
-
             considered = data.considered || considered;
             seenIds = data.seen_ids || seenIds;
             roundIdx += 1;
+            var added = cardEls.length - before;
 
+            // Only possible on the initial run (a manual refresh always has cards
+            // already, so total > 0): nothing found across the whole search.
             if (data.empty) {
-                // showError hides the summary card and surfaces the message.
                 showError("Couldn’t find any new vinyl recommendations — try again.");
                 return;
             }
-            if (data.done) {
-                showSpinner(false);
-                showMore(false);
-                setMetaTime();
+            // Initial stream with more rounds to go — show the footer, keep going.
+            if (auto && !data.done) {
+                showMore(true);
+                postBatch(true);
                 return;
             }
-            // More rounds to go — show the footer and keep streaming.
-            showMore(true);
-            fetchBatch();
+
+            // Initial stream finished, or a manual round completed.
+            showSpinner(false);
+            showMore(false);
+            setMetaTime();
+            // A manual round that resolved no new cards: brief inline note.
+            if (!auto && added === 0) {
+                showNote("No new picks right now — try again later.");
+            }
+            showRefresh(true);
         }).catch(function() {
-            finishOrError("Something went wrong generating recommendations.");
+            setBusy(false);
+            if (auto) finishOrError(GENERIC_ERR);
+            else manualStop(GENERIC_ERR);
+        });
+    }
+
+    // Manual "get more": one extra Gemini round, bottom spinner only.
+    if (refreshBtn) {
+        refreshBtn.addEventListener("click", function() {
+            if (busy) return;
+            hideNote();
+            showMore(true);       // bottom spinner; top spinner stays hidden
+            startTime = Date.now();
+            postBatch(false);
         });
     }
 
@@ -149,5 +195,5 @@
     // the first batch resolves.
     if (summary) summary.hidden = false;
     showSpinner(true);
-    fetchBatch();
+    postBatch(true);
 })();

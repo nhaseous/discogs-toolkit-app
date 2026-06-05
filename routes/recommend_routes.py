@@ -9,8 +9,9 @@ from web_common import oauth_auth
 
 recommend_bp = Blueprint('recommend', __name__)
 
-# Per-IP daily request cap (abuse guard). Override via env.
-_IP_DAILY_LIMIT = int(os.environ.get("RECOMMEND_IP_DAILY_LIMIT", "50"))
+# Per-IP daily cap, counted per Gemini ROUND (not per search). At up to 3 rounds
+# per search (_MAX_ROUNDS), 60 rounds/day is ~20 full searches/day. Override via env.
+_IP_DAILY_ROUND_LIMIT = int(os.environ.get("RECOMMEND_IP_DAILY_ROUND_LIMIT", "60"))
 
 # Streaming targets: keep asking for rounds until this many releases are found
 # or the round cap is hit. Each round is one Gemini call streamed to the client.
@@ -56,13 +57,15 @@ def recommend_batch():
     if not username:
         return jsonify({"error": "bad_request"}), 400
 
-    # Per-IP daily abuse guard — count once per recommendation request (first
-    # round only), not per round. On GAE the client IP is the first X-Forwarded-For.
-    if round_idx == 0:
-        client_ip = (request.headers.get('X-Forwarded-For', request.remote_addr or '') or '').split(',')[0].strip()
-        if not firestore_db.allow_ip_request(client_ip, _IP_DAILY_LIMIT):
-            return jsonify({"done": True, "error": "daily_limit",
-                            "message": "Daily recommendation limit reached for your network ({0}/day). Please try again tomorrow.".format(_IP_DAILY_LIMIT)})
+    # Per-IP daily cost guard — counted per Gemini round (every batch call), so a
+    # full 3-round search consumes 3 of the day's allowance. On GAE the client IP is
+    # the first X-Forwarded-For entry. A mid-search cap hit returns done with an
+    # error, but the client keeps the cards already found; only a round-0 hit (no
+    # cards yet) surfaces the notice.
+    client_ip = (request.headers.get('X-Forwarded-For', request.remote_addr or '') or '').split(',')[0].strip()
+    if not firestore_db.allow_ip_request(client_ip, _IP_DAILY_ROUND_LIMIT):
+        return jsonify({"done": True, "error": "daily_limit",
+                        "message": "Daily recommendation limit reached for your network. Please try again tomorrow."})
 
     scraper = api_helper.make_api_session()
     auth = oauth_auth()

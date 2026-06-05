@@ -169,6 +169,47 @@
     margin-right: 8px;
 }
 
+/* Inline note under the grid when a manual refresh yields nothing or is capped. */
+.recommend-note {
+    margin: 14px 0 4px;
+    color: var(--ink-soft);
+    font-size: 13px;
+    font-style: italic;
+}
+
+/* Recommendations summary header — title with a "get more" refresh control opposite. */
+.recommend-summary-head {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding-bottom: 6px;
+}
+
+.recommend-refresh {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 26px;
+    height: 26px;
+    padding: 0;
+    color: var(--rust);
+    background: var(--card);
+    border: 1px solid var(--rust-soft);
+    border-radius: 999px;
+    cursor: pointer;
+    transition: all 0.15s ease;
+}
+
+.recommend-refresh svg { display: block; width: 14px; height: 14px; }
+
+.recommend-refresh:hover:not(:disabled) {
+    background: var(--rust-soft);
+    border-color: var(--rust);
+}
+
+.recommend-refresh:disabled { opacity: 0.45; cursor: default; }
+
 /* =========================================================
    Sorted view
    ========================================================= */

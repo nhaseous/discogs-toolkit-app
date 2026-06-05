@@ -49,7 +49,12 @@
     <div id="recommend-error" class="result-card" hidden><div class="card-listings"></div></div>
 
     <div class="result-card" id="recommend-summary" hidden>
-        <div class="place-summary-title">Recommendations</div>
+        <div class="place-summary-title recommend-summary-head">
+            <span>Recommendations</span>
+            <button type="button" id="recommend-refresh" class="recommend-refresh" title="Get more recommendations" aria-label="Get more recommendations" hidden>
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M21 12a9 9 0 1 1-2.64-6.36"/><path d="M21 3v6h-6"/></svg>
+            </button>
+        </div>
         <div class="card-listings">
             Vinyl recommendations from <b>{{ username }}</b>&rsquo;s taste profile.<br>
             <br><span class="recommend-bio" id="recommend-bio"></span>
@@ -60,6 +65,7 @@
     <div class="match-grid match-grid--expanded" id="recommend-grid"></div>
 
     <div id="recommend-more" class="recommend-more" hidden><span class="recommend-more-icon"></span>Finding more&hellip;</div>
+    <div id="recommend-note" class="recommend-note" hidden></div>
 </div>
 {% endif %}
 {% endblock %}
