@@ -318,6 +318,43 @@
     }
 }
 
+/* In-grid "load more": sits in the next card cell but renders as plain clickable
+   text — no card art, border, or background. An invisible square spacer stands in
+   for .match-card-art so the label lines up with .match-card-info on real cards. */
+.match-card--loadmore {
+    padding: 0;
+    background: none;
+    border: none;
+    cursor: pointer;
+    text-align: center;
+}
+
+.match-card--loadmore::before {
+    content: "";
+    width: 100%;
+    aspect-ratio: 1 / 1;   /* matches .match-card-art height */
+    flex-shrink: 0;
+}
+
+.match-card--loadmore-label {
+    padding: 8px 0 4px;    /* matches .match-card-info */
+    font: inherit;
+    color: var(--rust);
+    font-size: 13px;
+    font-weight: 600;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+}
+
+.match-card--loadmore[hidden] { display: none; }
+
+.match-card--loadmore:hover { transform: none; }  /* cancel the .match-card hover lift */
+
+.match-card--loadmore:hover .match-card--loadmore-label {
+    text-decoration: underline;
+    text-underline-offset: 3px;
+}
+
 .match-card-art {
     width: 100%;
     aspect-ratio: 1 / 1;

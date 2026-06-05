@@ -36,14 +36,28 @@
     var cardEls = [];        // all rendered card nodes, in insertion order
     var startTime = Date.now();
     var busy = false;        // a batch round is in flight
+    var scrollBottomNext = false;  // keep the view pinned to the bottom after this round
     var GENERIC_ERR = "Something went wrong generating recommendations.";
+
+    // In-grid "load more": plain clickable text that occupies the next card cell
+    // (grid.js lays it out last). Triggers the same extra round as the header
+    // refresh icon. Created up front, revealed once the initial stream settles.
+    var loadMoreTile = document.createElement("button");
+    loadMoreTile.type = "button";
+    loadMoreTile.className = "match-card match-card--loadmore";
+    loadMoreTile.innerHTML = '<span class="match-card--loadmore-label">Load more</span>';
+    loadMoreTile.hidden = true;
 
     function showSpinner(on) { if (spinner) spinner.style.display = on ? "block" : "none"; }
     function showMore(on) { if (moreEl) moreEl.hidden = !on; }
-    function showRefresh(on) { if (refreshBtn) refreshBtn.hidden = !on; }
-    function setBusy(on) { busy = on; if (refreshBtn) refreshBtn.disabled = on; }
+    // Both "get more" affordances (header icon + in-grid text) show/hide together.
+    function showControls(on) {
+        if (refreshBtn) refreshBtn.hidden = !on;
+        loadMoreTile.hidden = !on;
+    }
     function showNote(msg) { if (noteEl) { noteEl.textContent = msg; noteEl.hidden = false; } }
     function hideNote() { if (noteEl) noteEl.hidden = true; }
+    function scrollToBottom() { window.scrollTo(0, document.documentElement.scrollHeight); }
 
     // On a failure: if cards are already shown, stop quietly and keep them;
     // otherwise replace the spinner with the error message.
@@ -79,10 +93,16 @@
     function relayoutGrid() {
         // Re-lay out from the flat insertion-ordered list: grid.js reorganizes
         // .match-card nodes into responsive columns, so reset to flat order first
-        // (keeping our node references) before asking it to rebuild.
+        // (keeping our node references) before asking it to rebuild. The load-more
+        // tile rides along as the final .match-card (grid.js pins it last).
+        // Clearing innerHTML momentarily collapses the page and would yank the
+        // scroll up, so snapshot and restore the scroll offset around the rebuild.
+        var y = window.scrollY;
         grid.innerHTML = "";
         cardEls.forEach(function(el) { grid.appendChild(el); });
+        grid.appendChild(loadMoreTile);
         if (window._layoutMatchGrids) window._layoutMatchGrids();
+        window.scrollTo(0, y);
     }
 
     function addBatch(data) {
@@ -108,20 +128,21 @@
     }
 
     // A manual refresh ended (empty result, cap, or error): keep the cards we
-    // have, drop the footer spinner, and surface a brief inline note. The refresh
-    // control comes back so the user can try again.
+    // have, drop the footer spinner, and surface a brief inline note. The "get
+    // more" controls come back so the user can try again.
     function manualStop(msg) {
         showMore(false);
         setMetaTime();
         showNote(msg);
-        showRefresh(true);
+        showControls(true);
+        if (scrollBottomNext) scrollToBottom();
     }
 
     // Run ONE batch round. `auto` drives the initial streaming load (keeps going
     // until the server says done); a manual refresh (`auto` false) runs a single
     // round, shows only the bottom spinner, and never re-shows the top one.
     function postBatch(auto) {
-        setBusy(true);
+        busy = true;
         fetch("/recommend/batch", {
             method: "POST",
             headers: { "Content-Type": "application/json" },
@@ -137,7 +158,7 @@
         }).then(function(r) {
             return r.json().catch(function() { throw new Error("bad_json"); });
         }).then(function(data) {
-            setBusy(false);
+            busy = false;
             if (data.error) {
                 if (auto) finishOrError(data.message || GENERIC_ERR);
                 else manualStop(data.message || GENERIC_ERR);
@@ -172,24 +193,29 @@
             if (!auto && added === 0) {
                 showNote("No new picks right now — try again later.");
             }
-            showRefresh(true);
+            showControls(true);
+            if (!auto && scrollBottomNext) scrollToBottom();
         }).catch(function() {
-            setBusy(false);
+            busy = false;
             if (auto) finishOrError(GENERIC_ERR);
             else manualStop(GENERIC_ERR);
         });
     }
 
-    // Manual "get more": one extra Gemini round, bottom spinner only.
-    if (refreshBtn) {
-        refreshBtn.addEventListener("click", function() {
-            if (busy) return;
-            hideNote();
-            showMore(true);       // bottom spinner; top spinner stays hidden
-            startTime = Date.now();
-            postBatch(false);
-        });
+    // Manual "get more": one extra Gemini round, bottom spinner only. Both the
+    // header icon and the in-grid "load more" text trigger it; the in-grid text
+    // (`fromBottom`) pins the view to the bottom so the new cards stay in sight.
+    function triggerRefresh(fromBottom) {
+        if (busy) return;
+        hideNote();
+        scrollBottomNext = !!fromBottom;
+        showControls(false);  // hide both affordances while the round runs
+        showMore(true);       // bottom spinner; top spinner stays hidden
+        startTime = Date.now();
+        postBatch(false);
     }
+    if (refreshBtn) refreshBtn.addEventListener("click", function() { triggerRefresh(false); });
+    loadMoreTile.addEventListener("click", function() { triggerRefresh(true); });
 
     // Show the (blank) Recommendations card and spinner up front so the page
     // indicates the search is underway; the "N releases" line stays hidden until

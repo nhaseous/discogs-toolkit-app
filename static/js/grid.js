@@ -94,6 +94,13 @@
         if (!grid.offsetParent) return;
         var allCards = Array.from(grid.querySelectorAll(".match-card"));
         if (!allCards.length) return;
+        // A trailing in-grid "load more" control (recommendations) must lay out as
+        // the final cell, even after a previous columnization left it mid-order.
+        // Stable sort keeps every real card's relative order and floats it last.
+        allCards.sort(function(a, b) {
+            return (a.classList.contains("match-card--loadmore") ? 1 : 0)
+                 - (b.classList.contains("match-card--loadmore") ? 1 : 0);
+        });
         var gap = 14, minWidth = 158;
         var numCols = Math.max(1, Math.floor((grid.offsetWidth + gap) / (minWidth + gap)));
         var existing = Array.from(grid.children);
