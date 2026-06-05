@@ -67,8 +67,8 @@
 {% endmacro %}
 
 
-{% macro lookup_grid(items, show_stats=False, prepend_card="") %}
-<div class="match-grid">
+{% macro lookup_grid(items, show_stats=False, prepend_card="", grid_class="") %}
+<div class="match-grid{% if grid_class %} {{ grid_class }}{% endif %}">
     {{ prepend_card | safe }}
     {% for m in items %}
         <a href="{{ m.url or '#' }}" class="match-card"{% if m is mapping and 'is_exact' in m %} data-is-exact="{{ '1' if m.is_exact else '0' }}"{% endif %} target="_blank" rel="noopener noreferrer">

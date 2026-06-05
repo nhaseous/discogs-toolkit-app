@@ -1,0 +1,57 @@
+{% extends "base.html" %}
+{% from "macros.html" import lookup_grid with context %}
+
+{% block extra_js %}
+<script src="/static/v{{ static_v }}/js/grid.js"></script>
+{% endblock %}
+
+{% block content %}
+<div class="lookup-search-header">
+<form id="recommend-form" class="search-bar" action="/recommend" method="get" role="search">
+    <span class="search-bar-icon" aria-hidden="true">
+        {% if search_icon_svg %}
+            {{ search_icon_svg | safe }}
+        {% else %}
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m21 21-4.3-4.3"/></svg>
+        {% endif %}
+    </span>
+    <div class="search-bar-segment">
+        <label class="search-bar-label" for="username">Discogs user</label>
+        <input type="text" id="username" name="username" placeholder="username" autocomplete="off" value="{{ username or '' }}">
+    </div>
+    <button type="submit" class="search-bar-submit">Recommend</button>
+</form>
+<div id="spinner"><span id="spinner-icon"></span>Finding recommendations&hellip;</div>
+
+<div class="page-header">
+    <div class="page-eyebrow">Powered by Gemini</div>
+    <h2>Record <em>Recommendations</em></h2>
+</div>
+</div>
+
+{% if has_results %}
+<div id="recommend-results" class="recommend-output">
+    <div class="meta">
+        <span><b>Collector: <a href="https://www.discogs.com/user/{{ username }}" target="_blank" rel="noopener noreferrer" class="meta-user-link">{{ username }}</a></b></span>
+        {% if loadtime %}<span>Found in {{ loadtime }} seconds &nbsp;&#124;&nbsp; {{ searched_at }}</span>{% endif %}
+    </div>
+
+    {% if error_output %}
+        <div class="result-card"><div class="card-listings">{{ error_output }}</div></div>
+    {% elif cards %}
+        <div class="result-card">
+            <div class="place-summary-title">Recommendations</div>
+            <div class="card-listings">
+                Vinyl picks for <b>{{ username }}</b> &middot; from this collection&rsquo;s taste profile, already-owned records excluded.<br>
+                <br><b>{{ cards | length }} release{{ '' if cards | length == 1 else 's' }}</b><br>
+                {% if cards %}<br>{% endif %}
+                {% for c in cards %}
+                    <span class="matcher-listing-line"><b>{{ c.artist }}</b> - {{ c.title }}{% if c.format %} &nbsp;&middot; <i>({{ c.format }})</i>{% endif %}<br></span>
+                {% endfor %}
+            </div>
+        </div>
+        {{ lookup_grid(cards, grid_class="match-grid--expanded") }}
+    {% endif %}
+</div>
+{% endif %}
+{% endblock %}

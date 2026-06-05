@@ -83,6 +83,7 @@ document.querySelectorAll(".sidebar a").forEach(function(link) {
     attachFormAnim("pc-form");
     attachFormAnim("matcher-form");
     attachFormAnim("lookup-form");
+    attachFormAnim("recommend-form");
 })();
 
 (function() {

@@ -299,3 +299,6 @@
     }
     .rec-pie-name { white-space: normal; }
 }
+
+/* Recommendations — reuses the Matcher results card + Lookup match-grid; the
+   Gemini reason rides on each card's .match-card-comment (expand-all on). */
