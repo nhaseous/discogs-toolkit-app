@@ -125,6 +125,11 @@ def lookuppage():
                 (username.lower(), str(list_id)),
                 {'collection': collection, 'wantlist': wantlist, 'list_releases': list_releases},
             )
+            # Share the collection with the Recommendations tool so a follow-up
+            # /recommend for this user reuses it instead of re-paging. Only when
+            # complete (a partial/truncated fetch would skew the taste profile).
+            if collection and not collection_partial:
+                lookup_cache.put(("collection", username.lower()), {'items': collection})
 
     # Inline only the first page of items per tab — the rest is hydrated lazily.
     # The full lists are still passed in for the mosaic (collection) and the tab

@@ -24,6 +24,7 @@ from services.clients import firestore_db
 from services.clients.discogs_client import request_with_retry
 from services.logic import insights as insights_helper
 from services.utils.common import API_HEADERS as _API_HEADERS
+from services.utils.ttl_cache import TTLCache
 
 
 class VertexConfigError(RuntimeError):
@@ -42,6 +43,18 @@ _LOCATION = os.environ.get("VERTEX_LOCATION", "us-central1")
 _SCOPES = ["https://www.googleapis.com/auth/cloud-platform"]
 
 _SEARCH_URL = "https://api.discogs.com/database/search"
+
+# Cache of resolved Discogs search results, keyed by normalized artist|album.
+# Gemini suggests the same popular records across different collectors, and
+# resolving a candidate costs 1-2 /database/search calls against the scarce
+# 60/min Discogs budget — so caching the picked release both speeds rounds and
+# frees budget (a cache hit makes no request, hence consumes none), improving
+# yield. Only positive matches are cached: a None can mean "request budget
+# exhausted", not "no release exists", so caching it would poison later lookups.
+# Catalog data is stable, so the TTL is long. In-memory and per-process.
+_SEARCH_CACHE_TTL_SECONDS = 24 * 60 * 60
+_SEARCH_CACHE_MAX_ENTRIES = 4096
+_search_cache = TTLCache(_SEARCH_CACHE_TTL_SECONDS, _SEARCH_CACHE_MAX_ENTRIES)
 # Default per-round Gemini ask for the initial streaming rounds. Manual "get more"
 # refreshes over-ask instead (see _REFRESH_CANDIDATES in recommend_routes.py),
 # because ~half of each round's candidates are lost to the owned-collection filter
@@ -405,7 +418,15 @@ def search_vinyl_release(artist, album, scraper, auth=None, budget=None):
 
     Tries progressively looser searches so a candidate isn't lost to one rigid
     query: (1) strict structured search on the Vinyl format, (2) a free-text
-    query post-filtered for vinyl. Stops at the first qualifying match."""
+    query post-filtered for vinyl. Stops at the first qualifying match.
+
+    A previously-resolved match is served from `_search_cache` without issuing
+    any Discogs request (so it also consumes no request budget)."""
+    cache_key = _key(artist, album)
+    cached = _search_cache.get(cache_key)
+    if cached is not None:
+        return cached
+
     strategies = [
         {"artist": artist, "release_title": album, "format": "Vinyl",
          "type": "release", "per_page": 15},
@@ -413,10 +434,13 @@ def search_vinyl_release(artist, album, scraper, auth=None, budget=None):
          "type": "release", "per_page": 25},
     ]
     for params in strategies:
+        # Budget exhaustion is not a "no match" — return without caching so a
+        # later round (with budget) can still resolve this candidate.
         if budget is not None and not budget.take():
             return None
         match = _pick_match(artist, album, _run_search(params, scraper, auth))
         if match:
+            _search_cache.put(cache_key, match)
             return match
     return None
 
@@ -439,7 +463,7 @@ def _card_from(candidate, result):
 
 def run_recommendation_round(items, scraper, auth=None, budget=None,
                              considered=None, seen_ids=None, new_artists=False,
-                             want_bio=True, n_candidates=None):
+                             want_bio=True, n_candidates=None, profile_text=None):
     """Run ONE Gemini round and resolve its candidates to Vinyl cards.
 
     This is the per-round core the streaming `/recommend/batch` endpoint calls
@@ -455,6 +479,10 @@ def run_recommendation_round(items, scraper, auth=None, budget=None,
     `n_candidates` overrides how many candidates this round asks Gemini for
     (defaults to `_CANDIDATES_PER_ROUND`); manual "get more" refreshes pass a
     higher count to offset per-round attrition.
+
+    `profile_text` lets the caller pass a pre-built taste profile so it isn't
+    re-aggregated from the whole collection on every round of a search (the
+    profile is identical across a search's rounds); when None it is built here.
 
     Returns a dict:
       cards      — newly resolved cards this round (lookup_grid-shaped)
@@ -483,8 +511,10 @@ def run_recommendation_round(items, scraper, auth=None, budget=None,
     suggested_keys = {_key(c["artist"], c["album"]) for c in considered}
     suggested_titles = ["{0} - {1}".format(c["artist"], c["album"]) for c in considered]
 
+    if profile_text is None:
+        profile_text = build_taste_profile(items)
     bio, candidates = collect_candidates(
-        build_taste_profile(items), n_candidates or _CANDIDATES_PER_ROUND,
+        profile_text, n_candidates or _CANDIDATES_PER_ROUND,
         exclude_keys=owned_text | suggested_keys,
         exclude_titles=suggested_titles,
         new_artists=new_artists,
@@ -543,12 +573,16 @@ def get_recommendation_cards(items, scraper, auth=None, budget=None, min_results
     stops and returns what was found. The streaming `/recommend/batch` endpoint
     drives the same rounds itself, so this remains the non-streaming entry point."""
     cards, bio, considered, seen_ids = [], "", [], []
+    # The taste profile is identical across rounds; build it once rather than
+    # re-aggregating the whole collection each round.
+    profile_text = build_taste_profile(items)
     for _round in range(max_rounds):
         if len(cards) >= min_results:
             break
         res = run_recommendation_round(items, scraper, auth=auth, budget=budget,
                                        considered=considered, seen_ids=seen_ids,
-                                       new_artists=new_artists, want_bio=(_round == 0))
+                                       new_artists=new_artists, want_bio=(_round == 0),
+                                       profile_text=profile_text)
         if res["capped"]:
             if not cards:
                 raise CapReachedError()

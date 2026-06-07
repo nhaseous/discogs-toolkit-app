@@ -10,8 +10,8 @@ from web_common import oauth_auth
 recommend_bp = Blueprint('recommend', __name__)
 
 # Per-IP daily cap, counted per Gemini ROUND (not per search). At up to 3 rounds
-# per search (_MAX_ROUNDS), 60 rounds/day is ~20 full searches/day. Override via env.
-_IP_DAILY_ROUND_LIMIT = int(os.environ.get("RECOMMEND_IP_DAILY_ROUND_LIMIT", "60"))
+# per search (_MAX_ROUNDS), 50 rounds/day is ~16 full searches/day. Override via env.
+_IP_DAILY_ROUND_LIMIT = int(os.environ.get("RECOMMEND_IP_DAILY_ROUND_LIMIT", "50"))
 
 # Streaming targets: keep asking for rounds until this many releases are found
 # or the round cap is hit. Each round is one Gemini call streamed to the client.
@@ -80,12 +80,18 @@ def recommend_batch():
     # Signed out uses app auth (60/min); budget each round's burst. Signed in: none.
     budget = api_helper.RequestBudget(60) if not session.get('discogs_access_token') else None
 
-    # Collection: fetch once per user, reuse across this recommendation's rounds.
-    cache_key = ("recommend", username.lower())
+    # Collection: shared across this recommendation's rounds AND with the Lookup
+    # tool (key ("collection", username)), so the common Lookup -> Recommend flow
+    # doesn't re-page the same collection. The taste profile is cached alongside
+    # the items so it isn't re-aggregated from the whole collection each round.
+    cache_key = ("collection", username.lower())
+    items, profile_text = None, None
     cached = lookup_cache.get(cache_key)
-    if cached:
+    if cached and cached.get("items"):
         items = cached["items"]
-    else:
+        profile_text = cached.get("profile")
+
+    if items is None:
         try:
             items, _partial, _total = lookup_helper.get_collection(username, scraper, auth=auth, budget=budget)
         except lookup_helper.UserNotFoundError:
@@ -96,14 +102,20 @@ def recommend_batch():
             return jsonify({"done": True, "error": "rate_limited", "message": "Discogs rate limit hit — try again in a minute."})
         if not items:
             return jsonify({"done": True, "error": "no_collection", "message": "No public collection found for this user."})
-        lookup_cache.put(cache_key, {"items": items})
+
+    # Build the profile once and cache it with the items (a Lookup-written entry
+    # has no profile yet, so compute it on first recommendation use).
+    if not profile_text:
+        profile_text = recommend_helper.build_taste_profile(items)
+    lookup_cache.put(cache_key, {"items": items, "profile": profile_text})
 
     try:
         res = recommend_helper.run_recommendation_round(
             items, scraper, auth=auth, budget=budget,
             considered=considered, seen_ids=seen_ids, new_artists=new_artists,
             want_bio=(round_idx == 0),
-            n_candidates=_REFRESH_CANDIDATES if manual else None)
+            n_candidates=_REFRESH_CANDIDATES if manual else None,
+            profile_text=profile_text)
     except recommend_helper.VertexConfigError as e:
         return jsonify({"done": True, "error": "vertex_config", "message": "Vertex AI is not configured: {0}".format(e)})
     except Exception:

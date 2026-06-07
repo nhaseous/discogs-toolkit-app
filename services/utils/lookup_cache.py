@@ -6,36 +6,24 @@ pagination window; the rest of the items are stashed here so the client can
 hydrate them asynchronously from /lookup/data without re-hitting Discogs.
 
 Keyed by (username_lower, list_id_or_empty); lookups are public so no auth
-data is part of the key. In-memory only — a stale miss on a multi-instance
-deployment falls back to a fresh Discogs fetch in the /lookup/data handler.
+data is part of the key. The Recommendations tool also shares a collection
+entry through this cache (key ("collection", username_lower)) so the common
+Lookup -> Recommend flow doesn't re-page the same collection.
+
+In-memory only — a stale miss on a multi-instance deployment falls back to a
+fresh Discogs fetch in the /lookup/data handler. Backed by the shared TTLCache.
 """
-import threading
-import time
+from services.utils.ttl_cache import TTLCache
 
 _TTL_SECONDS = 300
 _MAX_ENTRIES = 32
 
-_CACHE = {}
-_LOCK = threading.Lock()
+_cache = TTLCache(_TTL_SECONDS, _MAX_ENTRIES)
 
 
 def put(key, payload):
-    expiry = time.time() + _TTL_SECONDS
-    with _LOCK:
-        _CACHE[key] = (expiry, payload)
-        if len(_CACHE) > _MAX_ENTRIES:
-            # Drop oldest expiries first to keep the dict bounded.
-            for k, _ in sorted(_CACHE.items(), key=lambda kv: kv[1][0])[:len(_CACHE) - _MAX_ENTRIES]:
-                _CACHE.pop(k, None)
+    _cache.put(key, payload)
 
 
 def get(key):
-    with _LOCK:
-        entry = _CACHE.get(key)
-        if not entry:
-            return None
-        expiry, payload = entry
-        if time.time() > expiry:
-            _CACHE.pop(key, None)
-            return None
-        return payload
+    return _cache.get(key)

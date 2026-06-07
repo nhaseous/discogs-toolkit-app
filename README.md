@@ -111,6 +111,30 @@ Collection, wantlist, and list-index calls are paginated and fetched concurrentl
 
 The Recommendations tool calls Gemini through Google's Vertex AI using the `google-genai` SDK (model `gemini-2.5-flash` by default), authenticated with the same service-account credentials as the Google Sheets client. It returns structured JSON suggestions which are then resolved against the Discogs search API. Usage is bounded by a per-IP daily limit and a global monthly round cap.
 
+#### Tuning & cost
+
+A "round" is one Gemini call. A "search" streams up to `_MAX_ROUNDS` rounds, stopping early once `_TARGET_RESULTS` releases resolve (or when Gemini runs out of new candidates). In practice most searches use all 3 rounds, since ~half of each round's candidates are dropped by the owned-collection filter or fail to resolve to a qualifying Discogs vinyl release.
+
+| Knob | Constant | Env override | Default | Where |
+|---|---|---|---|---|
+| Model | `_MODEL` | `VERTEX_GEMINI_MODEL` | `gemini-2.5-flash` | `recommend.py` |
+| Vertex region | `_LOCATION` | `VERTEX_LOCATION` | `us-central1` | `recommend.py` |
+| Candidates asked per streaming round | `_CANDIDATES_PER_ROUND` | — | `5` | `recommend.py` |
+| Candidates asked per manual "get more" round | `_REFRESH_CANDIDATES` | — | `10` | `recommend_routes.py` |
+| Thinking budget (tokens; 0 disables) | `_THINKING_BUDGET` | `VERTEX_THINKING_BUDGET` | `128` | `recommend.py` |
+| Target resolved releases per search | `_TARGET_RESULTS` | — | `10` | `recommend_routes.py` |
+| Max rounds per search | `_MAX_ROUNDS` | — | `3` | `recommend_routes.py` |
+| Per-IP daily round cap | `_IP_DAILY_ROUND_LIMIT` | `RECOMMEND_IP_DAILY_ROUND_LIMIT` | `50` | `recommend_routes.py` |
+| Global monthly round cap | `_MONTHLY_ROUND_CAP` | `RECOMMEND_MONTHLY_ROUND_CAP` | `1000` | `recommend.py` |
+
+**Cost (measured):** $0.73 for 121 rounds ≈ **$0.0060/round** (~0.60¢). Each round bills roughly **~2,000 input tokens + ~2,000 output-billed tokens** (the 128-token thinking budget is included in output), against `gemini-2.5-flash` list pricing of ~$0.30/1M input and ~$2.50/1M output — so output dominates (~90%) and scales with candidate count, not round count. Derived caps at this rate:
+
+- **Per search** (~3 rounds) ≈ **$0.018**
+- **Per-IP daily cap** (50 rounds) ≈ **$0.30/day/IP**
+- **Global monthly cap** (1,000 rounds) ≈ **$6.00/month** — the effective spend ceiling for the feature
+
+Round usage is tracked in Firestore: global monthly count at `usage/gemini_rounds_<YYYY-MM>`, per-IP daily count at `ratelimit/<ip>_<YYYY-MM-DD>`. To translate a target monthly budget into a cap, set `RECOMMEND_MONTHLY_ROUND_CAP ≈ target_dollars ÷ 0.0060` (e.g. a $3/month budget ≈ ~500 rounds). Re-derive the $/round figure if the model, thinking budget, or `_TARGET_RESULTS` changes.
+
 ### HTML Scraping — `https://www.discogs.com`
 
 | URL | Used in | Route |
