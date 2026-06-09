@@ -85,11 +85,12 @@ def recommend_batch():
     # doesn't re-page the same collection. The taste profile is cached alongside
     # the items so it isn't re-aggregated from the whole collection each round.
     cache_key = ("collection", username.lower())
-    items, profile_text = None, None
+    items, profiles, ranked_artists = None, None, None
     cached = lookup_cache.get(cache_key)
     if cached and cached.get("items"):
         items = cached["items"]
-        profile_text = cached.get("profile")
+        profiles = cached.get("profiles")          # (profile_normal, profile_newartists)
+        ranked_artists = cached.get("ranked_artists")
 
     if items is None:
         try:
@@ -103,11 +104,16 @@ def recommend_batch():
         if not items:
             return jsonify({"done": True, "error": "no_collection", "message": "No public collection found for this user."})
 
-    # Build the profile once and cache it with the items (a Lookup-written entry
-    # has no profile yet, so compute it on first recommendation use).
-    if not profile_text:
-        profile_text = recommend_helper.build_taste_profile(items)
-    lookup_cache.put(cache_key, {"items": items, "profile": profile_text})
+    # Build both taste-profile variants + the ranked owned-artist list once and
+    # cache them with the items (a Lookup-written entry has neither yet; an older
+    # entry may lack one, so rebuild if either is missing). Both profiles are
+    # cached so toggling 'new artists' doesn't force a re-aggregation.
+    if not profiles or ranked_artists is None:
+        p_normal, p_new, ranked_artists = recommend_helper.build_recommendation_profile(items)
+        profiles = (p_normal, p_new)
+    lookup_cache.put(cache_key, {"items": items, "profiles": profiles,
+                                 "ranked_artists": ranked_artists})
+    profile_text = profiles[1] if new_artists else profiles[0]
 
     try:
         res = recommend_helper.run_recommendation_round(
@@ -115,7 +121,7 @@ def recommend_batch():
             considered=considered, seen_ids=seen_ids, new_artists=new_artists,
             want_bio=(round_idx == 0),
             n_candidates=_REFRESH_CANDIDATES if manual else None,
-            profile_text=profile_text)
+            profile_text=profile_text, ranked_artists=ranked_artists)
     except recommend_helper.VertexConfigError as e:
         return jsonify({"done": True, "error": "vertex_config", "message": "Vertex AI is not configured: {0}".format(e)})
     except Exception:

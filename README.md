@@ -122,6 +122,12 @@ A "round" is one Gemini call. A "search" streams up to `_MAX_ROUNDS` rounds, sto
 | Candidates asked per streaming round | `_CANDIDATES_PER_ROUND` | — | `5` | `recommend.py` |
 | Candidates asked per manual "get more" round | `_REFRESH_CANDIDATES` | — | `10` | `recommend_routes.py` |
 | Thinking budget (tokens; 0 disables) | `_THINKING_BUDGET` | `VERTEX_THINKING_BUDGET` | `128` | `recommend.py` |
+| "Top artists" listed in the default profile (taste only) | `_NORMAL_ARTIST_CAP` | `RECOMMEND_NORMAL_ARTIST_CAP` | `15` | `recommend.py` |
+| "Top artists" listed in the new-artists profile (also the avoidance set) | `_PROFILE_ARTIST_CAP` | `RECOMMEND_PROFILE_ARTIST_CAP` | `100` | `recommend.py` |
+| Extra owned artists sampled into the avoidance instruction/round (new-artists mode only) | `_OWNED_EXCLUDE_SAMPLE` | `RECOMMEND_OWNED_EXCLUDE_SAMPLE` | `40` | `recommend.py` |
+| Owned-album block: most-collected artists listed (normal mode only) | `_OWNED_ALBUM_ARTISTS` | `RECOMMEND_OWNED_ALBUM_ARTISTS` | `20` | `recommend.py` |
+| Owned-album block: max owned titles per artist | `_OWNED_ALBUM_PER_ARTIST` | `RECOMMEND_OWNED_ALBUM_PER_ARTIST` | `8` | `recommend.py` |
+| Owned-album block: max owned titles total | `_OWNED_ALBUM_MAX_TITLES` | `RECOMMEND_OWNED_ALBUM_MAX_TITLES` | `120` | `recommend.py` |
 | Target resolved releases per search | `_TARGET_RESULTS` | — | `10` | `recommend_routes.py` |
 | Max rounds per search | `_MAX_ROUNDS` | — | `3` | `recommend_routes.py` |
 | Per-IP daily round cap | `_IP_DAILY_ROUND_LIMIT` | `RECOMMEND_IP_DAILY_ROUND_LIMIT` | `50` | `recommend_routes.py` |

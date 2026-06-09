@@ -17,6 +17,7 @@ can be verified before the Discogs-resolution layer is built.
 import base64
 import json
 import os
+import random
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 
@@ -61,6 +62,36 @@ _search_cache = TTLCache(_SEARCH_CACHE_TTL_SECONDS, _SEARCH_CACHE_MAX_ENTRIES)
 # and to candidates with no qualifying Discogs vinyl release — so a lone refresh
 # round on a large collection would otherwise sometimes net zero.
 _CANDIDATES_PER_ROUND = 5
+
+# "Top artists" cap for the DEFAULT recommendation profile. Normal mode applies no
+# artist-level avoidance (it surfaces any non-owned release, including new releases
+# by artists the collector already owns), so this stays small — purely a taste
+# signal, like the other categories.
+_NORMAL_ARTIST_CAP = int(os.environ.get("RECOMMEND_NORMAL_ARTIST_CAP", "15"))
+
+# "Top artists" cap for the 'new artists' profile variant. There the list doubles
+# as the owned-artist avoidance set (the prompt marks them as already-owned and
+# tells Gemini to skip them), so a larger cap improves avoidance for big
+# collections. Used ONLY when the 'new artists' toggle is on. Fewer owned -> all
+# are listed.
+_PROFILE_ARTIST_CAP = int(os.environ.get("RECOMMEND_PROFILE_ARTIST_CAP", "100"))
+
+# 'New artists' mode only: for collections with more owned artists than the profile
+# lists, a random sample of the remaining (long-tail) owned artists is added to the
+# avoidance instruction each round, rotating across rounds to broaden coverage
+# without re-listing everyone.
+_OWNED_EXCLUDE_SAMPLE = int(os.environ.get("RECOMMEND_OWNED_EXCLUDE_SAMPLE", "40"))
+
+# Normal mode only: to cut non-hits where Gemini re-suggests an album the collector
+# already owns, the default profile lists the owned album titles of the most-
+# collected artists (those a completist most likely owns deeply) and tells the model
+# not to suggest those specific records — leaving it free to suggest *other*,
+# unowned albums by the same artists. Bounded by a cap on artists, titles per
+# artist, and total titles to keep the token cost in check; artists with a single
+# owned album are skipped (low repeat risk, not worth the tokens).
+_OWNED_ALBUM_ARTISTS = int(os.environ.get("RECOMMEND_OWNED_ALBUM_ARTISTS", "20"))
+_OWNED_ALBUM_PER_ARTIST = int(os.environ.get("RECOMMEND_OWNED_ALBUM_PER_ARTIST", "8"))
+_OWNED_ALBUM_MAX_TITLES = int(os.environ.get("RECOMMEND_OWNED_ALBUM_MAX_TITLES", "120"))
 
 # Fixed Gemini thinking budget (tokens). Default 2.5-flash dynamic thinking adds
 # ~12s/round; a small cap keeps taste reasoning while making rounds ~3-4x faster.
@@ -144,25 +175,105 @@ def _get_client():
     return _client
 
 
-def build_taste_profile(items, max_each=15):
-    """Turn collection items (lookup `_release_dict` shape) into a compact text
-    profile for the prompt, reusing the Insights aggregation."""
+def _owned_albums_block(items, ranked_artist_pairs):
+    """Build the normal-mode 'records already owned, do not suggest' block: the
+    owned album titles of the most-collected artists, grouped by artist, so Gemini
+    stops re-suggesting albums the collector has (the main normal-mode non-hit).
+    It blocks specific owned *albums*, not the artists — other, unowned albums by
+    those artists are still fair game. Skips single-album artists and caps
+    artists/titles to bound tokens. `ranked_artist_pairs` is `data["all_artists"]`
+    ((name, count), most-collected first). Returns "" when there's nothing to list."""
+    by_artist = {}
+    for item in items:
+        title = (item.get("title") or "").strip()
+        if not title:
+            continue
+        for a in (item.get("artist") or []):
+            a = (a or "").strip()
+            if not a:
+                continue
+            albums = by_artist.setdefault(a, [])
+            if title not in albums:
+                albums.append(title)
+
+    lines, total = [], 0
+    for name, _count in ranked_artist_pairs[:_OWNED_ALBUM_ARTISTS]:
+        albums = by_artist.get(name) or []
+        if len(albums) < 2:                       # single-album artists: low repeat risk
+            continue
+        albums = albums[:_OWNED_ALBUM_PER_ARTIST]
+        if total + len(albums) > _OWNED_ALBUM_MAX_TITLES:
+            albums = albums[:_OWNED_ALBUM_MAX_TITLES - total]
+        if not albums:
+            break
+        lines.append("{0}: {1}".format(name, ", ".join(albums)))
+        total += len(albums)
+        if total >= _OWNED_ALBUM_MAX_TITLES:
+            break
+
+    if not lines:
+        return ""
+    return ("Records the collector ALREADY OWNS (do NOT suggest any of these — "
+            "recommend other, unowned albums instead):\n" + "\n".join(lines))
+
+
+def build_recommendation_profile(items, max_each=15):
+    """Build both Gemini taste-profile variants and the ranked owned-artist list
+    from a single Insights aggregation.
+
+    Returns `(profile_normal, profile_newartists, ranked_artists)`:
+      profile_normal     — "Top artists" lists the top `_NORMAL_ARTIST_CAP`
+                           artists; used for default recommendations, where it is
+                           only a taste signal (no avoidance).
+      profile_newartists — "Top artists" lists the top `_PROFILE_ARTIST_CAP`
+                           artists; used only when the 'new artists' toggle is on,
+                           where that list doubles as the owned-artist avoidance
+                           set the prompt tells Gemini to skip.
+      ranked_artists     — every owned artist name, most-collected first, so the
+                           avoidance block can sample the long tail beyond the
+                           listed artists without re-aggregating.
+
+    The two profiles differ only in their "Top artists" line, so both are rendered
+    from one aggregation; the caller caches both and picks per request.
+    """
     data = insights_helper.get_collection_insights(items)
 
-    def fmt(pairs):
-        return ", ".join("{0} ({1})".format(name, count) for name, count in pairs[:max_each]) or "—"
+    def fmt(pairs, cap):
+        return ", ".join("{0} ({1})".format(name, count) for name, count in pairs[:cap]) or "—"
 
-    lines = [
-        "Collection size: {0} releases".format(len(items)),
-        "Top genres: {0}".format(fmt(data["all_genres"])),
-        "Top styles: {0}".format(fmt(data["all_subgenres"])),
-        "Top artists: {0}".format(fmt(data["all_artists"])),
-        "Top labels: {0}".format(fmt(data["all_labels"])),
-    ]
+    genres = "Top genres: {0}".format(fmt(data["all_genres"], max_each))
+    styles = "Top styles: {0}".format(fmt(data["all_subgenres"], max_each))
+    labels = "Top labels: {0}".format(fmt(data["all_labels"], max_each))
     decades = [(d["name"], d["value"]) for d in data.get("decade_pie", [])]
-    if decades:
-        lines.append("Decades: " + ", ".join("{0} ({1})".format(n, v) for n, v in decades[:max_each]))
-    return "\n".join(lines)
+    decade_line = ("Decades: " + ", ".join("{0} ({1})".format(n, v)
+                   for n, v in decades[:max_each])) if decades else None
+
+    # Owned-album exclusion block — normal variant only. In new-artists mode the
+    # owned artists are excluded wholesale, so listing their albums is redundant.
+    owned_albums = _owned_albums_block(items, data["all_artists"])
+
+    def assemble(artist_cap, include_owned_albums):
+        lines = [
+            "Collection size: {0} releases".format(len(items)),
+            genres, styles,
+            "Top artists: {0}".format(fmt(data["all_artists"], artist_cap)),
+            labels,
+        ]
+        if decade_line:
+            lines.append(decade_line)
+        if include_owned_albums and owned_albums:
+            lines.append("")            # blank line separates the avoidance block
+            lines.append(owned_albums)
+        return "\n".join(lines)
+
+    ranked_artists = [name for name, _count in data["all_artists"]]
+    return assemble(_NORMAL_ARTIST_CAP, True), assemble(_PROFILE_ARTIST_CAP, False), ranked_artists
+
+
+def build_taste_profile(items, max_each=15):
+    """Back-compat wrapper returning just the default (normal-mode) profile text.
+    Use `build_recommendation_profile` for both mode variants + ranked artists."""
+    return build_recommendation_profile(items, max_each=max_each)[0]
 
 
 def _recommendation_item_schema():
@@ -196,7 +307,7 @@ def _recommendation_schema(want_bio):
 
 
 def fetch_recommendations(profile_text, n, exclude_titles=None, new_artists=False,
-                          want_bio=True):
+                          want_bio=True, owned_tail=None):
     """Ask Gemini for `n` recommendations and return a `(bio, recommendations)`
     tuple. `recommendations` is a list of {artist, album, reason} dicts; `bio`
     is a 2-sentence taste-profile summary, or "" when `want_bio` is False.
@@ -224,14 +335,26 @@ def fetch_recommendations(profile_text, n, exclude_titles=None, new_artists=Fals
     if exclude_titles:
         avoid = (" Do NOT suggest any of these already-considered records: "
                  + "; ".join(exclude_titles) + ".")
+    # Owned-artist avoidance applies ONLY in 'new artists' mode. Normal mode is
+    # meant to surface NEW releases from artists the collector already owns, so it
+    # gets no artist-level avoidance — only the base "records they don't own"
+    # instruction and the album-level owned filter (exact owned albums are dropped).
+    # In new-artists mode the rule references the profile's "Top artists" list (up
+    # to _PROFILE_ARTIST_CAP owned artists) and appends `owned_tail` — a sample of
+    # further owned artists beyond those listed — so the model is aware of more of
+    # the collection to avoid.
     new_artist_rule = ""
     if new_artists:
         new_artist_rule = (
             " Every recommendation must be by an artist the collector does NOT "
-            "already own — do not recommend any artist listed in their top "
-            "artists above, or any other artist already in their collection. "
-            "Recommend only artists that are new to this collector."
+            "already own — do not recommend any artist listed under 'Top artists' "
+            "above, or any other artist already in their collection."
         )
+        if owned_tail:
+            new_artist_rule += (" They also already own records by: "
+                                + ", ".join(owned_tail) + ".")
+        new_artist_rule += " Recommend only artists that are new to this collector."
+
     bio_rule = _BIO_INSTRUCTION if want_bio else ""
     prompt = (
         "Here is the collector's taste profile:\n\n{profile}\n\n"
@@ -240,7 +363,8 @@ def fetch_recommendations(profile_text, n, exclude_titles=None, new_artists=Fals
         "discoveries over their existing collection.{avoid}{newartist} {bio}For "
         "each, give the primary artist, the album title, and a one-sentence "
         "reason grounded in their taste."
-    ).format(profile=profile_text, n=n, avoid=avoid, newartist=new_artist_rule, bio=bio_rule)
+    ).format(profile=profile_text, n=n, avoid=avoid,
+             newartist=new_artist_rule, bio=bio_rule)
 
     config = types.GenerateContentConfig(
         system_instruction=SYSTEM_PROMPT,
@@ -319,12 +443,14 @@ def owned_artists(items):
 
 
 def collect_candidates(profile_text, n, exclude_keys, exclude_titles, new_artists=False,
-                       want_bio=True):
+                       want_bio=True, owned_tail=None):
     """Run one Gemini round and return a `(bio, candidates)` tuple, dropping any
     candidate whose artist|album key is in `exclude_keys` (owned or
-    already-suggested). `bio` is "" unless `want_bio` is set."""
+    already-suggested). `bio` is "" unless `want_bio` is set. `owned_tail` is a
+    sampled list of further owned artists for the avoidance block."""
     bio, recs = fetch_recommendations(profile_text, n, exclude_titles=exclude_titles,
-                                      new_artists=new_artists, want_bio=want_bio)
+                                      new_artists=new_artists, want_bio=want_bio,
+                                      owned_tail=owned_tail)
     out, seen = [], set()
     for rec in recs:
         artist = (rec.get("artist") or "").strip()
@@ -463,7 +589,8 @@ def _card_from(candidate, result):
 
 def run_recommendation_round(items, scraper, auth=None, budget=None,
                              considered=None, seen_ids=None, new_artists=False,
-                             want_bio=True, n_candidates=None, profile_text=None):
+                             want_bio=True, n_candidates=None, profile_text=None,
+                             ranked_artists=None):
     """Run ONE Gemini round and resolve its candidates to Vinyl cards.
 
     This is the per-round core the streaming `/recommend/batch` endpoint calls
@@ -483,6 +610,9 @@ def run_recommendation_round(items, scraper, auth=None, budget=None,
     `profile_text` lets the caller pass a pre-built taste profile so it isn't
     re-aggregated from the whole collection on every round of a search (the
     profile is identical across a search's rounds); when None it is built here.
+    `ranked_artists` (owned artist names, most-collected first) feeds the
+    owned-artist avoidance block's long-tail sample; it is built alongside
+    `profile_text` when the latter is None, so pass both or neither.
 
     Returns a dict:
       cards      — newly resolved cards this round (lookup_grid-shaped)
@@ -512,13 +642,27 @@ def run_recommendation_round(items, scraper, auth=None, budget=None,
     suggested_titles = ["{0} - {1}".format(c["artist"], c["album"]) for c in considered]
 
     if profile_text is None:
-        profile_text = build_taste_profile(items)
+        p_normal, p_new, ranked_artists = build_recommendation_profile(items)
+        profile_text = p_new if new_artists else p_normal
+
+    # Owned-artist avoidance tail — 'new artists' mode only. The new-artists
+    # profile already lists (and the prompt marks as owned) up to
+    # _PROFILE_ARTIST_CAP artists; for bigger collections, add a fresh random
+    # sample of the remaining owned artists each round so the long tail is covered
+    # and coverage rotates across a multi-round search. Normal mode applies no
+    # artist avoidance, so it gets no tail.
+    owned_tail = []
+    if new_artists and ranked_artists and len(ranked_artists) > _PROFILE_ARTIST_CAP:
+        tail = ranked_artists[_PROFILE_ARTIST_CAP:]
+        owned_tail = random.sample(tail, min(_OWNED_EXCLUDE_SAMPLE, len(tail)))
+
     bio, candidates = collect_candidates(
         profile_text, n_candidates or _CANDIDATES_PER_ROUND,
         exclude_keys=owned_text | suggested_keys,
         exclude_titles=suggested_titles,
         new_artists=new_artists,
         want_bio=want_bio,
+        owned_tail=owned_tail,
     )
 
     # Record every raw candidate as "considered" so future rounds don't
@@ -573,16 +717,18 @@ def get_recommendation_cards(items, scraper, auth=None, budget=None, min_results
     stops and returns what was found. The streaming `/recommend/batch` endpoint
     drives the same rounds itself, so this remains the non-streaming entry point."""
     cards, bio, considered, seen_ids = [], "", [], []
-    # The taste profile is identical across rounds; build it once rather than
-    # re-aggregating the whole collection each round.
-    profile_text = build_taste_profile(items)
+    # The taste profile + ranked owned-artist list are identical across rounds;
+    # build them once rather than re-aggregating the whole collection each round.
+    p_normal, p_new, ranked_artists = build_recommendation_profile(items)
+    profile_text = p_new if new_artists else p_normal
     for _round in range(max_rounds):
         if len(cards) >= min_results:
             break
         res = run_recommendation_round(items, scraper, auth=auth, budget=budget,
                                        considered=considered, seen_ids=seen_ids,
                                        new_artists=new_artists, want_bio=(_round == 0),
-                                       profile_text=profile_text)
+                                       profile_text=profile_text,
+                                       ranked_artists=ranked_artists)
         if res["capped"]:
             if not cards:
                 raise CapReachedError()
