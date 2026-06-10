@@ -200,8 +200,20 @@
                 return;
             }
             var grid = card.closest(".match-grid");
-            if (grid && grid.classList.contains("match-grid--expanded")) return;
-            if (activeCard === card) return;
+            var isExpanded = (grid && grid.classList.contains("match-grid--expanded")) || activeCard === card;
+            if (isExpanded) {
+                // An already-expanded, player-enabled card (Lookup) opens its
+                // release only when its thumbnail is tapped — so taps elsewhere on
+                // the card don't fight the play button. The play button's own tap
+                // falls through to player.js's click handler. Cards without a play
+                // button (Matcher) keep the default: a tap anywhere opens the release.
+                if (card.querySelector(".match-card-play")
+                    && !e.target.closest(".match-card-art")
+                    && !e.target.closest(".match-card-play")) {
+                    e.preventDefault();
+                }
+                return;
+            }
             e.preventDefault();
             clearTimeout(closeTimer); closeTimer = null; pendingCard = null;
             if (activeCard) activeCard.classList.remove("match-card--active");

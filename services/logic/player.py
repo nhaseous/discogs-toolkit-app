@@ -23,6 +23,8 @@ import requests
 from services.utils.ttl_cache import TTLCache
 
 _SEARCH_URL = "https://itunes.apple.com/search"
+_LOOKUP_URL = "https://itunes.apple.com/lookup"
+_STOREFRONT = "US"
 # storefront only affects the embed page's locale/pricing chrome; "us" is a safe
 # default and the album itself resolves by id regardless.
 _EMBED_URL = "https://embed.music.apple.com/us/album/{0}"
@@ -99,12 +101,72 @@ def _build(result):
     }
 
 
+def _get_json_results(url, params):
+    """GET an iTunes API endpoint and return its `results` list ([] on failure)."""
+    try:
+        resp = requests.get(url, params=params, timeout=_HTTP_TIMEOUT)
+    except requests.RequestException:
+        return []
+    if resp.status_code != 200:
+        return []
+    try:
+        return resp.json().get("results", []) or []
+    except ValueError:
+        return []
+
+
+def _search(term, entity, limit):
+    """Run one iTunes Search API query; return its results ([] on any failure)."""
+    return _get_json_results(_SEARCH_URL, {
+        "term": term, "entity": entity, "media": "music",
+        "limit": limit, "country": _STOREFRONT,
+    })
+
+
+def _resolve_via_discography(artist, album):
+    """Fallback: enumerate the artist's albums and match by title.
+
+    The iTunes /search endpoint's relevance ranking sometimes omits a catalog
+    album for a text query even though it's present (e.g. "Dr. Dre - The Chronic",
+    buried under unrelated "The Chronic - EP" indie releases). Resolving the
+    artist's id and listing their discography via /lookup surfaces it. The artist
+    is already pinned by the lookup, so only the album title is matched here.
+    """
+    artist_id, best = None, 0.0
+    for a in _search(artist, "musicArtist", 5):
+        if a.get("wrapperType") != "artist":
+            continue
+        cov = _coverage(artist, _tokens(a.get("artistName", "")))
+        if cov > best and cov >= 0.5:
+            artist_id, best = a.get("artistId"), cov
+    if not artist_id:
+        return None
+
+    results = _get_json_results(_LOOKUP_URL, {
+        "id": artist_id, "entity": "album", "limit": 200, "country": _STOREFRONT,
+    })
+    for result in results:
+        if result.get("wrapperType") != "collection":
+            continue
+        if _coverage(album, _tokens(result.get("collectionName", ""))) >= 0.6:
+            return _build(result)
+    return None
+
+
 def resolve_apple_album(artist, album):
     """Resolve `artist`/`album` to an Apple Music album for the embed player.
 
     Returns a dict {embed_url, artwork, name, artist, apple_url} on a verified
     match, or None when Apple has no confident match (or the lookup failed). A
     previously-resolved match is served from cache without any network call.
+
+    Tries progressively broader searches so a release isn't lost to one rigid
+    query, stopping at the first result that passes `_result_matches`. A SONG
+    search backs up the album search because iTunes reliably attributes songs to
+    the real performing artist even when it mis-tags the album-level artist (e.g.
+    A Tribe Called Quest's "The Low End Theory", whose album entry is credited to
+    a malformed "Low End Theory, The") — and each song result still carries its
+    album's id/artwork/title, which is all the embed needs.
     """
     artist = (artist or "").strip()
     album = (album or "").strip()
@@ -116,27 +178,22 @@ def resolve_apple_album(artist, album):
     if cached is not None:
         return cached
 
-    params = {
-        "term": ("{0} {1}".format(artist, album)).strip(),
-        "entity": "album",
-        "media": "music",
-        "limit": 10,
-    }
-    try:
-        resp = requests.get(_SEARCH_URL, params=params, timeout=_HTTP_TIMEOUT)
-    except requests.RequestException:
-        return None
-    if resp.status_code != 200:
-        return None
-    try:
-        results = resp.json().get("results", []) or []
-    except ValueError:
-        return None
+    term = ("{0} {1}".format(artist, album)).strip()
+    strategies = (
+        ("album", term, 10),     # well-tagged albums: fast path
+        ("song", term, 25),      # rescue albums iTunes mis-tags at the album level
+    )
+    for entity, query, limit in strategies:
+        for result in _search(query, entity, limit):
+            if _result_matches(artist, album, result):
+                payload = _build(result)
+                if payload:
+                    _cache.put(cache_key, payload)
+                    return payload
 
-    for result in results:
-        if _result_matches(artist, album, result):
-            payload = _build(result)
-            if payload:
-                _cache.put(cache_key, payload)
-                return payload
+    # Last resort: scan the artist's discography for albums /search omits.
+    payload = _resolve_via_discography(artist, album)
+    if payload:
+        _cache.put(cache_key, payload)
+        return payload
     return None

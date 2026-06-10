@@ -3,10 +3,10 @@
 //   Clicking a card's play button (.match-card-play) resolves the
 //   release to an Apple Music album via /player/resolve, loads the
 //   native Apple embed into the fixed right rail (#player-rail), and
-//   swaps the sidebar's spinning platter for the album cover. The
-//   platter doubles as the "Export PDF" button (main.js), so hiding
-//   it while the player is open removes that button until dismissed;
-//   closing the player reverts both.
+//   slides the album cover in over the sidebar's spinning platter.
+//   The platter doubles as the "Export PDF" button (main.js); while a
+//   cover is shown it sits on top and intercepts clicks, so that button
+//   is suppressed until the cover slides back out on close.
 // Loaded only on the Lookup page (after main.js).
 // ==========================================================
 
@@ -17,7 +17,6 @@
     var frame = document.getElementById("player-rail-frame");
     var label = document.getElementById("player-rail-label");
     var closeBtn = document.getElementById("player-rail-close");
-    var platter = document.querySelector(".sidebar-platter");
     var cover = document.querySelector(".sidebar-nowplaying");
 
     var activeBtn = null;   // the play button of the currently-loaded release
@@ -29,27 +28,33 @@
         btn.disabled = on;
     }
 
-    function flashNotFound(btn) {
-        if (!btn) return;
-        btn.classList.add("match-card-play--notfound");
-        btn.setAttribute("title", "Not on Apple Music");
-        setTimeout(function() {
-            btn.classList.remove("match-card-play--notfound");
-            btn.setAttribute("title", "Play preview on Apple Music");
-        }, 2500);
+    // Show a text message in the rail, in the same place the player would load
+    // (e.g. when a release has no Apple Music match). Resets any now-playing state.
+    function showMessage(artist, title, text) {
+        if (activeBtn) activeBtn.classList.remove("match-card-play--active");
+        activeBtn = null;
+        restorePlatter();
+        label.textContent = (artist ? artist + " — " : "") + title;
+        frame.innerHTML = '<div class="player-rail-message"></div>';
+        frame.firstChild.textContent = text;
+        openRail();
     }
 
-    // Swap the sidebar platter (also the PDF-export button) for the album cover.
+    // Slide the album cover in over the sidebar platter while a track is loaded,
+    // and slide it back out (revealing the spinning platter / PDF-export button)
+    // on close. The cover stays in the DOM at its faded-out state between plays so
+    // the slide can animate both directions.
     function showCover(artwork) {
-        if (platter) platter.style.display = "none";
-        if (cover && artwork) {
-            cover.src = artwork;
-            cover.hidden = false;
-        }
+        if (!cover || !artwork) return;
+        cover.src = artwork;
+        cover.hidden = false;
+        // Force the out-state to apply before transitioning in — needed on the
+        // first show, where the element starts at display:none.
+        void cover.offsetWidth;
+        cover.classList.add("sidebar-nowplaying--in");
     }
     function restorePlatter() {
-        if (platter) platter.style.display = "";
-        if (cover) { cover.hidden = true; cover.src = ""; }
+        if (cover) cover.classList.remove("sidebar-nowplaying--in");
     }
 
     function loadEmbed(embedUrl) {
@@ -65,35 +70,21 @@
         frame.appendChild(iframe);
     }
 
-    // Reserving side space for the rail narrows the content, but grid.js only
-    // recolumnizes on window resize — so reflow the card grid explicitly after
-    // the margin animates in/out, otherwise cards overflow the new width.
-    function reflowGrid() {
-        if (window._layoutMatchGrids) window._layoutMatchGrids();
-    }
-    function reflowAfterTransition() {
-        reflowGrid();                        // progressive pass during the animation
-        setTimeout(reflowGrid, 260);         // final pass once the 0.22s margin settles
-    }
-
+    // The rail's gutter is reserved for the whole results view, so opening/closing
+    // the player never changes the content width — no grid reflow needed here.
     function openRail() {
-        var wasOpen = !rail.hidden;
         rail.hidden = false;
-        document.documentElement.classList.add("player-open");
         // Next frame so the transition runs from the hidden state.
         requestAnimationFrame(function() { rail.classList.add("player-rail--open"); });
-        if (!wasOpen) reflowAfterTransition();   // only the first open changes width
     }
 
     function closeRail() {
         rail.classList.remove("player-rail--open");
         rail.hidden = true;
-        document.documentElement.classList.remove("player-open");
         frame.innerHTML = "";                // stop playback
         restorePlatter();
         if (activeBtn) activeBtn.classList.remove("match-card-play--active");
         activeBtn = null;
-        reflowAfterTransition();
     }
 
     function play(btn) {
@@ -105,7 +96,10 @@
         ToolkitAPI.resolvePlayer(artist, title).then(function(data) {
             if (seq !== reqSeq) return;      // a newer click superseded this one
             setLoading(btn, false);
-            if (!data || !data.found) { flashNotFound(btn); return; }
+            if (!data || !data.found) {
+                showMessage(artist, title, "Couldn’t find this release on Apple Music.");
+                return;
+            }
 
             if (activeBtn && activeBtn !== btn) activeBtn.classList.remove("match-card-play--active");
             activeBtn = btn;
@@ -118,7 +112,7 @@
         }).catch(function() {
             if (seq !== reqSeq) return;
             setLoading(btn, false);
-            flashNotFound(btn);
+            showMessage(artist, title, "Couldn’t reach Apple Music. Please try again.");
         });
     }
 

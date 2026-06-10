@@ -52,7 +52,6 @@
 .match-card-play:hover { transform: scale(1.08); }
 .match-card-play:disabled { cursor: default; }
 .match-card-play--active { background: var(--amber); }
-.match-card-play--notfound { background: var(--ink-muted); }
 
 /* Loading: hide the triangle, spin a ring in its place. */
 .match-card-play--loading svg { opacity: 0; }
@@ -67,19 +66,16 @@
     animation: rotate 0.7s linear infinite;
 }
 
-/* ---- Reserve space for the rail so it never overlaps the content ----
-   While the player is open, push the content left to sit flush against the
-   rail's footprint (rail width 300 + its 16px inset = 316), exactly mirroring
-   how the content sits flush against the 220px left sidebar. The content's own
-   48px padding then gives the same breathing room on both sides. Animated to
-   match the sidebar's margin transition. */
-.player-open .content {
+/* ---- Permanently reserve the rail's column ----
+   The gutter is reserved for the whole results view (not just while the player
+   is open), exactly like the left sidebar's space always exists — so opening or
+   closing the player never resizes/reflows the main content; the player simply
+   fills the gutter that's already there. The content sits flush against the
+   rail's footprint (rail width 300 + its 16px inset = 316), mirroring how it
+   sits flush against the 220px left sidebar, and the content's own 48px padding
+   gives identical breathing room on both sides. */
+.content.has-results {
     margin-right: 316px;
-}
-
-.content {
-    transition: margin-left 0.22s cubic-bezier(0.4,0,0.2,1),
-                margin-right 0.22s cubic-bezier(0.4,0,0.2,1);
 }
 
 /* ---- Sidebar now-playing cover (replaces the spinning platter) ---- */
@@ -93,6 +89,20 @@
     object-fit: cover;
     border-radius: 4px;
     box-shadow: var(--shadow-pop);
+    /* Out state: slid to the right and faded out. The cover sits on top of the
+       platter, so it's revealed/hidden by sliding rather than by removing the
+       platter. pointer-events follow the visible state, so the platter beneath
+       (the PDF-export button) is only blocked while a cover is actually shown. */
+    opacity: 0;
+    transform: translateX(24px);
+    pointer-events: none;
+    transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar-nowplaying--in {
+    opacity: 1;
+    transform: translateX(0);
+    pointer-events: auto;
 }
 
 /* ---- Fixed right-rail player ---- */
@@ -173,6 +183,15 @@
     border: 0;
 }
 
+/* Shown in place of the player when a release isn't on Apple Music. */
+.player-rail-message {
+    padding: 28px 20px;
+    text-align: center;
+    font-size: 13px;
+    line-height: 1.5;
+    color: var(--ink-soft);
+}
+
 /* ---- Mobile: dock a minimized player to the bottom of the screen ---- */
 @media (max-width: 900px) {
     .player-rail {
@@ -194,5 +213,5 @@
     /* Short iframe → Apple's embed renders its compact single-bar player. */
     .player-rail-frame iframe { height: 96px; }
     /* Docked at the bottom — don't reserve side space. */
-    .player-open .content { margin-right: 0; }
+    .content.has-results { margin-right: 0; }
 }
