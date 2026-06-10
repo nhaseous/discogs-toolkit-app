@@ -114,5 +114,19 @@ window.ToolkitAPI = {
                   (listId ? '&list_id=' + encodeURIComponent(listId) : '');
         return fetch(url, { headers: { 'Accept': 'application/json' } })
             .then(this._handleResponse);
+    },
+
+    /**
+     * Resolves a Discogs release (artist + album title) to an Apple Music album
+     * for the in-app preview player. Resolves to {found: false} when there's no
+     * confident match rather than rejecting, so the caller can show a "not on
+     * Apple Music" state inline.
+     */
+    resolvePlayer: function(artist, title) {
+        return fetch("/player/resolve", {
+            method: "POST",
+            headers: {"Content-Type": "application/json"},
+            body: JSON.stringify({artist: artist, title: title})
+        }).then(function(r) { return r.json(); });
     }
 };

@@ -23,6 +23,7 @@
     var sizeOpts = sizeMenu ? Array.from(sizeMenu.querySelectorAll(".pag-select-opt")) : [];
 
     var VINYL_SVG = '<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><circle cx="50" cy="50" r="46" fill="currentColor"/><circle cx="50" cy="50" r="20" fill="var(--rule)"/><circle cx="50" cy="50" r="4" fill="currentColor"/></svg>';
+    var PLAY_SVG = '<svg viewBox="0 0 24 24" aria-hidden="true"><path d="M8 5v14l11-7z" fill="currentColor"/></svg>';
     function _esc(s) { return String(s || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
     function renderLookupCard(m, showStats) {
         var imgSrc = m.cover_image || m.thumb;
@@ -31,7 +32,14 @@
             : '<div class="match-card-placeholder">' + VINYL_SVG + '</div>';
         var info = '<div class="match-card-artist">' + _esc(Array.isArray(m.artist) ? m.artist.join(' / ') : (m.artist || '')) + '</div>'
             + '<div class="match-card-title">' + _esc(m.title) + '</div>';
-        var body = (m.format && m.format.length ? '<div class="match-card-format">' + _esc(m.format.join(' / ')) + '</div>' : '')
+        // Play button lives in the format row, right-aligned. The format row only
+        // renders when the item has a format, so list-tab cards (no format) get no
+        // button — and the row sits inside the hover-revealed card body, so the
+        // button shows on hover/expand. data-artist carries the primary artist
+        // only (extra/featured artists hurt the Apple Music match).
+        var primaryArtist = Array.isArray(m.artist) ? (m.artist[0] || '') : (m.artist || '');
+        var playBtn = '<button type="button" class="match-card-play" data-artist="' + _esc(primaryArtist) + '" data-title="' + _esc(m.title) + '" title="Play preview on Apple Music" aria-label="Play preview on Apple Music">' + PLAY_SVG + '</button>';
+        var body = (m.format && m.format.length ? '<div class="match-card-format"><span class="match-card-format-label">' + _esc(m.format.join(' / ')) + '</span>' + playBtn + '</div>' : '')
             + (m.format_descriptions ? '<div class="match-card-format-desc">' + _esc(m.format_descriptions) + '</div>' : '')
             + (m.format_text ? '<div class="match-card-format-text">' + _esc(m.format_text) + '</div>' : '')
             + (m.for_sale && m.for_sale_url ? '<div class="match-card-forsale" data-href="' + _esc(m.for_sale_url) + '" onclick="event.stopPropagation();event.preventDefault();window.open(this.dataset.href,\'_blank\',\'noopener,noreferrer\')">' + _esc(m.for_sale) + '</div>' : '')

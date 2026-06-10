@@ -5,6 +5,7 @@ from routes.matcher_routes import matcher_bp
 from routes.lookup_routes import lookup_bp
 from routes.records_routes import records_bp
 from routes.recommend_routes import recommend_bp
+from routes.player_routes import player_bp
 
 
 def register_blueprints(app):
@@ -15,3 +16,4 @@ def register_blueprints(app):
     app.register_blueprint(lookup_bp)
     app.register_blueprint(records_bp)
     app.register_blueprint(recommend_bp)
+    app.register_blueprint(player_bp)

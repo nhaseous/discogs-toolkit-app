@@ -114,6 +114,7 @@
         <div class="sidebar-art">
             <img src="/static/console-oak.png" alt="" class="sidebar-art-img">
             {% if show_platter %}<img src="/static/platter.png" alt="" class="sidebar-platter">{% endif %}
+            {% if show_player %}<img class="sidebar-nowplaying" alt="Now playing cover" hidden>{% endif %}
         </div>
         {% endif %}
     </nav>
@@ -124,6 +125,20 @@
             {% endblock %}
         </div>
     </main>
+    {% if show_player %}
+    {# Right rail: an invisible, viewport-fixed placeholder that holds the Apple
+       Music preview player. Hidden until a card's play button resolves a match;
+       does not reserve layout space, so the main content is unchanged. #}
+    <aside class="player-rail" id="player-rail" hidden aria-label="Music player">
+        <div class="player-rail-card">
+            <div class="player-rail-bar">
+                <span class="player-rail-label" id="player-rail-label">Now playing</span>
+                <button class="player-rail-close" id="player-rail-close" type="button" aria-label="Close player">&times;</button>
+            </div>
+            <div class="player-rail-frame" id="player-rail-frame"></div>
+        </div>
+    </aside>
+    {% endif %}
 </div>
 <div id="badge-tooltip"></div>
 <script src="/static/v{{ static_v }}/js/app-client.js"></script>

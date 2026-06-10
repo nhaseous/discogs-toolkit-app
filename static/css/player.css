@@ -1,0 +1,198 @@
+/* =========================================================
+   player.css — Lookup in-app Apple Music preview player.
+   Loaded on the Lookup page only (after cards.css). Covers the
+   per-card play button, the fixed right-rail player, and the
+   sidebar now-playing cover. Mobile (<900px) docks the player to
+   the bottom of the screen as a minimized bar.
+   ========================================================= */
+
+/* ---- Play button in the card's format row ---- */
+
+/* The format row becomes a flex line: format text left, play button right.
+   (cards.css sets its colour / margin-top:auto; we only add the layout.) */
+.match-card-format {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+}
+
+.match-card-format-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+.match-card-play {
+    position: relative;
+    flex-shrink: 0;
+    /* Match the height of the format text line beside it. */
+    width: 1.35em;
+    height: 1.35em;
+    padding: 0;
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    border: none;
+    border-radius: 50%;
+    background: var(--rust);
+    color: var(--paper);
+    cursor: pointer;
+    transition: transform 0.12s ease, background 0.12s ease, opacity 0.12s ease;
+}
+
+.match-card-play svg {
+    width: 0.8em;
+    height: 0.8em;
+    margin-left: 0.05em; /* optically centre the play triangle */
+}
+
+.match-card-play:hover { transform: scale(1.08); }
+.match-card-play:disabled { cursor: default; }
+.match-card-play--active { background: var(--amber); }
+.match-card-play--notfound { background: var(--ink-muted); }
+
+/* Loading: hide the triangle, spin a ring in its place. */
+.match-card-play--loading svg { opacity: 0; }
+.match-card-play--loading::after {
+    content: "";
+    position: absolute;
+    width: 0.65em;
+    height: 0.65em;
+    border: 2px solid color-mix(in srgb, var(--paper) 45%, transparent);
+    border-top-color: var(--paper);
+    border-radius: 50%;
+    animation: rotate 0.7s linear infinite;
+}
+
+/* ---- Reserve space for the rail so it never overlaps the content ----
+   While the player is open, push the content left to sit flush against the
+   rail's footprint (rail width 300 + its 16px inset = 316), exactly mirroring
+   how the content sits flush against the 220px left sidebar. The content's own
+   48px padding then gives the same breathing room on both sides. Animated to
+   match the sidebar's margin transition. */
+.player-open .content {
+    margin-right: 316px;
+}
+
+.content {
+    transition: margin-left 0.22s cubic-bezier(0.4,0,0.2,1),
+                margin-right 0.22s cubic-bezier(0.4,0,0.2,1);
+}
+
+/* ---- Sidebar now-playing cover (replaces the spinning platter) ---- */
+
+.sidebar-nowplaying {
+    position: absolute;
+    width: 74px;
+    height: 74px;
+    top: 15px;
+    left: 72px;
+    object-fit: cover;
+    border-radius: 4px;
+    box-shadow: var(--shadow-pop);
+}
+
+/* ---- Fixed right-rail player ---- */
+
+/* Invisible, viewport-fixed placeholder — no chrome of its own; only the inner
+   card is visible. Floats over the top-right of the content (the main layout is
+   left unchanged), and stays put on scroll. Above the sidebar (z-index 100). */
+.player-rail {
+    position: fixed;
+    top: 16px;
+    right: 16px;
+    width: 300px;
+    max-width: calc(100vw - 32px);
+    z-index: 200;
+}
+
+.player-rail[hidden] { display: none; }
+
+.player-rail-card {
+    background: var(--paper);
+    border: 1px solid var(--rule-strong);
+    border-radius: 12px;
+    box-shadow: var(--shadow-pop);
+    overflow: hidden;
+    opacity: 0;
+    transform: translateY(-8px);
+    transition: opacity 0.2s ease, transform 0.2s ease;
+}
+
+.player-rail--open .player-rail-card {
+    opacity: 1;
+    transform: none;
+}
+
+.player-rail-bar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    padding: 8px 8px 8px 12px;
+    border-bottom: 1px solid var(--rule);
+}
+
+.player-rail-label {
+    min-width: 0;
+    font-size: 12px;
+    font-weight: 600;
+    color: var(--ink-soft);
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+
+.player-rail-close {
+    flex-shrink: 0;
+    width: 24px;
+    height: 24px;
+    padding: 0;
+    border: none;
+    background: none;
+    color: var(--ink-muted);
+    font-size: 20px;
+    line-height: 1;
+    cursor: pointer;
+    border-radius: 6px;
+    transition: background 0.12s ease, color 0.12s ease;
+}
+
+.player-rail-close:hover {
+    background: color-mix(in srgb, var(--ink) 8%, var(--paper));
+    color: var(--ink);
+}
+
+.player-rail-frame iframe {
+    display: block;
+    width: 100%;
+    height: 450px;
+    border: 0;
+}
+
+/* ---- Mobile: dock a minimized player to the bottom of the screen ---- */
+@media (max-width: 900px) {
+    .player-rail {
+        top: auto;
+        right: 0;
+        left: 0;
+        bottom: 0;
+        width: auto;
+        max-width: none;
+    }
+    .player-rail-card {
+        border-radius: 0;
+        border-left: 0;
+        border-right: 0;
+        border-bottom: 0;
+        transform: translateY(10px);
+    }
+    .player-rail--open .player-rail-card { transform: none; }
+    /* Short iframe → Apple's embed renders its compact single-bar player. */
+    .player-rail-frame iframe { height: 96px; }
+    /* Docked at the bottom — don't reserve side space. */
+    .player-open .content { margin-right: 0; }
+}

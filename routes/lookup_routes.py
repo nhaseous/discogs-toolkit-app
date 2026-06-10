@@ -175,6 +175,7 @@ def lookuppage():
         insights_kind='collection',
         content_class='has-results' if has_results else '',
         show_platter=has_results,
+        show_player=has_results,
         title='User Lookup'
     )
 
