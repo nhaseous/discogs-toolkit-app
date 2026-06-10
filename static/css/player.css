@@ -66,17 +66,10 @@
     animation: rotate 0.7s linear infinite;
 }
 
-/* ---- Permanently reserve the rail's column ----
-   The gutter is reserved for the whole results view (not just while the player
-   is open), exactly like the left sidebar's space always exists — so opening or
-   closing the player never resizes/reflows the main content; the player simply
-   fills the gutter that's already there. The content sits flush against the
-   rail's footprint (rail width 300 + its 16px inset = 316), mirroring how it
-   sits flush against the 220px left sidebar, and the content's own 48px padding
-   gives identical breathing room on both sides. */
-.content.has-results {
-    margin-right: 316px;
-}
+/* The main content keeps its original size — the player is NOT given a reserved
+   gutter (which would shrink the content). Instead player.js measures the
+   leftover whitespace to the right of the content when play is clicked and sizes
+   the rail to fit it, so only the player's width changes, never the content. */
 
 /* ---- Sidebar now-playing cover (replaces the spinning platter) ---- */
 
@@ -113,8 +106,8 @@
 .player-rail {
     position: fixed;
     top: 16px;
-    right: 16px;
-    width: 300px;
+    right: 16px;            /* fallback anchor; JS positions it beside the content */
+    width: 320px;           /* fallback; JS sets the real width to fit the gap */
     max-width: calc(100vw - 32px);
     z-index: 200;
 }
@@ -192,26 +185,29 @@
     color: var(--ink-soft);
 }
 
-/* ---- Mobile: dock a minimized player to the bottom of the screen ---- */
-@media (max-width: 900px) {
-    .player-rail {
-        top: auto;
-        right: 0;
-        left: 0;
-        bottom: 0;
-        width: auto;
-        max-width: none;
-    }
-    .player-rail-card {
-        border-radius: 0;
-        border-left: 0;
-        border-right: 0;
-        border-bottom: 0;
-        transform: translateY(10px);
-    }
-    .player-rail--open .player-rail-card { transform: none; }
-    /* Short iframe → Apple's embed renders its compact single-bar player. */
-    .player-rail-frame iframe { height: 96px; }
-    /* Docked at the bottom — don't reserve side space. */
-    .content.has-results { margin-right: 0; }
+/* ---- Docked player: a minimized bar at the bottom of the screen ----
+   Applied by player.js (.player-rail--docked) below 900px, and on wider screens
+   when the gap beside the content is too small to fit the player without
+   overlapping it. */
+.player-rail--docked {
+    top: auto;
+    right: 0;
+    bottom: 0;
+    left: 0;
+    width: auto;
+    max-width: none;
+}
+.player-rail--docked .player-rail-card {
+    border-radius: 0;
+    border-left: 0;
+    border-right: 0;
+    border-bottom: 0;
+    transform: translateY(10px);
+}
+.player-rail--docked.player-rail--open .player-rail-card {
+    transform: none;
+}
+/* Short iframe → Apple's embed renders its compact single-bar player. */
+.player-rail--docked .player-rail-frame iframe {
+    height: 96px;
 }

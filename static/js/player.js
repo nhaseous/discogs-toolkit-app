@@ -21,6 +21,7 @@
 
     var activeBtn = null;   // the play button of the currently-loaded release
     var reqSeq = 0;         // ignore stale resolves when play buttons are clicked fast
+    var coverSwapTimer = null;   // pending cover slide-out→in when switching releases
 
     function setLoading(btn, on) {
         if (!btn) return;
@@ -44,8 +45,7 @@
     // and slide it back out (revealing the spinning platter / PDF-export button)
     // on close. The cover stays in the DOM at its faded-out state between plays so
     // the slide can animate both directions.
-    function showCover(artwork) {
-        if (!cover || !artwork) return;
+    function slideCoverIn(artwork) {
         cover.src = artwork;
         cover.hidden = false;
         // Force the out-state to apply before transitioning in — needed on the
@@ -53,7 +53,23 @@
         void cover.offsetWidth;
         cover.classList.add("sidebar-nowplaying--in");
     }
+    function showCover(artwork) {
+        if (!cover || !artwork) return;
+        clearTimeout(coverSwapTimer);
+        // Already showing a cover (switching releases): slide the current one out,
+        // then swap the art and slide the new one in — same animation as the first
+        // show, so it reads like putting a new record on.
+        if (!cover.hidden && cover.classList.contains("sidebar-nowplaying--in")) {
+            cover.classList.remove("sidebar-nowplaying--in");        // slide current out
+            coverSwapTimer = setTimeout(function() {
+                slideCoverIn(artwork);                              // slide the new one in
+            }, 300);                                                // matches the 0.3s CSS transition
+            return;
+        }
+        slideCoverIn(artwork);
+    }
     function restorePlatter() {
+        clearTimeout(coverSwapTimer);
         if (cover) cover.classList.remove("sidebar-nowplaying--in");
     }
 
@@ -70,10 +86,37 @@
         frame.appendChild(iframe);
     }
 
-    // The rail's gutter is reserved for the whole results view, so opening/closing
-    // the player never changes the content width — no grid reflow needed here.
+    // Size the rail to the leftover whitespace to the RIGHT of the main content,
+    // computed when it opens (and on resize / sidebar toggle). Only the player's
+    // width changes — the main content is never resized to make room. When there's
+    // enough room the player sits in the gap beside the content; when there isn't
+    // (narrow desktop) it floats over the content's right edge; below 900px the
+    // CSS bottom-dock takes over, so inline sizing is cleared.
+    var GAP = 24, MIN_W = 280, MAX_W = 420;
+    function sizeRail() {
+        if (rail.hidden) return;
+        // Mobile: no room beside the content — dock to the bottom of the screen.
+        if (window.innerWidth <= 900) {
+            rail.classList.add("player-rail--docked");
+            rail.style.left = rail.style.right = rail.style.width = "";
+            return;
+        }
+        // Desktop: sit beside the content (constant GAP on the left) and run flush
+        // to the screen's right edge. When the gap is tighter than MIN_W, keep
+        // MIN_W and allow the slight overlap rather than docking — tuned by eye.
+        rail.classList.remove("player-rail--docked");
+        var content = document.querySelector(".content");
+        if (!content) return;
+        var contentRight = content.getBoundingClientRect().right;
+        var avail = window.innerWidth - contentRight;
+        rail.style.width = Math.max(MIN_W, Math.min(avail - GAP, MAX_W)) + "px";
+        rail.style.right = "0";
+        rail.style.left = "auto";
+    }
+
     function openRail() {
         rail.hidden = false;
+        sizeRail();              // fit the width to the available space before it shows
         // Next frame so the transition runs from the hidden state.
         requestAnimationFrame(function() { rail.classList.add("player-rail--open"); });
     }
@@ -131,5 +174,15 @@
     if (closeBtn) closeBtn.addEventListener("click", closeRail);
     document.addEventListener("keydown", function(e) {
         if (e.key === "Escape" && !rail.hidden) closeRail();
+    });
+
+    // Re-fit the player when the layout shifts while it's open: the content's
+    // right edge moves on window resize and when the sidebar collapses/expands
+    // (its 0.22s transition — re-measure once it settles). sizeRail() no-ops when
+    // the rail is closed, so these stay cheap.
+    window.addEventListener("resize", sizeRail);
+    var sidebarToggle = document.getElementById("sidebar-toggle");
+    if (sidebarToggle) sidebarToggle.addEventListener("click", function() {
+        setTimeout(sizeRail, 260);
     });
 })();
