@@ -171,6 +171,21 @@
         play(btn);
     }, true);
 
+    // Card navigation policy: a lookup release card opens its Discogs release only
+    // when the click lands on its art (thumbnail) or its info (artist/title).
+    // Clicks anywhere else on the card — the format row with the play button,
+    // comments, stats, empty space — do NOT navigate, so the body is a safe place
+    // to interact without being thrown to Discogs. List-index cards have no
+    // .match-card-info (their title lives in the body), so they're left alone and
+    // keep navigating as normal. The play button and the "for sale" pill stop their
+    // own clicks, so they never reach here.
+    document.addEventListener("click", function(e) {
+        var card = e.target.closest(".match-card");
+        if (!card || !card.querySelector(".match-card-info")) return;
+        if (e.target.closest(".match-card-art") || e.target.closest(".match-card-info")) return;
+        e.preventDefault();
+    });
+
     if (closeBtn) closeBtn.addEventListener("click", closeRail);
     document.addEventListener("keydown", function(e) {
         if (e.key === "Escape" && !rail.hidden) closeRail();

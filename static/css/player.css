@@ -25,6 +25,13 @@
     white-space: nowrap;
 }
 
+/* The play button sits flush against the card's right edge and scales up on
+   hover, so the card's (and body's) overflow:hidden would clip its right side.
+   Let it bleed past the edge horizontally. The body keeps its vertical clip
+   (overflow-y: clip) so the collapse animation is unaffected. */
+.match-card { overflow: visible; }
+.match-card-body { overflow-x: visible; overflow-y: clip; }
+
 .match-card-play {
     position: relative;
     flex-shrink: 0;
@@ -82,12 +89,12 @@
     object-fit: cover;
     border-radius: 4px;
     box-shadow: var(--shadow-pop);
-    /* Out state: slid to the right and faded out. The cover sits on top of the
+    /* Out state: slid to the left and faded out. The cover sits on top of the
        platter, so it's revealed/hidden by sliding rather than by removing the
        platter. pointer-events follow the visible state, so the platter beneath
        (the PDF-export button) is only blocked while a cover is actually shown. */
     opacity: 0;
-    transform: translateX(24px);
+    transform: translateX(-24px);
     pointer-events: none;
     transition: opacity 0.3s ease, transform 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -105,7 +112,7 @@
    left unchanged), and stays put on scroll. Above the sidebar (z-index 100). */
 .player-rail {
     position: fixed;
-    top: 16px;
+    top: 0;
     right: 16px;            /* fallback anchor; JS positions it beside the content */
     width: 320px;           /* fallback; JS sets the real width to fit the gap */
     max-width: calc(100vw - 32px);
