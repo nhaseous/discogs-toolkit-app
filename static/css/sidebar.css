@@ -301,11 +301,8 @@
     display: block;
     width: 100%;
     height: auto;
-    opacity: 0.88;
-    transition: opacity 0.2s ease;
+    opacity: 1;
 }
-
-.sidebar-art-img:hover { opacity: 1; }
 
 @media (max-width: 900px) {
     .sidebar { display: none; }

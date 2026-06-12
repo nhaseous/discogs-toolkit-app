@@ -25,6 +25,29 @@
     white-space: nowrap;
 }
 
+/* List cards have no format row, so the play button rides the for-sale row.
+   Lay it out like the format row: for-sale text left (truncating), button right.
+   On lookup the only for-sale rows are list cards, which all host the button. */
+.match-card-forsale {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    min-width: 0;
+}
+
+.match-card-forsale-label {
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+
+/* No for-sale info: the field exists only to anchor the button, so drop the
+   link affordance it would otherwise carry. */
+.match-card-forsale--empty { text-decoration: none; }
+.match-card-forsale--empty:hover { color: var(--olive); }
+
 /* The play button sits flush against the card's right edge and scales up on
    hover, so the card's (and body's) overflow:hidden would clip its right side.
    Let it bleed past the edge horizontally. The body keeps its vertical clip
@@ -103,6 +126,7 @@
     opacity: 1;
     transform: translateX(0);
     pointer-events: auto;
+    cursor: pointer;   /* click the cover to close the player (slides it out) */
 }
 
 /* ---- Fixed right-rail player ---- */

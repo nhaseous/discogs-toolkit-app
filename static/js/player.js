@@ -187,6 +187,9 @@
     });
 
     if (closeBtn) closeBtn.addEventListener("click", closeRail);
+    // Clicking the sidebar cover closes the player too — same trigger as the
+    // rail's close button, so the cover slides back out to reveal the platter.
+    if (cover) cover.addEventListener("click", closeRail);
     document.addEventListener("keydown", function(e) {
         if (e.key === "Escape" && !rail.hidden) closeRail();
     });

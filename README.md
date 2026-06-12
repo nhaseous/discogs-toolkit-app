@@ -1,6 +1,6 @@
 # discogs-toolkit-app
 
-Flask web app for Discogs marketplace research and collection browsing. Deployed on Google App Engine.
+Flask web app for Discogs marketplace research and collection browsing. Deployed on Google Cloud Platform.
 
 **Live:** https://discogs-toolkit.uc.r.appspot.com
 
@@ -13,7 +13,7 @@ Enter a seller's username. Fetches their entire for-sale inventory, then for eac
 
 **Watchlist:** Logged-in users can add releases to a personal watchlist when viewing their own store. Watchlist state is persisted to Google Cloud Firestore and syncs across devices.
 
-> Price Checker is disabled on Google App Engine (Cloudflare blocks scraping from server IPs). It's available locally and in the macOS desktop app.
+> Price Checker is disabled on GCP (Cloudflare blocks scraping from server IPs/common cloud IPs). It's available locally and in the macOS desktop app.
 
 ### Matcher (`/matcher`)
 Enter two usernames — one collection, one wantlist. Returns all releases in the collection that also appear on the wantlist. Two match modes: fuzzy (artist + title + format only) and exact (also includes format description and pressing text). Useful for figuring out what you have that someone else wants, or vice versa.

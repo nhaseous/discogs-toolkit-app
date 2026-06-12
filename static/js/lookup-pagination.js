@@ -32,17 +32,33 @@
             : '<div class="match-card-placeholder">' + VINYL_SVG + '</div>';
         var info = '<div class="match-card-artist">' + _esc(Array.isArray(m.artist) ? m.artist.join(' / ') : (m.artist || '')) + '</div>'
             + '<div class="match-card-title">' + _esc(m.title) + '</div>';
-        // Play button lives in the format row, right-aligned. The format row only
-        // renders when the item has a format, so list-tab cards (no format) get no
-        // button — and the row sits inside the hover-revealed card body, so the
-        // button shows on hover/expand. data-artist carries the primary artist
-        // only (extra/featured artists hurt the Apple Music match).
+        // The play button is right-aligned inside whichever row hosts it, and the
+        // row sits inside the hover-revealed card body so the button shows on
+        // hover/expand. data-artist carries the primary artist only (extra/featured
+        // artists hurt the Apple Music match).
         var primaryArtist = Array.isArray(m.artist) ? (m.artist[0] || '') : (m.artist || '');
         var playBtn = '<button type="button" class="match-card-play" data-artist="' + _esc(primaryArtist) + '" data-title="' + _esc(m.title) + '" title="Play preview on Apple Music" aria-label="Play preview on Apple Music">' + PLAY_SVG + '</button>';
-        var body = (m.format && m.format.length ? '<div class="match-card-format"><span class="match-card-format-label">' + _esc(m.format.join(' / ')) + '</span>' + playBtn + '</div>' : '')
+        var hasFormat = m.format && m.format.length;
+        // Cards with a format (collection / wantlist) host the button in the format
+        // row. List cards have no format, so it rides the for-sale row instead —
+        // and when the item has no for-sale info we still render an empty for-sale
+        // field so the button has a home (the empty field stays invisible).
+        var formatRow = hasFormat
+            ? '<div class="match-card-format"><span class="match-card-format-label">' + _esc(m.format.join(' / ')) + '</span>' + playBtn + '</div>'
+            : '';
+        var forsaleRow = '';
+        if (m.for_sale && m.for_sale_url) {
+            forsaleRow = '<div class="match-card-forsale" data-href="' + _esc(m.for_sale_url) + '" onclick="event.stopPropagation();event.preventDefault();window.open(this.dataset.href,\'_blank\',\'noopener,noreferrer\')">'
+                + '<span class="match-card-forsale-label">' + _esc(m.for_sale) + '</span>'
+                + (hasFormat ? '' : playBtn)
+                + '</div>';
+        } else if (!hasFormat) {
+            forsaleRow = '<div class="match-card-forsale match-card-forsale--empty"><span class="match-card-forsale-label"></span>' + playBtn + '</div>';
+        }
+        var body = formatRow
             + (m.format_descriptions ? '<div class="match-card-format-desc">' + _esc(m.format_descriptions) + '</div>' : '')
             + (m.format_text ? '<div class="match-card-format-text">' + _esc(m.format_text) + '</div>' : '')
-            + (m.for_sale && m.for_sale_url ? '<div class="match-card-forsale" data-href="' + _esc(m.for_sale_url) + '" onclick="event.stopPropagation();event.preventDefault();window.open(this.dataset.href,\'_blank\',\'noopener,noreferrer\')">' + _esc(m.for_sale) + '</div>' : '')
+            + forsaleRow
             + (m.comment ? '<div class="match-card-comment">' + _esc(m.comment) + '</div>' : '')
             + (showStats && m.stats ? '<div class="match-card-stats">' + _esc(m.stats) + '</div>' : '');
         return '<a href="' + _esc(m.url || '#') + '" class="match-card" target="_blank" rel="noopener noreferrer">'

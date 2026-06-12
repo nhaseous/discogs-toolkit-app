@@ -1,0 +1,9 @@
+runtime: python312
+
+automatic_scaling:
+  max_instances: 2
+
+env_variables:
+  DISCOGS_CALLBACK_URL: "https://discogs-toolkit.uc.r.appspot.com/callback"
+  VERTEX_LOCATION: "us-central1"
+  VERTEX_GEMINI_MODEL: "gemini-2.5-flash"

@@ -8,6 +8,13 @@ load_dotenv()
 import os
 import sys
 from datetime import timedelta
+
+# Pull secrets from Secret Manager into os.environ before any module reads them
+# (web_common, the Google clients, and recommend all read their secrets at
+# import/first-use). No-op off App Engine — see services/clients/secrets.py.
+from services.clients.secrets import load_secrets
+load_secrets()
+
 from flask import Flask, session
 import assets
 from services.logic import pricechecker
