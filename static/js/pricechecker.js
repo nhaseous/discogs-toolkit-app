@@ -141,9 +141,33 @@
     var loaded = [];   // { index, place, el } — el is the unsorted card node
     window._pcRegisterLoaded = function(item) { loaded.push(item); };
 
+    // When the page is restored from a static snapshot (e.g. a saved
+    // .webarchive) the streaming loader never runs, so the in-memory `loaded`
+    // list is empty even though the cards are present in the DOM. Rebuild it
+    // from the unsorted list so toggling "sort by place" still works offline.
+    function ensureLoadedFromDom() {
+        if (loaded.length) return;
+        var src = document.getElementById('pc-list-unsorted');
+        if (!src) return;
+        src.querySelectorAll('.result-card').forEach(function(el, i) {
+            var idx = parseInt(el.getAttribute('data-index'), 10);
+            if (isNaN(idx)) idx = i;
+            var place = parseInt(el.getAttribute('data-place'), 10);
+            if (isNaN(place)) {
+                // Fallback for snapshots saved before data-place existed: the
+                // place renders as "(n)" in the card number row.
+                var row = el.querySelector('.card-number-right');
+                var m = row && row.textContent.match(/\((\d+)\)/);
+                place = m ? parseInt(m[1], 10) : 0;
+            }
+            loaded.push({ index: idx, place: place, el: el });
+        });
+    }
+
     function buildSortedView() {
         var sortedDiv = document.getElementById('pc-list-sorted');
         if (!sortedDiv) return;
+        ensureLoadedFromDom();
 
         var groups = [];
         for (var i = 0; i < 10; i++) groups.push([]);
@@ -411,6 +435,13 @@
     var releases = [];
     try { releases = JSON.parse(dataEl.textContent || "[]"); } catch (e) {}
     if (!releases.length) return;
+
+    // If cards are already in the DOM, this page was restored from a static
+    // snapshot (e.g. a saved .webarchive) rather than a fresh search. Re-running
+    // the streaming loader would re-scrape (failing offline) and, on finish,
+    // rebuild the sorted "Place Summary" view from the empty in-memory `loaded`
+    // array — wiping the saved results. Leave the snapshot untouched.
+    if (document.querySelector("#pc-list-unsorted .result-card, #pc-list-sorted .result-card")) return;
 
     var unsorted = document.getElementById("pc-list-unsorted");
     var sortedDiv = document.getElementById("pc-list-sorted");

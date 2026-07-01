@@ -23,6 +23,8 @@ Enter any Discogs username. Browse their full collection, wantlist, and any publ
 
 **Insights Dashboard:** Aggregates collection and wantlist data into an interactive dashboard showing breakdowns by genre, artist, label, format, and decade. If you look up your own username while logged in, it also displays your total collection value (minimum, median, maximum) and an approximated "Value per Genre" breakdown.
 
+**Preview Player:** Every card gets a play button that resolves the release to an Apple Music album and streams it in a player rail on the right side of the page, with the album cover sliding in over the sidebar's spinning platter. Resolution uses the public iTunes Search API (no key or account needed); anonymous visitors get ~30–90s previews via Apple's native embedded player, and signed-in Apple Music subscribers get full playback.
+
 ### Recommendations (`/recommend`)
 Enter any Discogs username. Builds a taste profile from their collection (top genres, styles, artists, labels, and decades) and asks Gemini, via Google's Vertex AI, for vinyl records they likely don't own but would love. Each suggestion is resolved to a real Discogs release (Vinyl, non-bootleg) and shown as a card with album art and a one-line reason grounded in the profile. A **"New artists"** toggle restricts results to artists not already in the collection — pure discovery rather than new albums by familiar names.
 
@@ -50,12 +52,14 @@ routes/               # Flask blueprints, one per tool (registered in routes/__i
   lookup_routes.py    # /lookup + insights/data/load-tab/folders/list sub-routes
   recommend_routes.py # /recommend
   records_routes.py   # /records
+  player_routes.py    # /player/resolve — release -> Apple Music album for the preview player
 
 services/
   clients/            # External API integrations
     discogs_client.py # Discogs REST: retries, pagination, search, RequestBudget rate-limiting
     google_client.py  # Google Sheets client (gspread)
     firestore_db.py   # Firestore: watchlist persistence + Recommendations usage caps
+    secrets.py        # Google Secret Manager -> os.environ at startup (GAE; no-op locally)
   logic/              # Feature business logic
     pricechecker.py   # Inventory fetch + marketplace scraping + rendering
     matcher.py        # Collection/wantlist fetch and comparison
@@ -63,17 +67,19 @@ services/
     recommend.py      # Taste profile -> Gemini candidates -> Discogs release resolution
     insights.py       # Aggregates collection stats; renders the Insights Dashboard
     charts.py         # SVG chart generators
-  utils/              # auth.py (Keychain), common.py (headers), lookup_cache.py, records.py
+    player.py         # iTunes Search API resolution + fuzzy matching for the preview player
+  utils/              # auth.py (Keychain), common.py (headers), ttl_cache.py (shared TTL cache),
+                      #   lookup_cache.py, records.py
   models/             # models.py — shared data structures
 
 static/
-  css/                # vars, sidebar, components, results, cards, mosaic, insights, lookup,
-                      #   reprice, records, tools, main — design tokens + per-feature styles
-  js/                 # main, pricechecker, reprice, lookup*, matcher, mosaic, insights,
-                      #   grid, records, app-client, utils — global + per-feature UI
+  css/                # vars, main, sidebar, components, results, cards, mosaic, insights,
+                      #   lookup, player, reprice, records, tools — design tokens + per-feature styles
+  js/                 # main, utils, app-client, grid, mosaic, pricechecker, reprice, matcher,
+                      #   lookup*, insights, player, recommend, records — global + per-feature UI
 
 templates/
-  base.html           # Master layout with sidebar and content slot
+  base.html           # Master layout with sidebar, content slot, and preview-player rail
   macros.html         # Shared Jinja macros (card grid, etc.)
   landing.html        # Landing page (extends base)
   pricechecker.html   # Price Checker page
@@ -152,6 +158,10 @@ Round usage is tracked in Firestore: global monthly count at `usage/gemini_round
 
 `/lists/{list_id}` — parsed with BeautifulSoup; pulls the embedded Apollo cache JSON from `<script id="dsdata">` for release info, thumbnails, per-item comments, and marketplace availability.
 
+### Apple Music previews — iTunes Search API
+
+The Lookup preview player resolves releases through the public **iTunes Search API** (`https://itunes.apple.com/search` and `/lookup`) — no API key or token, so it works identically on GCP, locally, and in the macOS app, and consumes no Discogs rate limit. `services/logic/player.py` tries an album search, falls back to a song search (which rescues albums iTunes mis-tags at the album level), and finally scans the artist's full discography; every candidate must pass a fuzzy token-coverage match before it's accepted. Successful resolutions are cached in memory for 24 hours. The matched album's `collectionId` drives Apple's native embedded player (`embed.music.apple.com`).
+
 ### Rate Limits
 
 Every API request the app makes is authenticated, so all requests get Discogs' authenticated limit of **60 requests/minute** (vs. 25/minute for unauthenticated requests). Signed-in users authenticate via OAuth; signed-out users authenticate at the **application level** using the consumer key/secret (`Authorization: Discogs key=…, secret=…`), which carries no user identity but still earns the 60/min tier. Discogs uses a sliding 60-second window — no fixed lockout; slots free up as the window rolls — and throttles per source IP. The `X-Discogs-Ratelimit-Remaining` response header can be read to throttle proactively. See the [Discogs API rate-limiting docs](https://www.discogs.com/developers/accessing.html#page:home,header:home-rate-limiting).
@@ -166,6 +176,14 @@ On the macOS desktop app, credentials are persisted to the system Keychain so yo
 
 ---
 
+## Configuration & Secrets
+
+On App Engine, secrets (`FLASK_SECRET_KEY`, `DISCOGS_CONSUMER_KEY`, `DISCOGS_CONSUMER_SECRET`, `GOOGLE_SA_KEY_B64`) live in **Google Secret Manager** and are loaded into the environment at startup by `services/clients/secrets.py` — they are not in `app.yaml`, which only carries non-secret config (callback URL, Vertex region/model). Secret IDs match the env var names one-to-one, and values already set in the environment are never overwritten.
+
+Off App Engine (local dev, macOS app) the loader is a no-op and secrets come from `.env` / environment variables as usual. Set `USE_SECRET_MANAGER=1` to opt a local run into Secret Manager (requires application-default credentials).
+
+---
+
 ## Running Locally
 
 ```bash
@@ -173,6 +191,8 @@ pip install -r requirements.txt
 python main.py
 # http://127.0.0.1:8080
 ```
+
+Local secrets/config are read from `.env`.
 
 Deploy:
 ```bash

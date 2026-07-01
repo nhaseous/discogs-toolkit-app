@@ -7,7 +7,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 Discogs Toolkit is a Flask web app for Discogs marketplace research and collection browsing. It has five tools:
 - **Price Checker** (`/pricechecker`): scrapes a seller's inventory and shows where each listing ranks among all marketplace listings for the same release. Disabled on GAE (Cloudflare blocks scraping from server IPs); only available locally and in the macOS desktop app. Supports a per-user **Watchlist** persisted to Firestore.
 - **Matcher** (`/matcher`): finds overlap between one user's collection and another user's wantlist
-- **Lookup** (`/lookup`): browse any user's collection, wantlist, and curated lists as a card grid. Includes an **Insights Dashboard** for collection stats and estimated value.
+- **Lookup** (`/lookup`): browse any user's collection, wantlist, and curated lists as a card grid. Includes an **Insights Dashboard** for collection stats and estimated value, and an in-app **music preview player**: each card gets a play button that resolves the release to an Apple Music album (via the keyless iTunes Search API) and streams previews through Apple's native embed in a fixed right rail.
 - **Recommendations** (`/recommend`): builds a taste profile from any user's collection and asks Gemini (Vertex AI) for vinyl records they likely don't own but would love, then resolves each suggestion to a real Discogs release. Includes a "New artists" toggle to restrict suggestions to artists not already in the collection.
 - **Records** (`/records`): personal collection dashboard backed by Google Sheets; restricted to user `curefortheitch`
 
@@ -26,13 +26,15 @@ Also ships as a standalone macOS desktop app (built with `py2app` + `pywebview`)
 - **google-genai (Vertex AI / Gemini)** — generates the recommendation candidates; authenticates with the same service-account JSON as the Sheets client
 - **gspread + google-auth** — Google Sheets access for the Records dashboard
 - **Google Cloud Firestore** — persists user watchlists; also backs the per-IP daily and global monthly caps on Recommendations
+- **Google Secret Manager** — holds secrets on GAE (`FLASK_SECRET_KEY`, Discogs consumer key/secret, `GOOGLE_SA_KEY_B64`); hydrated into `os.environ` at startup by `services/clients/secrets.py`. Local dev and the macOS app use `.env`/Keychain instead.
+- **iTunes Search API** — keyless public API used by the Lookup preview player to resolve releases to Apple Music albums (`services/logic/player.py`)
 - **Google App Engine** — production deployment (`app.yaml`, `runtime: python312`)
 - **pywebview + pyobjc** — native macOS .app wrapper (macOS only)
 
 ## Key Files and Directories
 
 ```
-main.py               # Flask entry point — app setup, context processor, session config, registers blueprints
+main.py               # Flask entry point — loads secrets first, then app setup, context processor, session config, blueprints
 web_common.py         # Shared web helpers: app auth (DiscogsAppAuth), oauth_auth(), price-checker gating
 assets.py             # Loads SVGs and HTML snippets into module-level constants at startup
 mac_main.py           # macOS .app entry point — starts Flask + opens pywebview window
@@ -46,12 +48,14 @@ routes/               # Flask blueprints, one module per tool (registered by rou
   lookup_routes.py    # /lookup + insights/data/load-tab/folders/list sub-routes
   recommend_routes.py # /recommend (shell) + /recommend/batch (one streamed Gemini round)
   records_routes.py   # /records
+  player_routes.py    # /player/resolve — Discogs release → Apple Music album (JSON)
 
 services/
   clients/            # External API integrations
     discogs_client.py # Discogs REST API: session management, pagination, search, RequestBudget
     google_client.py  # Google Sheets API client (gspread)
     firestore_db.py   # Firestore: watchlist persistence + Recommendations IP/monthly caps
+    secrets.py        # Loads secrets from Google Secret Manager into os.environ (GAE only; no-op locally)
   logic/              # Feature-specific business logic
     lookup.py         # Lookup: collection, wantlist, lists fetch + list page scraping
     matcher.py        # Matcher: collection/wantlist comparison
@@ -59,10 +63,12 @@ services/
     recommend.py      # Recommendations: taste profile → Gemini candidates → Discogs release resolution
     insights.py       # Aggregates collection stats
     charts.py         # SVG chart generators (pie, bar, line)
+    player.py         # Preview player: iTunes Search API resolution + fuzzy match + 24h cache
   utils/              # Shared helpers and utilities
     auth.py           # macOS Keychain credential persistence (save/get/delete)
     common.py         # Shared API headers (User-Agent)
-    lookup_cache.py   # In-memory cache for lookup payloads
+    ttl_cache.py      # Generic thread-safe TTL cache (backs lookup_cache, recommend search cache, player cache)
+    lookup_cache.py   # In-memory cache for lookup payloads (shared with Recommendations)
     records.py        # Records: Google Sheets load + data parsing
   models/
     models.py         # Shared data structures (FormattedEntry)
@@ -73,26 +79,48 @@ server/               # Standalone background monitor (NOT wired into web routes
 
 static/
   css/
-    vars.css          # Design tokens, reset, global layout — loaded on every page
+    vars.css          # Variables and reset — loaded on every page
+    main.css          # Global layout, typography, shared patterns — loaded on every page
     sidebar.css       # Left nav sidebar — loaded on every page
-    components.css    # Search bar, spinner, badges — loaded on tool pages
-    results.css       # Result cards, tabs, pagination, mosaics — loaded on tool pages
-    tools.css         # Landing page tool card grid — loaded on / only
+    components.css    # Search bar, spinner, meta, badges — tool pages
+    results.css       # Lookup search/header, shared tabs + pagination, dashboard base (.rec-*)
+    cards.css         # Result cards (Price Checker) + match cards (Matcher, Lookup)
+    mosaic.css        # Thumbnail mosaics (Price Checker, Matcher, Lookup)
+    insights.css      # Insights Dashboard layout, charts, slice/row interactivity
+    lookup.css        # Lookup notices and active-filter badges
+    player.css        # Preview player rail + play buttons (Lookup only)
+    reprice.css       # Reprice modal UI
+    records.css       # Records table UI (tabs, toolbar, table, badges)
+    tools.css         # Landing page hero + tool card grid — / only
   js/
     main.js           # Global UI: sidebar, tabs, pagination, badge filter pills, tooltips
-    pricechecker.js   # Price Checker: filter pills, card refresh, reprice modal + API calls
+    utils.js          # Shared DOM/scroll/format helpers
+    app-client.js     # Consolidated client for app API calls + centralized error handling
+    grid.js           # Shared card-grid behavior (responsive layout, hover) — Matcher + Lookup
+    mosaic.js         # Shared mosaic UI — Price Checker + Lookup
+    pricechecker.js   # Price Checker: filter pills, card refresh + API calls
+    reprice.js        # Reprice modal + API calls
+    matcher.js        # Matcher "Exact match" toggle
+    lookup.js         # Lookup search-form transition
+    lookup-browse.js  # Lookup orchestration: tab/mosaic switching, expand-all toggle
+    lookup-filters.js # Lookup per-tab filter state + badge UI
+    lookup-pagination.js # Lookup pagination, deferred-load + lazy hydration, page controls
+    insights.js       # Insights Dashboard panel toggles
+    player.js         # Preview player: play buttons → /player/resolve → Apple embed in right rail
     recommend.js      # Recommendations: streams Gemini rounds from /recommend/batch into the grid
     records.js        # Records dashboard: tab switching between panels
 
 templates/
-  base.html           # Master layout: sidebar nav, stylesheet links, content slot, main.js
+  base.html           # Master layout: sidebar nav, stylesheet links, content slot, player rail (when show_player), main.js
   macros.html         # Shared Jinja macros (match_card + lookup_grid card grid)
   _recommend_cards.html # Bare match_card list returned by /recommend/batch for client append
   _recommend_lines.html # Per-release text lines for the Recommendations card (same data as cards)
+  _insights_fragment.html # Insights Dashboard fragment rendered by /lookup/insights
   landing.html        # Tool card grid (extends base)
   pricechecker.html   # Extends base; sets window.TOOLKIT_CONFIG; loads pricechecker.js
+  pricechecker_results.html # Results area shell (mosaic, badge counts) included by pricechecker.html
   matcher.html        # Extends base
-  lookup.html         # Extends base
+  lookup.html         # Extends base; loads lookup*.js, player.js, insights.js
   recommend.html      # Extends base; "New artists" toggle, streaming shell, loads recommend.js
   records.html        # Extends base; loads records.js
 ```
@@ -113,6 +141,7 @@ templates/
 | `/lookup/insights`, `/lookup/data`, `/lookup/load-tab`, `/lookup/folders` | GET/POST | JSON APIs — Insights dashboard, lazy tab/folder loading | Optional |
 | `/recommend` | GET | Recommendations UI shell — cards stream in client-side (`new_artists` toggle) | Optional |
 | `/recommend/batch` | POST | JSON API — runs one Gemini round, returns rendered cards + bio; streamed by `recommend.js` | Optional |
+| `/player/resolve` | POST | JSON API — resolves a release (artist + title) to an Apple Music album for the Lookup preview player | — |
 | `/watchlist` | GET/POST | Firestore API — manage user's Price Checker watchlist | Required |
 | `/records` | GET | Personal records dashboard | `curefortheitch` only |
 | `/reprice` | POST | JSON API — reprices selected Discogs listings | Required |
@@ -136,16 +165,17 @@ python3 setup.py py2app
 
 No test suite exists.
 
+## Secrets and Configuration
+
+Secrets (`FLASK_SECRET_KEY`, `DISCOGS_CONSUMER_KEY`, `DISCOGS_CONSUMER_SECRET`, `GOOGLE_SA_KEY_B64`) live in **Google Secret Manager** (secret IDs match the env var names one-to-one). `main.py` calls `services/clients/secrets.load_secrets()` before any other module reads the environment; on GAE it hydrates `os.environ` via the runtime service account, so the rest of the app keeps using `os.environ.get` unchanged. Off App Engine it's a no-op — local dev reads `.env` (via `python-dotenv`) and the macOS app uses Keychain; set `USE_SECRET_MANAGER=1` to opt a local run in (requires ADC). Values already present in the environment are never overwritten. Non-secret config (`DISCOGS_CALLBACK_URL`, `VERTEX_LOCATION`, `VERTEX_GEMINI_MODEL`) stays in `app.yaml`.
+
 ## Authentication (OAuth 1.0a)
 
-Discogs uses OAuth 1.0a. Credentials are stored in `app.yaml` env vars:
-- `DISCOGS_CONSUMER_KEY` / `DISCOGS_CONSUMER_SECRET`
-- `DISCOGS_CALLBACK_URL` — differs between GAE and localhost
-- `FLASK_SECRET_KEY` — Flask session signing
+Discogs uses OAuth 1.0a using the consumer key/secret above; `DISCOGS_CALLBACK_URL` differs between GAE and localhost.
 
 On a successful `/callback`, tokens are written to the Flask session. On macOS, they're also persisted to Keychain via `services/utils/auth.py` so the user stays logged in across app restarts. A `before_request` hook (`_load_persistent_auth`) restores Keychain credentials into the session on each request if the session is empty.
 
-Price Checker is gated by `_is_price_checker_enabled()`: returns True only on localhost or when running as a frozen macOS app.
+Price Checker is gated by `web_common.is_price_checker_enabled()`: returns True only on localhost or when running as a frozen macOS app.
 
 ## APIs
 
@@ -175,6 +205,10 @@ These use `cloudscraper` + BeautifulSoup rather than the REST API:
 |---|---|---|
 | `https://www.discogs.com/sell/release/{release_id}` | `pricechecker.py` | Marketplace listings page; parses the `mpitems` table for pricing. |
 | `https://www.discogs.com/lists/{list_id}` | `lookup.py` | List detail page; parses the embedded `<script id="dsdata">` Apollo cache JSON for items, thumbnails, and per-item comments. Paginated via `?page=N`. |
+
+### Music preview player (iTunes Search API)
+
+`services/logic/player.py` resolves a Discogs release (artist + album title) to an Apple Music album for the Lookup page's in-app preview player. It uses the public **iTunes Search API** (`https://itunes.apple.com/search` and `/lookup`) — no API key, no OAuth — so it works identically on GAE, local dev, and the macOS build, and spends no Discogs request budget. Resolution tries progressively broader strategies: an album search, then a song search (rescues albums iTunes mis-tags at the album level — each song result carries its album's id/artwork), then a discography scan via `/lookup` on the resolved artist id (rescues catalog albums `/search`'s relevance ranking omits). Every candidate must pass a fuzzy token-coverage match against the iTunes `artistName`/`collectionName` fields before acceptance. Positive resolutions are memoized for 24h in a `TTLCache` (only successes — a miss may be a transient network failure). The returned `collectionId` drives Apple's native embed player (`embed.music.apple.com`), which streams ~30–90s previews for anonymous visitors (full playback for signed-in Apple Music subscribers). Client side, `player.js` injects play buttons on Lookup cards, calls `POST /player/resolve`, and loads the embed into the fixed right rail (`#player-rail` in `base.html`, rendered when `show_player` is set); the resolved album cover slides in over the sidebar's spinning platter.
 
 ### Recommendations (Vertex AI / Gemini)
 

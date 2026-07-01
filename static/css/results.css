@@ -44,6 +44,8 @@
     max-width: 100%;
 }
 
+.lookup-tabs-row { border-radius: 10px 10px 0 0; }
+
 .lookup-tabs, .rec-tabs {
     display: flex;
     flex: 1 1 auto;
@@ -97,7 +99,8 @@
     padding: 8px;
     flex-shrink: 0;
     align-self: stretch;
-    background: var(--rule);
+    background: transparent;
+    border-left: 1px solid var(--rule);
 }
 
 .pag-select { position: relative; }

@@ -7,6 +7,7 @@
      {% if entry.reprice_data %} data-reprice="{{ reprice_data }}"{% endif %}
      {% if entry.listing_ids %} data-listing-ids="{{ listing_ids }}"{% endif %}
      data-title="{{ entry.title | forceescape }}"
+     data-place="{{ entry.place or 0 }}"
      data-thumb="{{ entry.imgUrl | forceescape }}">
     <div class="card-number">
         <span>#{{ count }}</span>
@@ -111,7 +112,7 @@
 {% else %}
     <div class="match-grid">
         {% for lst in lists %}
-            <a href="/lookup?username={{ username | urlencode }}&list_id={{ lst.id | urlencode }}" class="match-card">
+            <a href="/lookup?username={{ username | urlencode }}&list_id={{ lst.id | urlencode }}" class="match-card" data-list-url="{{ lst.url }}">
                 <div class="match-card-art">
                     <div class="match-card-placeholder">{{ vinyl_placeholder_svg | safe }}</div>
                     <div class="match-card-art-label">{{ lst.name }}</div>

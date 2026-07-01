@@ -37,7 +37,7 @@
         return p;
     }
 
-    function createListTab(listName) {
+    function createListTab(listName, listUrl) {
         var container = document.querySelector(".lookup-tabs");
         var tab = document.createElement("button");
         tab.className = "lookup-tab";
@@ -46,6 +46,9 @@
         if (container) container.appendChild(tab);
         tab.textContent = listName + "…";
         tab.setAttribute("data-count-text", "");
+        // Carry the Discogs list URL so the meta count renders as a clickable
+        // link — matching the server-rendered tab on a fresh list-page visit.
+        if (listUrl) tab.setAttribute("data-count-url", listUrl);
         return tab;
     }
 
@@ -61,6 +64,7 @@
 
         var titleEl = card.querySelector(".match-card-title");
         var listName = titleEl ? titleEl.textContent.trim() : "List";
+        var listUrl = card.getAttribute("data-list-url") || "";
 
         // Always close the previously-opened list (tab + panel + mosaic) before
         // opening the new one — keeps state clean and gives the user clear
@@ -68,7 +72,7 @@
         _closeExistingList();
 
         var listPanel = createListPanel();
-        var listTab = createListTab(listName);
+        var listTab = createListTab(listName, listUrl);
         listTab.disabled = true;
 
         if (window._switchToTab) window._switchToTab("list");
